@@ -2,14 +2,15 @@
 
 THE SCANDAL THIS ENDS
 ---------------------
-gates.py refuses to sign Gate 1 without a document of doc_type "concept_note", Gate 2
-without "programme_charter", Gate 4 without "business_case", and so on -- nine gates, nine
-named documents. Those are exactly the documents the owner wants the app to write.
+gates.py refuses to sign a gate without the one document that gate reads. Under Revision 4
+that is each phase's own approval/closure document -- five gates, five named documents
+(rev4_phases.DELIVERABLE_GATE_DOC_TYPE). Those are exactly the documents the owner wants the
+app to write.
 
 But generate_document() stamped EVERY document it produced with doc_type
-"lifecycle_document" -- a type no gate looks for. So the app could write a flawless concept
-note and Gate 1 would still refuse to open. The only thing that could open it was
-workflows.register_document(), which stores a doc_type and a TITLE STRING: no file, no
+"lifecycle_document" -- a type no gate looks for. So the app could write a flawless approval
+request and the Initiation gate would still refuse to open. The only thing that could open it
+was workflows.register_document(), which stores a doc_type and a TITLE STRING: no file, no
 content, nothing checked.
 
 The result: a stage gate -- the control that exists so a programme cannot proceed without
@@ -32,7 +33,7 @@ import sqlite3
 import pytest
 
 from app.enterprise_programme import (
-    beneficiaries, constants, documents, gates, tenancy, workflows,
+    beneficiaries, documents, gates, rev4_phases, tenancy, workflows,
 )
 from app.enterprise_programme.documents import DocumentError
 from app.enterprise_programme.gates import EnterpriseGateError
@@ -73,10 +74,9 @@ def programme(db):
     )
 
 
-def _generate(db, programme, deliverable: str, activities=("P01_A01",)):
+def _generate(db, programme, deliverable: str):
     return documents.generate_document(
         db, db.org, 1, programme,
-        activity_codes=list(activities),
         deliverable_code=deliverable,
         use_ai=False,                      # deterministic: no network in a unit test
         audit=AuditSpy(),
@@ -102,12 +102,14 @@ def test_every_gate_document_can_be_produced_by_some_deliverable(db):
     # A guard that inspects nothing passes forever. gates.py publishes `required_doc_type`
     # on each predicate precisely so this can read the REAL demands; if that ever stops
     # working, `demanded` goes empty and the assertion below would be vacuously true.
-    assert len(demanded) >= 9, (
-        f"expected to find the 9 gate documents by introspection, found {len(demanded)} -- "
-        f"this test is not actually checking anything"
+    # Revision 4 has five gates and each demands exactly one document, so five is the whole
+    # demand -- not a floor.
+    assert len(demanded) == len(rev4_phases.GATE_CODES) == 5, (
+        f"expected to find one gate document per Rev 4 gate by introspection, found "
+        f"{len(demanded)} -- this test is not actually checking anything"
     )
 
-    producible = set(constants.DELIVERABLE_GATE_DOC_TYPE.values())
+    producible = set(rev4_phases.DELIVERABLE_GATE_DOC_TYPE.values())
     missing = demanded - producible
     assert not missing, (
         f"these gates demand a document that NO deliverable can produce, so the programme "
@@ -116,11 +118,13 @@ def test_every_gate_document_can_be_produced_by_some_deliverable(db):
 
 
 def test_the_deliverable_carries_the_gates_doc_type(db):
-    assert constants.deliverable_doc_type("P01_D01") == "concept_note"
-    assert constants.deliverable_doc_type("P05_D01") == "master_plan"
+    # The five deliverables that open Revision 4's five gates are stored under the doc_type
+    # their gate reads, not under their own code.
+    assert rev4_phases.deliverable_doc_type("R4P1_D12") == "programme_approval_request"
+    assert rev4_phases.deliverable_doc_type("R4P6_D14") == "programme_closure_certificate"
     # A deliverable no gate demands is stored under its own code -- unique, and unable to
     # collide with a reserved gate type.
-    assert constants.deliverable_doc_type("P04_D03") == "P04_D03"
+    assert rev4_phases.deliverable_doc_type("R4P1_D01") == "R4P1_D01"
 
 
 def test_an_unknown_deliverable_is_refused_not_silently_downgraded(db, programme):
@@ -131,21 +135,25 @@ def test_an_unknown_deliverable_is_refused_not_silently_downgraded(db, programme
 
 # ------------------------------------------------------- the headline: writing opens a gate
 
-def test_generating_the_concept_note_OPENS_gate_1(db, programme):
-    """Before: the app wrote the concept note and Gate 1 still refused. That was the bug."""
-    # Gate 1 is shut, and it says why.
-    with pytest.raises(EnterpriseGateError) as before:
-        gates.evaluate_gate(db, db.org, programme, "G01")
-    assert "concept note" in str(before.value).lower()
+def test_generating_the_programme_approval_request_OPENS_the_initiation_gate(db, programme):
+    """Before: the app wrote the gate's document and the gate still refused. That was the bug.
 
-    _generate(db, programme, "P01_D01")          # the app WRITES it
+    Revision 4's Initiation gate reads ONE document -- the Programme Approval Request
+    (R4P1_D12) -- and that document is a deliverable button the app itself writes.
+    """
+    # The gate is shut, and it says why.
+    with pytest.raises(EnterpriseGateError) as before:
+        gates.evaluate_gate(db, db.org, programme, "R4G1_INITIATION")
+    assert "programme approval request" in str(before.value).lower()
+
+    _generate(db, programme, "R4P1_D12")         # the app WRITES it
 
     # ...and now the gate opens, because the document it demanded actually exists.
-    gates.evaluate_gate(db, db.org, programme, "G01")
+    gates.evaluate_gate(db, db.org, programme, "R4G1_INITIATION")
 
 
 def test_the_generated_document_is_stored_under_the_gates_type_with_real_content(db, programme):
-    doc_id = _generate(db, programme, "P01_D01")
+    doc_id = _generate(db, programme, "R4P1_D12")
 
     row = db.execute(
         "SELECT doc_type, title, doc_kind, markdown FROM enterprise_documents WHERE id=?",
@@ -153,8 +161,12 @@ def test_the_generated_document_is_stored_under_the_gates_type_with_real_content
     ).fetchone()
     doc_type, title, kind, markdown = row
 
-    assert doc_type == "concept_note", "the document must be stored as the type the gate reads"
-    assert title == "Programme concept note", "it must be named as doc 2 names it"
+    assert doc_type == "programme_approval_request", (
+        "the document must be stored as the type the gate reads"
+    )
+    assert title == "Programme Approval Request", (
+        "it must be named as the owner's spec (section 9) names it"
+    )
     assert kind == "generated"
     # The whole point: unlike register_document(), there is a DOCUMENT here.
     assert markdown and len(markdown) > 50, (
@@ -164,33 +176,37 @@ def test_the_generated_document_is_stored_under_the_gates_type_with_real_content
 
 
 def test_a_document_for_the_WRONG_deliverable_does_not_open_the_gate(db, programme):
-    """Writing some other deliverable must not open the gate that wants a concept note.
+    """Writing some other deliverable must not open the gate that wants the approval request.
 
     If it did, the doc_type would be decorative and any generated document would open any
     gate -- which is the same hole as before, just harder to see.
 
-    Uses P01_D02 rather than the economic assessment (P04_D03): that one is ENGINE-written
-    now, so on a programme with no approved reference design it is refused outright, and the
-    refusal -- not the doc_type -- would be what kept the gate shut. That would make this
-    test pass for the wrong reason.
+    Uses the Programme Concept Note (R4P1_D01): it is in the same phase as the gate's own
+    document, and it is written by the deliverable writer rather than the design engine. An
+    ENGINE-written deliverable would be refused outright on a programme with no approved
+    reference design, and the refusal -- not the doc_type -- would be what kept the gate shut.
+    That would make this test pass for the wrong reason.
     """
-    _generate(db, programme, "P01_D02", activities=("P01_A01",))   # not a gate document
+    _generate(db, programme, "R4P1_D01")         # not a gate document
 
     with pytest.raises(EnterpriseGateError):
-        gates.evaluate_gate(db, db.org, programme, "G01")
+        gates.evaluate_gate(db, db.org, programme, "R4G1_INITIATION")
 
 
 def test_the_owners_four_documents_are_all_bound_to_an_engine():
     """The owner: "create program technical and financial proposal, implementation plan,
     ... monitor". Each must be produced by an existing engine, not hand-typed."""
-    assert constants.DELIVERABLE_ENGINE["P04_D01"] == "technical"            # technical proposal
-    assert constants.DELIVERABLE_ENGINE["P04_D02"] == "financial"            # financial proposal
-    assert constants.DELIVERABLE_ENGINE["P05_D01"] == "implementation_plan"  # implementation plan
-    assert constants.DELIVERABLE_ENGINE["P15_D01"] == "monitoring"           # monitor
+    engine = rev4_phases.DELIVERABLE_ENGINE
+    assert engine["R4P2_D07"] == "technical"             # Programme Feasibility Study
+    assert engine["R4P2_D16"] == "financial"             # Programme Cost Plan
+    assert engine["R4P2_D25"] == "implementation_plan"   # Programme Implementation Plan
+    assert engine["R4P4_D19"] == "monitoring"            # Executive Status Report
 
 
-def test_all_144_key_outputs_are_encoded():
-    assert sum(len(v) for v in constants.PHASE_DELIVERABLES.values()) == 144
-    assert len(constants.PHASE_DELIVERABLES) == 16
-    # every phase in the lifecycle has at least one named output
-    assert set(constants.PHASE_DELIVERABLES) == set(constants.PHASE_CODES)
+def test_all_112_revision_4_deliverables_are_encoded():
+    """The owner's spec (sections 9-14) names 112 deliverables across six phases: 12 for
+    Initiation, 27 Planning, 21 Execution, 19 Monitoring, 17 Value Realisation, 16 Closure."""
+    assert sum(len(v) for v in rev4_phases.PHASE_DELIVERABLES.values()) == 112
+    assert len(rev4_phases.PHASE_DELIVERABLES) == 6
+    # every phase in the lifecycle has at least one named deliverable button
+    assert set(rev4_phases.PHASE_DELIVERABLES) == set(rev4_phases.PHASE_CODES)

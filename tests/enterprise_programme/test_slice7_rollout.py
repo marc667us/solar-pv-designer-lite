@@ -175,7 +175,7 @@ def db():
                                      sponsor_user_id=OWNER, audit=_audit(c))
     # A programme opens into design at PLANNING. Put it there.
     c.execute(
-        "UPDATE enterprise_programme_registry SET current_phase_code='P03_NEEDS' "
+        "UPDATE enterprise_programme_registry SET current_phase_code='R4_PLANNING' "
         " WHERE tenant_id=? AND id=?", (org, pid))
     c.commit()
     yield c, org, other, pid
@@ -252,7 +252,7 @@ def _design(c, org, pid, engine, *, design_path="standard", **kw):
 def test_a_programme_in_initiation_cannot_design_yet(db):
     """"when you are in PLANNING the programme must open into ... design"."""
     c, org, _other, pid = db
-    c.execute("UPDATE enterprise_programme_registry SET current_phase_code='P01_CONCEPT' "
+    c.execute("UPDATE enterprise_programme_registry SET current_phase_code='R4_INITIATION' "
               " WHERE tenant_id=? AND id=?", (org, pid))
     version_id = _approved_template(c, org, pid)
 

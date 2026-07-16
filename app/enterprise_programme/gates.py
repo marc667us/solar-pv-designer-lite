@@ -4,17 +4,17 @@ WHAT THIS IS
 ------------
 The part of the module that says NO.
 
-Doc 3 gives 14 stage gates and 15 "key programme management controls". Both are
-phrased as prohibitions ("No beneficiary becomes a project without qualification").
-This file turns each one into a predicate that a service MUST call before acting.
+Revision 4 gives FIVE stage gates (owner-spec section 38) and doc 3's 15 "key programme
+management controls" survive it unchanged. Both are phrased as prohibitions ("No beneficiary
+becomes a project without qualification"). This file turns each one into a predicate that a
+service MUST call before acting.
 
 TWO RULES THAT SHAPE EVERYTHING HERE
 ------------------------------------
 1. FAIL CLOSED. Every guard's default answer is NO. A guard whose evidence table does
    not exist yet (because its slice has not shipped) does not "pass for now" -- it
-   raises. Release 1 delivers a complete lifecycle through Gate 9; Gates 10-14 are
-   seeded and visibly BLOCKED. A lifecycle with a hole in the middle is worse than a
-   shorter one that cannot be bypassed (Supervisor adjudication, doc 09).
+   raises, and control_summary() reports it as not-yet-enforced rather than satisfied.
+   A control that quietly passes is worse than one that visibly blocks.
 
 2. GUARDS LIVE IN SERVICES, NOT ROUTES. The route decorator is a fast fail, not the
    boundary. The queue drainer and internal calls never touch a route, and project
@@ -23,27 +23,34 @@ TWO RULES THAT SHAPE EVERYTHING HERE
 
 WHY C01 IS NOT CIRCULAR
 -----------------------
-Gate 1's approving authority IS the Programme Sponsor, and Gate 1's exit condition is
-"sponsor approval exists". Read naively that is a loop. It is not: the programme must
-NAME a sponsor before Gate 1 can even be evaluated (that is the gate's own predicate),
-and the sponsor's approval OF Gate 1 is what satisfies C01 for every later phase. So:
-name a sponsor -> sponsor approves G01 -> programme may leave Concept. Nothing else
-opens that door.
+The Initiation gate's approving authority IS the Programme Sponsor, and C01's exit condition
+is "sponsor approval exists". Read naively that is a loop. It is not: the programme must
+NAME a sponsor before the gate can even be evaluated (that is the gate's own predicate),
+and the sponsor's approval OF that gate is what satisfies C01 for every later phase. So:
+name a sponsor -> sponsor approves the Initiation gate -> programme may leave Initiation.
+Nothing else opens that door.
 """
 
 from __future__ import annotations
 
-from .constants import (
-    CONTROLS,
+# THE GATES ARE REVISION 4's FIVE (Slice 0b-ii, 2026-07-16). What stays in constants is the
+# vocabulary the six-phase model does not redefine: the 15 controls, and the status sets the
+# control guards read.
+from .rev4_phases import (
+    DEFAULT_PHASE_CODE,
     DELIVERABLE_GATE_DOC_TYPE,
     DELIVERABLE_INDEX,
+    GATE_CLOSING_PHASE,
     GATE_CODES,
     GATE_PREREQUISITE_GATES,
     GATES,
-    BENEFICIARY_STATUSES_APPROVED,
     GATES_DEFERRED_BEYOND_RELEASE_1,
-    TEMPLATE_STATUSES_GENERATIVE,
     deliverable_doc_type,
+)
+from .constants import (
+    CONTROLS,
+    BENEFICIARY_STATUSES_APPROVED,
+    TEMPLATE_STATUSES_GENERATIVE,
 )
 
 
@@ -78,7 +85,7 @@ _GATE_AUTHORITY: dict[str, str] = {g[0]: g[3] for g in GATES}
 def gate_authority(gate_code: str) -> str:
     """The role code that alone may approve this gate.
 
-    Input:  gate code, e.g. 'G01'.
+    Input:  gate code, e.g. 'R4G1_INITIATION'.
     Output: role code, e.g. 'programme_sponsor'.
     Raises: EnterpriseGateError on an unknown gate (fail closed -- an unknown gate must
             never resolve to "anyone may approve it").
@@ -115,18 +122,26 @@ def require_approved_sponsor(c, tenant_id: str, programme_id: int) -> None:
     Output: none (returns quietly when satisfied).
     Raises: EnterpriseGateError.
 
-    Satisfied by an APPROVED Gate 1 whose approver actually held the sponsor role at
+    Satisfied by an APPROVED Initiation gate whose approver actually held the sponsor role at
     the time (approve_gate enforces the role; this reads the result). Merely naming a
     sponsor is not approval.
+
+    THE GATE CODE IS LOOKED UP, NOT SPELT OUT. It used to read `gate_code='G01'` inline. When
+    Rev 4 renumbered the gates, that literal would have gone on matching nothing -- so the
+    query would return no row, C01 would refuse forever, and every programme would be wedged
+    at Initiation by a control that believed it was doing its job. Deriving it from the model
+    means a future renumbering moves this with it, or fails loudly at import instead.
     """
+    initiation_gate = GATE_CLOSING_PHASE[DEFAULT_PHASE_CODE]
     row = c.execute(
         "SELECT status FROM enterprise_stage_gates "
-        " WHERE tenant_id=? AND programme_id=? AND gate_code='G01'",
-        (tenant_id, programme_id),
+        " WHERE tenant_id=? AND programme_id=? AND gate_code=?",
+        (tenant_id, programme_id, initiation_gate),
     ).fetchone()
     if not row or row[0] != "Approved":
         raise EnterpriseGateError(
-            "C01", "the programme sponsor has not approved Gate 1 (Programme Concept)"
+            "C01",
+            "the programme sponsor has not approved the Initiation gate",
         )
 
 
@@ -470,14 +485,23 @@ CONTROL_GUARDS = {
 
 
 def _gate_1_predicate(c, tenant_id: str, programme_id: int) -> None:
-    """G01 entry: the programme must name a sponsor (see 'why C01 is not circular')."""
+    """Initiation gate entry: the programme must name a sponsor.
+
+    Input:  connection, tenant id, programme id.
+    Output: none (returns quietly when a sponsor is named).
+    Raises: EnterpriseGateError.
+
+    See 'why C01 is not circular' in the module docstring -- this predicate is the half of
+    that argument which stops the sponsor's own approval from being self-referential.
+    """
     row = c.execute(
         "SELECT sponsor_user_id FROM enterprise_programme_registry WHERE tenant_id=? AND id=?",
         (tenant_id, programme_id),
     ).fetchone()
     if not row or not row[0]:
         raise EnterpriseGateError(
-            "G01", "the programme must name a sponsor before Gate 1 can be approved"
+            GATE_CLOSING_PHASE[DEFAULT_PHASE_CODE],
+            "the programme must name a sponsor before the Initiation gate can be approved",
         )
 
 
@@ -514,75 +538,57 @@ def _requires_document(doc_type: str, gate_code: str, human: str):
     return _predicate
 
 
-def _gate_3_predicate(c, tenant_id: str, programme_id: int) -> None:
-    """G03 entry: the programme must actually HAVE an approved beneficiary (slice 5).
-
-    Gate 3 is "Beneficiary Register Approval". Before slice 5 the only thing it could check
-    was that somebody had registered a document called a beneficiary register -- which is a
-    claim about a register, not a register. Now that the register exists, the gate asks for
-    the thing itself: at least one beneficiary admitted to the programme (approved out of
-    "Beneficiary Registered" and into the qualification queue).
-
-    Merely IMPORTING beneficiaries is not enough, and that is the whole point. A District
-    Coordinator can put 4000 rows into the register; a Programme Manager decides which of
-    them the programme will actually serve. The gate wants evidence of the second act.
-    """
-    placeholders = ",".join("?" for _ in BENEFICIARY_STATUSES_APPROVED)
-    row = c.execute(
-        "SELECT 1 FROM enterprise_beneficiary_register "
-        f" WHERE tenant_id=? AND programme_id=? AND status IN ({placeholders}) LIMIT 1",
-        tuple([tenant_id, programme_id] + sorted(BENEFICIARY_STATUSES_APPROVED)),
-    ).fetchone()
-    if not row:
-        raise EnterpriseGateError(
-            "G03",
-            "the beneficiary register is empty of APPROVED sites: import or enter "
-            "beneficiaries, then approve at least one into the programme",
-        )
-
-
-def _gate_6_predicate(c, tenant_id: str, programme_id: int) -> None:
-    """G06 entry: the programme must actually HAVE an approved standard (slice 4).
-
-    Gate 6 is "Standardisation Approval". Before slice 4 the only thing it could check was
-    that somebody had registered a document called a template version pack -- which is a
-    claim, not a standard. Now that templates exist, the gate asks for the thing itself: at
-    least one template version, on this programme or tenant-wide, in a generative state.
-
-    Tenant-wide templates count. A ministry that standardises "School 50 kW" once and reuses
-    it across every programme is doing exactly what a template engine is for; demanding a
-    programme-local copy would force a duplicate per programme, which is the drift this
-    module exists to prevent.
-    """
-    row = c.execute(
-        "SELECT 1 FROM enterprise_template_versions v "
-        "  JOIN enterprise_programme_templates t "
-        "    ON t.tenant_id = v.tenant_id AND t.id = v.template_id "
-        " WHERE v.tenant_id=? AND v.status IN ('Approved','Published') "
-        "   AND (t.programme_id IS NULL OR t.programme_id=?) LIMIT 1",
-        (tenant_id, programme_id),
-    ).fetchone()
-    if not row:
-        raise EnterpriseGateError(
-            "G06",
-            "no approved programme template: at least one template version must be "
-            "Approved or Published before standardisation can be signed off",
-        )
-
-
+# WHAT A REV 4 GATE ASKS FOR, AND WHY IT IS SO MUCH LESS THAN BEFORE
+# ------------------------------------------------------------------
+# The old model had 14 gates and a predicate zoo behind them: per-gate evidence documents,
+# cross-gate prerequisites, and two gates (G03, G06) that reached into the beneficiary
+# register and the template store to check the thing itself rather than a claim about it.
+# The owner rejected that model as "made too large" and Revision 4 replaced it with five
+# boundaries, each phrased in the spec (section 38) as an APPROVAL BY A NAMED AUTHORITY.
+#
+# So a Rev 4 gate asks for exactly two things, and the second one does the real work:
+#
+#   1. THE PHASE'S OWN APPROVAL DOCUMENT, so the gate reads something the app actually WROTE
+#      rather than opening on a typed name (the 2026-07-13 defect -- a stage gate passed by
+#      TYPING A NAME while the document the app wrote counted for nothing).
+#   2. THE NAMED AUTHORITY'S SIGNATURE, enforced by approve_gate against GATE_AUTHORITY.
+#
+# The old per-gate evidence predicates are GONE rather than remapped. They asked for
+# documents that belonged to a 16-phase lifecycle -- a business case, a funding strategy, an
+# issued-for-construction package -- and Rev 4's phases do not have those boundaries to
+# defend. Keeping them would have been the "old map" the owner asked to have deleted, wearing
+# new gate codes.
+#
+# Governance is advisory-by-default (flags.enterprise_governance_advisory), so a programme
+# whose gate evidence is thin is TOLD, not stopped, unless the tenant turns advisory off.
 GATE_PREDICATES = {
-    "G01": [_gate_1_predicate, _requires_document("concept_note", "G01", "concept note")],
-    "G02": [_requires_document("programme_charter", "G02", "programme charter")],
-    "G03": [_gate_3_predicate,
-            _requires_document("beneficiary_register", "G03", "beneficiary register")],
-    "G04": [_requires_document("business_case", "G04", "business case")],
-    "G05": [_requires_document("master_plan", "G05", "programme master plan")],
-    "G06": [_gate_6_predicate,
-            _requires_document("template_version_pack", "G06", "template version pack")],
-    "G07": [_requires_document("funding_strategy", "G07", "funding strategy")],
-    "G08": [_requires_document("signed_contract", "G08", "signed contract")],
-    "G09": [_requires_document("ifc_package", "G09", "issued-for-construction package")],
+    gate_code: (
+        # The Initiation gate additionally requires the programme to NAME a sponsor. See
+        # "why C01 is not circular" in the module docstring: naming the sponsor is what makes
+        # the sponsor's approval of this gate meaningful rather than self-referential.
+        ([_gate_1_predicate] if phase_code == DEFAULT_PHASE_CODE else [])
+        + [_requires_document(
+            deliverable_doc_type(deliverable_code),
+            gate_code,
+            DELIVERABLE_INDEX[deliverable_code][1],
+        )]
+    )
+    for gate_code, phase_code in (
+        (GATE_CLOSING_PHASE[_p], _p) for _p in GATE_CLOSING_PHASE
+    )
+    for deliverable_code in (
+        # The one deliverable in this gate's phase that is stamped as its evidence.
+        next(d for d, _t in DELIVERABLE_GATE_DOC_TYPE.items()
+             if DELIVERABLE_INDEX[d][0] == phase_code),
+    )
 }
+
+# Every gate must have got a predicate list. A gate that silently ended up with none would
+# open on authority alone -- which is a decision, not an accident, and is not the one made
+# here.
+assert set(GATE_PREDICATES) == set(GATE_CODES), (
+    f"gates without predicates: {sorted(set(GATE_CODES) - set(GATE_PREDICATES))}"
+)
 
 
 # doc_type -> the gate it opens. DERIVED from the predicates above, never hand-written.
@@ -617,7 +623,7 @@ assert len(_demanded) == len(set(_demanded)), (
 del _demanded
 
 
-# deliverable code -> the gate that deliverable opens. Nine of the 144.
+# deliverable code -> the gate that deliverable opens. Five of Revision 4's 112.
 DELIVERABLE_GATE: dict[str, str] = {
     code: GATE_OF_DOC_TYPE[doc_type]
     for code, doc_type in DELIVERABLE_GATE_DOC_TYPE.items()
@@ -627,8 +633,9 @@ assert len(DELIVERABLE_GATE) == len(DELIVERABLE_GATE_DOC_TYPE), (
     "a deliverable is mapped to a gate document type that no gate actually demands"
 )
 
-# doc_type -> the doc-2 title of the deliverable stored under it. What the register shows a
-# reader instead of "P04_D03" or "concept_note", neither of which means anything to them.
+# doc_type -> the title of the deliverable stored under it. What the register shows a reader
+# instead of "R4P1_D12" or "programme_approval_request", neither of which means anything to
+# them.
 DOC_TYPE_LABELS: dict[str, str] = {
     deliverable_doc_type(code): title
     for code, (_phase, title) in DELIVERABLE_INDEX.items()
@@ -646,24 +653,28 @@ def evaluate_gate(c, tenant_id: str, programme_id: int, gate_code: str) -> None:
     Output: none (returns quietly when the gate may be approved).
     Raises: EnterpriseGateError / GateBlockedError.
 
-    Gates 10-14 are deliberately blocked in Release 1 -- their evidence (construction
-    reports, test results, handover dossiers) is produced by slices that have not
-    shipped. They are seeded and visible so the lifecycle is honest about where it ends.
+    ALL FIVE OF REVISION 4's GATES ARE OPERABLE. The old model seeded 14 and blocked five of
+    them, because their evidence came from slices that had not shipped -- a lifecycle with a
+    visible end was judged better than one with a hole in the middle. Rev 4's five boundaries
+    each ask only for their own phase's approval document, which the app itself writes, so
+    none of them is waiting on unshipped work. GATES_DEFERRED_BEYOND_RELEASE_1 is
+    consequently empty, and the guard below is kept as a no-op rather than deleted: it is the
+    mechanism by which a future gate CAN be seeded-but-blocked honestly.
     """
     if gate_code not in GATE_CODES:
         raise EnterpriseGateError("GATE", f"unknown gate {gate_code!r}")
     if gate_code in GATES_DEFERRED_BEYOND_RELEASE_1:
         raise GateBlockedError(
             gate_code,
-            "this gate is seeded but not yet operable; Release 1 delivers the "
-            "lifecycle through Gate 9",
+            "this gate is seeded but not yet operable",
         )
 
-    # Gate prerequisites, checked BEFORE the gate's own evidence. Awarding a contract
-    # (G08) before financial close (G07) is not a routing mistake to be caught on some
-    # edge -- it is the thing Gate 7 exists to prevent, so the dependency lives on the
-    # GATE. With it here, mobilisation transitively requires funding no matter which path
-    # a programme takes to reach it.
+    # Gate prerequisites, checked BEFORE the gate's own evidence. Rev 4 declares none
+    # (GATE_PREREQUISITE_GATES is empty): its phases are a simple forward spine, and
+    # PHASE_ENTRY_REQUIRED_GATES already makes each gate transitively require the one before
+    # it, so a second cross-gate table would only be a place for the two to disagree. Kept as
+    # a no-op loop because the mechanism is how a genuine cross-gate dependency would be
+    # expressed if the owner's model ever grows one.
     for prerequisite in GATE_PREREQUISITE_GATES.get(gate_code, ()):
         row = c.execute(
             "SELECT status FROM enterprise_stage_gates "

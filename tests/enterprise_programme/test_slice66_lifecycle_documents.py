@@ -1,17 +1,25 @@
-"""Slice 6.6 -- lifecycle document generation from selected activities + source uploads.
+"""Slice 6.6 -- report generation from a Rev 4 deliverable + source uploads.
 
 The owner's requirement, in their words:
-  "in the life cycle activities must have check box, one use select one or even multiple of
-   the activities the app must generate document"
+  "each phase will have types [of] report to be produced as buttons and once clicked the
+   agent writes the report, human review, edit and save and agent upload"
   "where user must load a document that document can be used to develop life cycle document"
+
+REV 4 (2026-07-16): THE 453 ACTIVITIES ARE GONE. The old model built a report out of ticked
+activity checkboxes, one section per activity. Revision 4's model is six phases of deliverable
+BUTTONS, and clicking one asks for THAT document -- so a report IS one deliverable, and its
+sections are derived from the deliverable itself (documents._sections_for_deliverable): a
+focused deliverable ("Preliminary Budget") covers the topics its title bears on, an omnibus one
+("Programme Concept Note") covers the union of its phase's topics. Section headings are
+`## <topic heading>`; there is no longer a `### <activity sentence>`.
 
 The properties that carry the slice, and therefore the tests:
 
-  1. AN ACTIVITY THE SOURCE CANNOT ANSWER IS MARKED, NOT FAKED. A generated document that
-     quietly leaves a gap looks finished and is not. Every activity either gets real content
-     or says TO BE COMPLETED.
-  2. THE DOCUMENT NAMES WHAT IT ANSWERS. The ticked activity codes are stored on the row, so
-     a document can always account for its own scope.
+  1. A SECTION THE APP CANNOT GROUND IS MARKED, NOT FAKED. A generated report that quietly
+     leaves a gap looks finished and is not. Every section either gets real content or is
+     marked [To be completed].
+  2. THE DOCUMENT NAMES WHAT IT IS. The deliverable is stamped into the row's doc_type, so a
+     report can always account for its own scope -- and so a gate reads what the app WROTE.
   3. C13 HOLDS ON THE SOURCE TOO. Naming a document id from another programme must not quote
      that programme's content into this one.
 """
@@ -26,9 +34,12 @@ import pytest
 from app.enterprise_programme import (
     beneficiaries, documents, tenancy, workflows,
 )
-from app.enterprise_programme.constants import ACTIVITY_INDEX, PHASE_ACTIVITIES
 from app.enterprise_programme.documents import DocumentError
 from app.enterprise_programme.rbac import EnterprisePermissionError
+from app.enterprise_programme import rev4_phases as rev4
+from app.enterprise_programme.rev4_phases import (
+    DELIVERABLE_INDEX, PHASE_DELIVERABLES, PHASES,
+)
 from app.security import audit as audit_mod
 
 
@@ -38,6 +49,14 @@ class _Conn(sqlite3.Connection):
 
 OWNER = 1       # created the org -> holds every Release-1 role
 READER = 2      # a member with no roles at all
+
+
+# The deliverables these tests drive, named once so a reader can see WHY each was chosen.
+CONCEPT_NOTE = "R4P1_D01"       # omnibus: matches no topic, so it covers Initiation's union
+PRELIM_BUDGET = "R4P1_D10"      # focused: "Preliminary Budget" -> the money topic alone
+RISK_REGISTER = "R4P1_D07"      # focused: "Initial Risk Register" -> the risk topic alone
+APPROVAL_REQUEST = "R4P1_D12"   # opens gate R4G1_INITIATION -> stored as its gate's doc_type
+SPONSOR_ACCEPTANCE = "R4P6_D13"  # focused: "Sponsor Acceptance" -> the sponsor topic alone
 
 
 SOURCE = b"""Programme Background
@@ -106,98 +125,160 @@ def _upload(c, org, pid, data=SOURCE, name="brief.txt"):
                                      title="Ministry Brief", audit=_audit(c))
 
 
-# --- the activities themselves ----------------------------------------------
+def _sections(md: str) -> list[tuple[str, str]]:
+    """A report's sections, as an ORDERED LIST of (heading, prose).
+
+    Input:  a generated report's markdown.
+    Output: [(heading, prose)] for every `## ` section that carries prose, in document order.
+
+    A LIST, NOT A DICT, AND THAT IS LOAD-BEARING. Keying by heading silently MERGES two
+    sections that share one -- which is exactly the shape the duplicate-statement guard exists
+    to catch, so a dict would hide the very defect these tests are here to find.
+
+    The italic notes (*Written by...*, *Not yet recorded.*, *[To be completed...*) and the
+    `---` rule that closes the document are not a section's prose and are dropped; sections
+    left with nothing but those are dropped too.
+    """
+    out: list[list] = []
+    cur: list | None = None
+    for line in md.splitlines():
+        if line.startswith("## "):
+            cur = [line[3:].strip(), []]
+            out.append(cur)
+        elif (cur and line.strip() and not line.startswith("#")
+                and not line.strip().startswith("*") and set(line.strip()) != {"-"}):
+            cur[1].append(line.strip())
+    return [(h, " ".join(body).strip()) for h, body in out if " ".join(body).strip()]
 
 
-def test_every_phase_has_activities_and_they_came_from_doc_3():
-    """453 activities across the 16 phases. If this drops to 0 the picker renders empty."""
-    assert len(PHASE_ACTIVITIES) == 16
-    assert all(len(v) > 0 for v in PHASE_ACTIVITIES.values())
-    assert len(ACTIVITY_INDEX) > 400
-    # Verbatim from doc 3, not paraphrased.
-    assert ACTIVITY_INDEX["P01_A01"][1] == "Register the programme idea."
+# --- the deliverables themselves --------------------------------------------
+
+
+def test_every_phase_has_deliverables_and_they_came_from_the_owner_spec():
+    """112 deliverables across the six phases. If this drops to 0 the phase renders no
+    buttons, and there is no way left to ask for a report at all."""
+    assert len(PHASE_DELIVERABLES) == 6
+    assert all(len(v) > 0 for v in PHASE_DELIVERABLES.values())
+    assert len(DELIVERABLE_INDEX) == 112
+    # Verbatim from the owner's Revision 4 spec (sections 9-14), not paraphrased.
+    assert DELIVERABLE_INDEX["R4P1_D01"] == ("R4_INITIATION", "Programme Concept Note")
+    # Six phases, in the owner's order -- the report buttons are grouped by these.
+    assert [code for code, _no, _name in PHASES] == [
+        "R4_INITIATION", "R4_PLANNING", "R4_EXECUTION",
+        "R4_MONITORING", "R4_VALUE", "R4_CLOSURE",
+    ]
 
 
 # --- generation -------------------------------------------------------------
 
 
-def test_generating_from_one_ticked_activity_produces_a_document(db):
+def test_generating_the_report_for_one_deliverable_produces_a_document(db):
     c, org, _o, pid, _op = db
     doc_id = documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], title="Concept",
+        c, org, OWNER, pid, deliverable_code=PRELIM_BUDGET, title="Concept",
         use_ai=False, audit=_audit(c),
     )
     doc = documents.get_document(c, org, doc_id)
     assert doc["doc_kind"] == "generated"
-    assert "Register the programme idea." in doc["markdown"]
+    # "Preliminary Budget" is now an authored document, not a bare money topic. The test
+    # still proves one clicked deliverable writes a real document and uses its own shape.
+    headings = [ln[3:].strip() for ln in doc["markdown"].splitlines()
+                if ln.startswith("## ")]
+    assert headings == [s.heading for s in documents._sections_for_deliverable(PRELIM_BUDGET)]
+    assert "Indicative cost" in headings
     assert "Ghana Schools" in doc["markdown"]
 
 
-def test_generating_from_several_activities_groups_them_by_phase_in_lifecycle_order(db):
-    """Ticked in any order, a document must still read in lifecycle order."""
+def test_an_omnibus_report_covers_its_authored_document_shape_in_a_fixed_order(db):
+    """The concept note now has authored document sections, not topic headings.
+
+    This is the contract the owner asked for after rejecting the topic-derived output: the
+    headings name parts of the document -- Purpose, Background, Problem, and so on -- rather
+    than buckets of programme facts. The order is fixed because it is the document's argument.
+    """
     c, org, _o, pid, _op = db
-    doc_id = documents.generate_document(
-        c, org, OWNER, pid,
-        activity_codes=["P03_A02", "P01_A11", "P03_A01", "P01_A02"],   # deliberately jumbled
-        title="Pack", use_ai=False, audit=_audit(c),
-    )
-    md = documents.get_document(c, org, doc_id)["markdown"]
-    assert md.index("## Phase 1") < md.index("## Phase 3")
-    # And within a phase, doc-3 order -- not click order.
-    assert md.index(ACTIVITY_INDEX["P03_A01"][1]) < md.index(ACTIVITY_INDEX["P03_A02"][1])
+    md = documents.get_document(c, org, documents.generate_document(
+        c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE, use_ai=False, audit=_audit(c),
+    ))["markdown"]
+
+    expected = [s.heading for s in documents._sections_for_deliverable(CONCEPT_NOTE)]
+    assert expected == ["Purpose", "Background and context", "The problem",
+                        "Objectives and expected benefits", "Scope and beneficiaries",
+                        "Delivery approach", "Indicative cost and funding",
+                        "Key stakeholders", "Risks and assumptions",
+                        "Recommendation and next steps"]
+    assert [ln[3:].strip() for ln in md.splitlines() if ln.startswith("## ")] == expected
 
 
-def test_an_empty_selection_is_refused(db):
+def test_a_report_naming_no_deliverable_is_refused(db):
+    """A report that is not one of Revision 4's deliverables is not a report this app writes.
+
+    Rev 4 made `deliverable_code` required: every button posts one, so there is no free-form
+    path left -- and an empty one must fail closed rather than fall through to a generic
+    document that looks right, is named right, and opens no gate.
+    """
     c, org, _o, pid, _op = db
-    with pytest.raises(DocumentError, match="at least one activity"):
-        documents.generate_document(c, org, OWNER, pid, activity_codes=[],
+    with pytest.raises(DocumentError, match="unknown deliverable"):
+        documents.generate_document(c, org, OWNER, pid, deliverable_code="",
                                     use_ai=False, audit=_audit(c))
 
 
-def test_an_unknown_activity_code_is_refused(db):
-    """A hand-posted code must not silently produce a document with a missing section."""
+def test_an_unknown_deliverable_code_is_refused(db):
+    """A hand-posted code must not silently produce a document named after nothing."""
     c, org, _o, pid, _op = db
-    with pytest.raises(DocumentError, match="unknown activities"):
-        documents.generate_document(c, org, OWNER, pid,
-                                    activity_codes=["P01_A01", "P99_A99"],
+    with pytest.raises(DocumentError, match="unknown deliverable"):
+        documents.generate_document(c, org, OWNER, pid, deliverable_code="R4P9_D99",
                                     use_ai=False, audit=_audit(c))
 
 
-def test_the_document_records_exactly_which_activities_it_answers(db):
+def test_the_document_records_exactly_which_deliverable_it_is(db):
+    """A document can always account for its own scope -- now via the deliverable it IS.
+
+    The `activity_codes` column is gone with the activities (migration 033). A Rev 4 report is
+    ONE deliverable, so its provenance is the deliverable stamped into its doc_type -- and for
+    the five deliverables that open a gate, that doc_type is the gate's own, which is what
+    makes the document the app WROTE the thing the gate READS rather than a typed-in title.
+    """
     c, org, _o, pid, _op = db
-    picked = ["P01_A02", "P01_A01"]
-    doc_id = documents.generate_document(c, org, OWNER, pid, activity_codes=picked,
-                                         use_ai=False, audit=_audit(c))
-    listed = [d for d in documents.list_documents(c, org, pid) if d["id"] == doc_id][0]
-    assert sorted(listed["activity_codes"]) == sorted(picked)
-    assert listed["activity_count"] == 2
+
+    plain = documents.generate_document(c, org, OWNER, pid, deliverable_code=PRELIM_BUDGET,
+                                        use_ai=False, audit=_audit(c))
+    listed = [d for d in documents.list_documents(c, org, pid) if d["id"] == plain][0]
+    assert listed["doc_type"] == PRELIM_BUDGET
+    assert listed["title"] == "Preliminary Budget"
+
+    evidence = documents.generate_document(c, org, OWNER, pid,
+                                           deliverable_code=APPROVAL_REQUEST,
+                                           use_ai=False, audit=_audit(c))
+    listed = [d for d in documents.list_documents(c, org, pid) if d["id"] == evidence][0]
+    assert listed["doc_type"] == "programme_approval_request"   # gate R4G1's own type
 
 
 # --- the source document ----------------------------------------------------
 
 
 def test_an_uploaded_document_supplies_the_content(db):
-    """THE second half of the ask: my document becomes the lifecycle document's material."""
+    """THE second half of the ask: my document becomes the report's material."""
     c, org, _o, pid, _op = db
     src = _upload(c, org, pid)
 
     md = documents.get_document(c, org, documents.generate_document(
         c, org, OWNER, pid,
-        activity_codes=["P01_A08"],          # "Identify possible programme funding sources."
+        deliverable_code=PRELIM_BUDGET,      # "Preliminary Budget" -> the money section
         source_document_id=src, use_ai=False, audit=_audit(c),
     ))["markdown"]
 
-    # The BODY of the funding section, not merely its heading.
+    # The BODY of the funding passage, not merely its heading.
     assert "sovereign concessional loan" in md
     assert "**QUESTION" not in md
 
 
-def test_an_activity_the_app_KNOWS_is_written_not_asked(db):
+def test_a_section_the_app_KNOWS_is_written_not_asked(db):
     """The owner's bug (2026-07-13): "it's not writing, it's rather asking me question."
 
-    This programme HAS a sponsor on record. So "identify the sponsoring institution" is a
-    question the app can answer out of its own database -- and asking the operator for it,
-    as the old code did whenever no LLM was reachable, was the app refusing to read its own
+    This programme HAS a sponsor on record. So "Sponsor Acceptance" -- a report about the
+    sponsor -- is one the app can write out of its own database, and asking the operator for
+    it, as the old code did whenever no LLM was reachable, was the app refusing to read its own
     records. Answering it is not a nicety; it is the difference between a document and a
     questionnaire.
     """
@@ -205,7 +286,7 @@ def test_an_activity_the_app_KNOWS_is_written_not_asked(db):
     src = _upload(c, org, pid)
 
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A02"],   # sponsoring institution
+        c, org, OWNER, pid, deliverable_code=SPONSOR_ACCEPTANCE,
         source_document_id=src, use_ai=False, audit=_audit(c),
     ))["markdown"]
 
@@ -213,40 +294,49 @@ def test_an_activity_the_app_KNOWS_is_written_not_asked(db):
     assert "sponsored by owen" in md, "it did not write the sponsor it has on record"
 
 
-def test_an_activity_the_app_CANNOT_ground_is_still_written_and_marked_to_complete(db):
-    """The honest half, preserved: never invent -- but never hand back a blank either.
+def test_a_section_the_app_CANNOT_ground_is_marked_to_complete_never_faked(db):
+    """The honest half, preserved: never invent -- but never hand back a blank report either.
 
-    "Register the programme idea" is not a fact this app holds. The old code made that section
-    BE a question; the interim code wrote the section and asked a question underneath it.
-    OWNER, 2026-07-15: "remove ... questions". Now the section is written from the programme's
-    own description and, where a specific fact is missing, marked with a plain [To be completed]
-    note the operator fills in by EDITING the report -- no question is ever put to them.
+    The app stores no risk register, so a concept note's Risks section is a fact it does not
+    hold. The old code made that section BE a question; the interim code wrote the section and
+    asked a question underneath it. OWNER, 2026-07-15: "remove ... questions". Now an
+    ungroundable section says "*Not yet recorded.*" and carries a plain [To be completed] note
+    the operator fills in by EDITING the report -- no question is ever put to them.
+
+    REV 4 CHANGED WHICH HALF IS WHICH, and the distinction is the point. A THIN SECTION is no
+    longer written at all -- _write_from_facts returns silence rather than boilerplate, because
+    a non-empty section that answers nothing reads as done and the gap never surfaces (the
+    2026-07-13 defect). What must still be true is that the REPORT is written: the sections the
+    app CAN ground carry real prose, and only the rest are marked.
     """
     c, org, _o, pid, _op = db
 
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"],   # register the programme idea
-        use_ai=False, audit=_audit(c),
+        c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE, use_ai=False, audit=_audit(c),
     ))["markdown"]
 
-    # WRITTEN: the section has prose, and it is neither a bare question nor a question line.
+    # WRITTEN: neither a bare question nor the old question line.
     assert "**QUESTION" not in md
     assert "*To strengthen" not in md          # the old question line is gone for good
-    body = md.split("### ", 1)[1]
-    prose = [ln.strip() for ln in body.splitlines()
-             if ln.strip() and not ln.strip().startswith("*")]
-    assert prose, "the section is a marker with no prose above it"
 
-    # ...and where it lacks a fact it says so as a plain completion note, NOT a question.
+    # The report is a document, not a sheet of markers: the sections the app can ground carry
+    # real prose about THIS programme.
+    written = _sections(md)
+    assert written, "the report is markers all the way down -- nothing was written"
+    assert any("Ghana Schools" in prose for _h, prose in written)
+
+    # ...and the sections it cannot ground say so as a plain completion note, NOT a question.
     assert documents.THIN_SECTION_MARKER in md
+    # Risks is one of them: the app holds no risk register and does not pretend otherwise.
+    assert "Risks" not in [h for h, _p in written]
 
 
-def test_an_unrelated_passage_is_never_quoted_under_an_activity(db):
-    """Worse than a gap: a confident quote that has nothing to do with the activity."""
+def test_an_unrelated_passage_is_never_quoted_under_a_section(db):
+    """Worse than a gap: a confident quote that has nothing to do with the section."""
     c, org, _o, pid, _op = db
     src = _upload(c, org, pid)
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A02"],   # sponsoring institution
+        c, org, OWNER, pid, deliverable_code=SPONSOR_ACCEPTANCE,   # the sponsor section
         source_document_id=src, use_ai=False, audit=_audit(c),
     ))["markdown"]
     # It must not have reached for the least-irrelevant paragraph.
@@ -263,7 +353,7 @@ def test_generation_works_with_no_source_document_at_all(db):
     """
     c, org, _o, pid, _op = db
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
+        c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE, use_ai=False, audit=_audit(c),
     ))["markdown"]
     assert "Ghana Schools" in md            # written, and written about THIS programme
     assert "**QUESTION" not in md           # not handed back to the operator
@@ -301,7 +391,7 @@ def test_an_empty_upload_is_refused(db):
 def test_a_member_without_report_generate_cannot_generate(db):
     c, org, _o, pid, _op = db
     with pytest.raises(EnterprisePermissionError):
-        documents.generate_document(c, org, READER, pid, activity_codes=["P01_A01"],
+        documents.generate_document(c, org, READER, pid, deliverable_code=CONCEPT_NOTE,
                                     use_ai=False, audit=_audit(c))
 
 
@@ -319,7 +409,7 @@ def test_c13_a_source_document_from_another_programme_cannot_be_quoted_in(db):
                                         data=b"Secret rival funding plan.\n",
                                         audit=_audit(c))
     with pytest.raises(DocumentError) as e:
-        documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A01"],
+        documents.generate_document(c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE,
                                     source_document_id=foreign, use_ai=False,
                                     audit=_audit(c))
     assert e.value.control == "C13"
@@ -341,7 +431,7 @@ def test_uploading_and_generating_are_both_audited(db):
     c, org, _o, pid, _op = db
     c.execute("DELETE FROM audit_logs")
     src = _upload(c, org, pid)
-    documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A01", "P01_A08"],
+    documents.generate_document(c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE,
                                 source_document_id=src, use_ai=False, audit=_audit(c))
 
     actions = [r[0] for r in c.execute("SELECT action FROM audit_logs ORDER BY id")]
@@ -354,39 +444,12 @@ def test_uploading_and_generating_are_both_audited(db):
 def test_a_generated_document_renders_to_a_real_pdf(db):
     c, org, _o, pid, _op = db
     doc = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], title="Concept Note",
+        c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE, title="Concept Note",
         use_ai=False, audit=_audit(c),
     ))
     pdf = documents.render_pdf(doc["markdown"], doc["title"])
     assert pdf.startswith(b"%PDF-")
     assert len(pdf) > 1000
-
-
-# --- the app asks, the operator answers, the answer becomes the content ------
-
-
-# --- the five lifecycle stages ----------------------------------------------
-
-
-def test_the_five_stages_cover_every_phase_and_every_activity():
-    """Initiation / Planning / Implementation / Monitoring / Closure -- the owner's model."""
-    from app.enterprise_programme.constants import LIFECYCLE_STAGES, PHASES
-    assert [name for _c, name, _p in LIFECYCLE_STAGES] == [
-        "Initiation", "Planning", "Implementation", "Monitoring", "Closure",
-    ]
-    covered = [p for _c, _n, phases in LIFECYCLE_STAGES for p in phases]
-    assert sorted(covered) == sorted(p[0] for p in PHASES)   # all 16, none twice
-
-
-def test_a_document_is_grouped_by_lifecycle_stage(db):
-    """Ticked across stages, the document reads Initiation then Planning -- never click order."""
-    c, org, _o, pid, _op = db
-    md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid,
-        activity_codes=["P03_A01", "P01_A01"],     # Planning ticked first, Initiation second
-        use_ai=False, audit=_audit(c),
-    ))["markdown"]
-    assert md.index("# Initiation") < md.index("# Planning")
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +464,7 @@ def test_the_programme_description_actually_reaches_the_document(db):
     `programme_facts()` did not SELECT `description`, while `_brief()` and `build_markdown()`
     read `facts["description"]` through `.get()`. So the column was absent, `.get()` returned
     None, no error was ever raised, and the programme description -- the one thing the app was
-    told to write every activity from -- was never given to the writer. Every activity fell
+    told to write every section from -- was never given to the writer. Every section fell
     through to "ask a question" and the feature looked like it had merely found nothing to say.
     """
     c, org, _o, pid, _op = db
@@ -414,7 +477,7 @@ def test_the_programme_description_actually_reaches_the_document(db):
     assert facts["description"] == "Electrifying 500 residential buildings in Volta."
 
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
+        c, org, OWNER, pid, deliverable_code=CONCEPT_NOTE, use_ai=False, audit=_audit(c),
     ))["markdown"]
     assert "Electrifying 500 residential buildings in Volta." in md
 
@@ -464,61 +527,104 @@ def test_a_source_document_cannot_break_out_of_its_fence(db):
     assert "<<<SOURCE_EXTRACT" not in safe
 
 
-
-
 # --- the owner's "same statement" bug, on the report path --------------------
 
-def test_no_two_sections_of_a_report_make_the_SAME_STATEMENT(db):
+def test_no_two_sections_of_a_report_make_the_SAME_STATEMENT(db, monkeypatch):
     """THE OWNER'S BUG, 2026-07-14: "the agent just answered every question with the same
     statement -- fix it, and don't use my information".
 
-    It was fixed then in the per-activity answer engine. The Rev 4 rebuild DELETED that
-    engine, so this -- a report covering a whole phase -- is the only path the operator has
-    left, and the defect lived on in it: _topic_of matches needles against the activity
-    sentence and takes the first hit, so "Identify the energy-access problem" (`energy`) and
-    "Determine whether the programme will use ... Generation-station designs" (`generation`)
-    both resolve to the capacity topic, which for a young programme can offer exactly one
-    sentence. Both sections printed it.
+    It was fixed then in the per-activity answer engine. The Rev 4 rebuild DELETED that engine,
+    so a report -- the only path the operator has left -- is where this guard now lives. The
+    guard must still detect repeated prose, but it must not turn a section into a fake gap:
+    it retries the section and, if the model still repeats itself, keeps the prose with a
+    review flag.
 
-    Driven with use_ai=False on purpose: that is the live reality, where the free-tier chain
-    falls through to rule_based and every section takes the deterministic path.
+    WHY THE AGENT WRITES HERE, AND WHY THAT IS THE HONEST TEST. Read the owner's words again:
+    "THE AGENT just answered every question with the same statement". The failure they reported
+    is the MODEL returning the same prose for section after section, and that is what this
+    drives -- `_ai_write` is stubbed to answer every section identically, which is exactly what
+    a narrow-record programme provokes out of a real free-tier model.
+
+    It is stubbed rather than hoped for. An earlier version of this test leaned on a collision
+    the DETERMINISTIC path happened to produce, and that collision turned out to be a separate
+    defect (`_sections_for_deliverable` resolved the `design` topic twice, so an omnibus report
+    grew two identical headings). When that defect was fixed on 2026-07-16 the collision went
+    with it, and this test went on passing with the dedupe ripped out -- i.e. it had quietly
+    become worthless. A guard against "the model repeated itself" must not depend on the model
+    being unlucky in one particular way; it must MAKE it repeat itself and check the app copes.
+
+    The deterministic path is covered separately by
+    test_no_report_the_app_can_write_repeats_itself_on_the_deterministic_path.
     """
     c, org, _o, _pid, _op = db
     desc = "Rooftop solar for 100 rural schools in the Volta Region."
     pid = workflows.create_programme(
         c, org, OWNER, code="GH-SAME", name="Same Statement Check",
-        sponsor_user_id=OWNER, design_strategy="standard", description=desc,
+        sponsor_user_id=OWNER, design_strategy="standard", country="Ghana", description=desc,
         audit=_audit(c))
     c.commit()
 
-    codes = [a for a, _t in PHASE_ACTIVITIES["P01_CONCEPT"]]
+    # THE MODEL, REPEATING ITSELF. One sentence, every section, no matter what it was asked --
+    # the owner's bug, made deterministic.
+    PARROT = "The programme is progressing in line with its objectives."
+    monkeypatch.setattr(documents, "_ai_write",
+                        lambda subject, facts, passage_body="", *,
+                        brief="", document_title="": PARROT)
+
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=codes, use_ai=False, audit=_audit(c),
+        c, org, OWNER, pid, deliverable_code="R4P1_D01",     # Programme Concept Note (omnibus)
+        use_ai=True, audit=_audit(c),
     ))["markdown"]
 
-    # Collect each activity section's prose, ignoring the markers and the italic notes.
-    sections, cur = {}, None
-    for line in md.splitlines():
-        if line.startswith("### "):
-            cur = line[4:].strip()
-            sections[cur] = []
-        elif cur and line.strip() and not line.startswith("#"):
-            sections[cur].append(line.strip())
-    bodies = {}
-    for head, lines in sections.items():
-        # Skip the italic notes (*Written by...*, *[To be completed...*) and the `---` rule
-        # that closes the document -- neither is a section's prose, and the rule would
-        # otherwise be collected as the last section's body.
-        prose = " ".join(l for l in lines
-                         if not l.startswith("*") and set(l.strip()) != {"-"})
-        if prose.strip():
-            bodies[head] = prose.strip()
-
-    assert bodies, "the report wrote no prose at all"
-    assert len(bodies) == len(set(bodies.values())), (
-        "the same statement was written under more than one section -- exactly what the "
-        "owner reported"
+    bodies = _sections(md)
+    assert len(bodies) > 1, (
+        "this report has fewer than two sections, so it cannot demonstrate the guard at all"
     )
-    assert not [h for h, p in bodies.items() if desc in p], (
+    assert len([h for h, p in bodies if PARROT in p]) > 1, (
+        "the test no longer drives the repeated-model-output failure it is meant to pin"
+    )
+    assert "Repeated-section review" in md, (
+        "the duplicate-statement guard was defeated: repeated model prose was saved without "
+        "being retried and flagged"
+    )
+    assert documents.THIN_SECTION_MARKER not in md, (
+        "a repeated AI statement was converted into a fake completion gap instead of being "
+        "kept with a review flag"
+    )
+    assert not [h for h, p in bodies if desc in p], (
         "the operator's own programme description was echoed back at them as a section"
     )
+
+
+def test_no_report_the_app_can_write_repeats_itself_on_the_deterministic_path():
+    """No deliverable may produce a report with the SAME HEADING twice. All 112 of them.
+
+    THE DEFECT THIS PINS, found 2026-07-16 while rewriting the suite for Rev 4:
+    `_TOPICS` deliberately maps TWO needle groups to the `design` topic -- the design PHRASES
+    must be matched ahead of the capacity needles, while the generic design words come after
+    them (Codex rec A). `_topics_of` collapses that duplication; the OMNIBUS union in
+    `_sections_for_deliverable` did not. So 28 omnibus reports grew two identical
+    `## Design strategy` headings, and the second was saved from printing the same sentence
+    twice ONLY by the duplicate-statement dedupe -- which turned it into a spurious
+    "[To be completed]", asking the operator to fill a gap answered three headings above.
+
+    That is the owner's "same statement" bug wearing a hat, and it was being MASKED by the
+    guard against the owner's "same statement" bug. So it gets its own test, on the structure
+    itself, where no dedupe can hide it: this is pure (no database, no model), because
+    `_sections_for_deliverable` reads only the model.
+    """
+    offenders = {}
+    for code in sorted(rev4.DELIVERABLE_CODES):
+        headings = [s.heading for s in documents._sections_for_deliverable(code)]
+        if len(headings) != len(set(headings)):
+            offenders[code] = headings
+    assert not offenders, (
+        f"these reports would render the same heading twice: {offenders}"
+    )
+
+    # And the guard above cannot go vacuous: every deliverable must still produce a report
+    # with at least one section. A blank page presented as a document is the failure this
+    # whole model exists to avoid.
+    empty = [c for c in rev4.DELIVERABLE_CODES
+             if not documents._sections_for_deliverable(c)]
+    assert not empty, f"these deliverables would render an EMPTY report: {empty}"

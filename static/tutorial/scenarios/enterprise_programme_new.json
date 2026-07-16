@@ -3,7 +3,7 @@
   "pageId": "enterprise_programme_new",
   "title": "Register a programme",
   "module": "Enterprise",
-  "description": "A programme is born at Phase 1 with all 16 phases and 14 gates seeded.",
+  "description": "A programme is born at Phase 1 with all six phases and five gates seeded.",
   "version": 2,
   "language": "en-US",
   "screens": [
@@ -53,9 +53,9 @@
     },
     {
       "title": "Register it",
-      "description": "It opens at Phase 1, Concept, awaiting Gate 1.",
-      "voiceScript": "Register it, and it opens at Phase 1, Concept, with all fourteen gates waiting.",
-      "captionText": "Register it, and it opens at Phase 1, Concept, with all fourteen gates waiting.",
+      "description": "It opens at Phase 1, Initiation, awaiting the Initiation gate.",
+      "voiceScript": "Register it, and it opens at Phase 1, Initiation, with all five gates waiting.",
+      "captionText": "Register it, and it opens at Phase 1, Initiation, with all five gates waiting.",
       "targetSelector": "button[type=\"submit\"], .btn-warning",
       "action": "moveCursor",
       "duration": 700,

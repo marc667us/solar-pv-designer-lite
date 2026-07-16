@@ -2,22 +2,28 @@
 
 THE OWNER'S ASK: "the app must work to produce report" -- "using existing design options".
 
-Eleven of doc 2's 144 Key Outputs are engineering documents: the technical and financial
-feasibility reports, the programme business case, the master plan / implementation manual,
-the monitoring report, the consolidated programme BOQ (constants.DELIVERABLE_ENGINE). The
+Seven of Revision 4's 112 deliverables are engineering documents: the programme feasibility
+study, the cost plan, the BOQ, the funding strategy, the implementation plan, the executive
+planning report and the executive status report (rev4_phases.DELIVERABLE_ENGINE). The
 capital-investment engine already writes every one of them from a real design.
 
-Until now the deliverable picker OFFERED those eleven and then wrote them from whatever
-activities the operator happened to tick -- so a "Technical feasibility report" contained no
-engineering at all, while the actual kWp, inverter schedule, BOQ and cash flow sat in a table
-nobody read. And four of the eleven open a stage gate, which would then have opened on the
-strength of that prose.
+Before the fix the deliverable picker OFFERED them and then wrote them from prose -- so a
+"Programme Feasibility Study" contained no engineering at all, while the actual kWp, inverter
+schedule, BOQ and cash flow sat in a table nobody read.
 
 So these tests assert the two halves of the fix:
   * an engine deliverable is written FROM THE DESIGN (and carries the programme's scale, not
     one site's), and
   * when there is no approved reference design, the app REFUSES and says what to do --
-    it does NOT quietly fall back to prose and hand over a hollow document that opens a gate.
+    it does NOT quietly fall back to prose and hand over a hollow document.
+
+NOTE ON THE MISSING TEST. Under the old model four of the engine deliverables were also a
+stage gate's evidence, so "a gate must not open on a refused engine deliverable" was a real
+risk and this module closed it. Revision 4's five gates each ask for their phase's own
+approval/closure document, and not one of those is engine-written -- the engine set and the
+gate set are disjoint (rev4_phases.DELIVERABLE_ENGINE vs DELIVERABLE_GATE_DOC_TYPE), so that
+property has no subject any more. Should a future edit map an engine deliverable onto a gate,
+restore that test with it: the refusal path would be load-bearing again.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ import sqlite3
 import pytest
 
 from app.enterprise_programme import (
-    beneficiaries, constants, documents, reports, rollout, tenancy, workflows,
+    beneficiaries, documents, reports, rev4_phases, rollout, tenancy, workflows,
 )
 from app.enterprise_programme.reports import ReportError
 
@@ -79,22 +85,22 @@ def programme(db):
 
 def test_the_owners_four_documents_are_all_engine_written():
     """"technical and financial proposal, implementation plan, ... monitor" -- their words."""
-    assert reports.is_engine_written("P04_D01")      # technical feasibility report
-    assert reports.is_engine_written("P04_D02")      # financial feasibility report
-    assert reports.is_engine_written("P05_D01")      # programme master plan
-    assert reports.is_engine_written("P15_D01")      # programme performance report
+    assert reports.is_engine_written("R4P2_D07")     # Programme Feasibility Study
+    assert reports.is_engine_written("R4P2_D16")     # Programme Cost Plan
+    assert reports.is_engine_written("R4P2_D25")     # Programme Implementation Plan
+    assert reports.is_engine_written("R4P4_D19")     # Executive Status Report
 
     # ...and a governance narrative is NOT: a concept note is a statement of intent about a
-    # programme that has not been designed yet. The activity path is right for those.
-    assert not reports.is_engine_written("P01_D01")  # concept note
-    assert not reports.is_engine_written("P02_D01")  # programme charter
+    # programme that has not been designed yet. The deliverable writer is right for those.
+    assert not reports.is_engine_written("R4P1_D01")  # Programme Concept Note
+    assert not reports.is_engine_written("R4P1_D09")  # Programme Charter
 
 
 def test_every_engine_key_exists_in_the_engine():
     """A deliverable mapped to a report key the engine does not have is a dead deliverable."""
     from new_capital_investment_routes import REPORT_KEYS
 
-    missing = {code: key for code, key in constants.DELIVERABLE_ENGINE.items()
+    missing = {code: key for code, key in rev4_phases.DELIVERABLE_ENGINE.items()
                if key not in REPORT_KEYS}
     assert not missing, f"deliverables mapped to a report the engine cannot write: {missing}"
 
@@ -104,13 +110,13 @@ def test_every_engine_key_exists_in_the_engine():
 def test_without_a_reference_design_the_engine_REFUSES_and_says_what_to_do(db, programme):
     """The load-bearing test.
 
-    Silently falling back to the activity path would hand the operator a "Technical
-    feasibility report" written from ticked prose, with no engineering in it -- and, for the
-    business case, open Gate 4 on it. Hollow evidence that looks right is the exact failure
-    this whole module exists to abolish. It must refuse, and the refusal must be actionable.
+    Silently falling back to the deliverable writer would hand the operator a "Programme
+    Feasibility Study" written from topic prose, with no engineering in it. A hollow document
+    that looks right is the exact failure this whole module exists to abolish. It must refuse,
+    and the refusal must be actionable.
     """
     with pytest.raises(ReportError) as e:
-        reports.build_engine_document(db, db.org, programme, "P04_D01")
+        reports.build_engine_document(db, db.org, programme, "R4P2_D07")
 
     msg = str(e.value).lower()
     assert "reference design" in msg
@@ -124,30 +130,12 @@ def test_generate_document_refuses_the_engine_deliverable_and_writes_NOTHING(db,
     with pytest.raises(ReportError):
         documents.generate_document(
             db, db.org, 1, programme,
-            activity_codes=["P04_A01"],          # ticked, and rightly ignored
-            deliverable_code="P04_D01",
+            deliverable_code="R4P2_D07",
             use_ai=False, audit=A(),
         )
 
     after = db.execute("SELECT COUNT(*) FROM enterprise_documents").fetchone()[0]
     assert after == before, "a hollow document was written anyway"
-
-
-def test_a_gate_does_NOT_open_on_a_refused_engine_deliverable(db, programme):
-    """P04_D08 (the business case) opens Gate 4. A refusal must leave that gate shut."""
-    from app.enterprise_programme import gates
-
-    with pytest.raises(ReportError):
-        documents.generate_document(
-            db, db.org, 1, programme, activity_codes=[],
-            deliverable_code="P04_D08", use_ai=False, audit=A(),
-        )
-
-    row = db.execute(
-        "SELECT 1 FROM enterprise_documents WHERE tenant_id=? AND programme_id=? "
-        "AND doc_type='business_case'", (db.org, programme)).fetchone()
-    assert row is None, "Gate 4's evidence was written despite the engine refusing"
-    assert gates.GATE_OF_DOC_TYPE["business_case"] == "G04"
 
 
 # ------------------------------------------- with a design -> the engine writes it
@@ -223,15 +211,17 @@ def _give_it_a_design(db, programme, *, kwp=50.0, unit_cost=120000.0, sites=3,
 def test_the_engine_writes_it_and_the_report_carries_the_PROGRAMME_scale(db, programme):
     """The subtle one. The engine writes about ONE site. The ministry funds two hundred.
 
-    A business case showing the cost of one clinic, presented as the programme's business
-    case, would be accurate in every particular and wrong in its conclusion. The programme
-    header states the multiplication BEFORE the reader reaches an engineering figure.
+    A cost plan showing the cost of one clinic, presented as the programme's cost plan, would
+    be accurate in every particular and wrong in its conclusion. The programme header states
+    the multiplication BEFORE the reader reaches an engineering figure.
     """
     _give_it_a_design(db, programme, unit_cost=120000.0, sites=3)
 
-    md, title = reports.build_engine_document(db, db.org, programme, "P04_D02")
+    md, title = reports.build_engine_document(db, db.org, programme, "R4P2_D16")
 
-    assert title == "Financial feasibility report"
+    # The document is titled for the DELIVERABLE the operator asked for, not for the engine's
+    # own name for the report it happens to run.
+    assert title == "Programme Cost Plan"
     assert "Rural Clinics Solar" in md
     assert "GH-CLINIC" in md
 
@@ -241,8 +231,8 @@ def test_the_engine_writes_it_and_the_report_carries_the_PROGRAMME_scale(db, pro
     assert "360,000.00" in md                      # ...and 3 x that, the programme total
     assert "reference design" in md.lower()
 
-    # And it really did run the ENGINE, not the activity writer: the engine's own section
-    # heading is present, and no activity prose is.
+    # And it really did run the ENGINE, not the deliverable writer: none of the writer's own
+    # prose is present.
     assert "To strengthen this section" not in md
 
 
@@ -254,7 +244,7 @@ def test_a_generation_station_cost_is_NOT_multiplied_by_its_beneficiaries(db, pr
     _give_it_a_design(db, programme, unit_cost=5_000_000.0, sites=4,
                       design_path="generation_station")
 
-    md, _t = reports.build_engine_document(db, db.org, programme, "P04_D08")
+    md, _t = reports.build_engine_document(db, db.org, programme, "R4P2_D26")
 
     assert "single generation station" in md
     assert "not** multiplied" in md or "not multiplied" in md
@@ -262,28 +252,29 @@ def test_a_generation_station_cost_is_NOT_multiplied_by_its_beneficiaries(db, pr
     assert "20,000,000.00" not in md, "the plant's cost was multiplied by its beneficiaries"
 
 
-def test_an_engine_document_opens_its_gate_and_records_no_activities(db, programme):
-    """P04_D08 is the business case: engine-written AND Gate 4's evidence."""
-    from app.enterprise_programme import gates
+def test_an_engine_document_is_STORED_under_its_own_deliverable_code(db, programme):
+    """Generation goes all the way through: the engine's markdown is what lands in the register.
 
+    R4P2_D26 (Executive Planning Report) is engine-written and opens no gate, so it is stored
+    under its own code -- which is what keeps one deliverable's documents distinguishable from
+    another's (rev4_phases.deliverable_doc_type). The content must be the engine's, not a stub:
+    a row that exists but holds a paragraph would satisfy a register and fail a reader.
+    """
     _give_it_a_design(db, programme)
-
-    with pytest.raises(gates.EnterpriseGateError):
-        gates.evaluate_gate(db, db.org, programme, "G04")      # shut
 
     doc_id = documents.generate_document(
         db, db.org, 1, programme,
-        activity_codes=[],                       # none needed, and none given
-        deliverable_code="P04_D08", use_ai=False, audit=A(),
+        deliverable_code="R4P2_D26", use_ai=False, audit=A(),
     )
 
-    gates.evaluate_gate(db, db.org, programme, "G04")          # ...and now it opens
-
     doc = documents.get_document(db, db.org, doc_id)
-    assert doc["doc_type"] == "business_case"
-    # It must not claim to answer activities it never read.
-    assert json.loads(doc["activity_codes"] or "[]") == []
+    assert doc["doc_type"] == "R4P2_D26"
+    assert doc["title"] == "Executive Planning Report"
     assert len(doc["markdown"]) > 200
+    # It really is the engine's document: the programme header the adapter wraps every engine
+    # report in is present, and the deliverable writer's gap marker is not.
+    assert "reference design" in doc["markdown"].lower()
+    assert documents.THIN_SECTION_MARKER not in doc["markdown"]
 
 
 def test_zero_qualified_sites_is_flagged_LOUDLY_in_the_document(db, programme):
@@ -293,5 +284,5 @@ def test_zero_qualified_sites_is_flagged_LOUDLY_in_the_document(db, programme):
     """
     _give_it_a_design(db, programme, sites=0)
 
-    md, _t = reports.build_engine_document(db, db.org, programme, "P04_D02")
+    md, _t = reports.build_engine_document(db, db.org, programme, "R4P2_D16")
     assert "No sites are qualified" in md

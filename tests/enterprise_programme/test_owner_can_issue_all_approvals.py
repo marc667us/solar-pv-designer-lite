@@ -10,10 +10,10 @@ the programme has NAMED a holder for that post -- the caller must BE that person
 
 The second one bites the owner specifically. A programme records its sponsor, director and
 manager BY USER ID. So the moment the owner appoints a colleague as sponsor, the owner --
-who holds `programme_sponsor` and owns the entire organisation -- can never sign Gate 1 or
-Gate 4 on that programme. The ministry's principal is locked out of their own lifecycle by
-an appointment they themselves made, and there is no way back short of re-appointing
-themselves.
+who holds `programme_sponsor` and owns the entire organisation -- can never sign the
+Initiation gate (nor any other gate the sponsor holds) on that programme. The ministry's
+principal is locked out of their own lifecycle by an appointment they themselves made, and
+there is no way back short of re-appointing themselves.
 
 WHAT THE OVERRIDE IS, AND WHAT IT IS NOT
 ----------------------------------------
@@ -35,7 +35,8 @@ import sqlite3
 import pytest
 
 from app.enterprise_programme import (
-    beneficiaries, constants, documents, gates, members, rbac, tenancy, workflows,
+    beneficiaries, constants, documents, gates, members, rbac, rev4_phases, tenancy,
+    workflows,
 )
 from app.enterprise_programme.gates import EnterpriseGateError
 from app.security import audit as audit_mod
@@ -100,11 +101,15 @@ def programme(db):
     return pid
 
 
-def _concept_note(db, programme):
-    """Gate 1's evidence, written by the app."""
+def _approval_request(db, programme):
+    """The Initiation gate's evidence, written by the app.
+
+    Revision 4's R4G1_INITIATION reads exactly one document -- the Programme Approval Request
+    (R4P1_D12), the last of the Initiation phase's twelve deliverable buttons.
+    """
     return documents.generate_document(
-        db, db.org, OWNER, programme, activity_codes=["P01_A01"],
-        deliverable_code="P01_D01", use_ai=False, audit=_audit(db),
+        db, db.org, OWNER, programme,
+        deliverable_code="R4P1_D12", use_ai=False, audit=_audit(db),
     )
 
 
@@ -112,7 +117,7 @@ def _concept_note(db, programme):
 
 def test_the_owner_is_NOT_the_named_sponsor_and_the_gate_names_the_sponsor(db, programme):
     """The premise. Without it the rest of this file proves nothing."""
-    assert gates.gate_authority("G01") == "programme_sponsor"
+    assert gates.gate_authority("R4G1_INITIATION") == "programme_sponsor"
     named = db.execute(
         "SELECT sponsor_user_id FROM enterprise_programme_registry WHERE id=?",
         (programme,)).fetchone()[0]
@@ -123,25 +128,25 @@ def test_the_owner_is_NOT_the_named_sponsor_and_the_gate_names_the_sponsor(db, p
 
 def test_the_owner_CAN_sign_a_gate_whose_named_holder_is_somebody_else(db, programme):
     """The directive: "owner must have the authority to issue all approvals"."""
-    _concept_note(db, programme)                       # the evidence exists
+    _approval_request(db, programme)                       # the evidence exists
 
-    workflows.approve_gate(db, db.org, programme, "G01", OWNER, audit=_audit(db))
+    workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", OWNER, audit=_audit(db))
 
     status = db.execute(
         "SELECT status FROM enterprise_stage_gates WHERE tenant_id=? AND programme_id=? "
-        "AND gate_code='G01'", (db.org, programme)).fetchone()[0]
+        "AND gate_code='R4G1_INITIATION'", (db.org, programme)).fetchone()[0]
     assert status == "Approved"
 
 
 def test_the_override_is_RECORDED_as_an_override(db, programme):
     """An override with no trace would destroy the accountability it is bypassing."""
-    _concept_note(db, programme)
-    workflows.approve_gate(db, db.org, programme, "G01", OWNER, audit=_audit(db))
+    _approval_request(db, programme)
+    workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", OWNER, audit=_audit(db))
 
     # The approvals table must not claim the owner signed AS the sponsor. They are not.
     role = db.execute(
         "SELECT decided_by_role FROM enterprise_approvals "
-        " WHERE tenant_id=? AND programme_id=? AND subject_id='G01'",
+        " WHERE tenant_id=? AND programme_id=? AND subject_id='R4G1_INITIATION'",
         (db.org, programme)).fetchone()[0]
     assert role == "enterprise_owner", (
         "the approvals table says the owner signed as the sponsor, which is false"
@@ -165,14 +170,14 @@ def test_the_owner_signing_a_gate_they_LEGITIMATELY_hold_is_not_an_override(db):
         design_strategy="standard", sponsor_user_id=OWNER, country="Ghana",
         audit=_audit(db), description="x")
     documents.generate_document(
-        db, db.org, OWNER, pid, activity_codes=["P01_A01"],
-        deliverable_code="P01_D01", use_ai=False, audit=_audit(db))
+        db, db.org, OWNER, pid,
+        deliverable_code="R4P1_D12", use_ai=False, audit=_audit(db))
 
-    workflows.approve_gate(db, db.org, pid, "G01", OWNER, audit=_audit(db))
+    workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", OWNER, audit=_audit(db))
 
     role = db.execute(
         "SELECT decided_by_role FROM enterprise_approvals "
-        " WHERE tenant_id=? AND programme_id=? AND subject_id='G01'",
+        " WHERE tenant_id=? AND programme_id=? AND subject_id='R4G1_INITIATION'",
         (db.org, pid)).fetchone()[0]
     assert role == "programme_sponsor", "a normal approval was mislabelled an override"
 
@@ -187,27 +192,27 @@ def test_the_owner_signing_a_gate_they_LEGITIMATELY_hold_is_not_an_override(db):
 def test_the_owner_still_CANNOT_sign_without_the_evidence(db, programme):
     """AUTHORITY, NOT EXEMPTION. This is the line that keeps the gates from being decorative.
 
-    No concept note is generated here. Gate 1 demands one. The owner owns the organisation,
-    holds every role, and is rescued from the post-holder check -- and is still refused,
-    because the document the gate requires does not exist.
+    No approval request is generated here. The Initiation gate demands one. The owner owns
+    the organisation, holds every role, and is rescued from the post-holder check -- and is
+    still refused, because the document the gate requires does not exist.
     """
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.approve_gate(db, db.org, programme, "G01", OWNER, audit=_audit(db))
-    assert "concept note" in str(e.value).lower()
+        workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", OWNER, audit=_audit(db))
+    assert "programme approval request" in str(e.value).lower()
 
     status = db.execute(
         "SELECT status FROM enterprise_stage_gates WHERE tenant_id=? AND programme_id=? "
-        "AND gate_code='G01'", (db.org, programme)).fetchone()[0]
+        "AND gate_code='R4G1_INITIATION'", (db.org, programme)).fetchone()[0]
     assert status != "Approved"
 
 
 def test_a_NON_owner_still_cannot_sign_another_persons_gate(db, programme):
     """The control survives for everyone else. OUTSIDER holds programme_sponsor tenant-wide
     but is not THIS programme's sponsor -- C01 says they may not sign, and they may not."""
-    _concept_note(db, programme)
+    _approval_request(db, programme)
 
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, programme, "G01", OUTSIDER, audit=_audit(db))
+        workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", OUTSIDER, audit=_audit(db))
 
 
 def test_a_delegated_ORG_ADMIN_is_not_the_owner_and_cannot_override(db, programme):
@@ -231,14 +236,14 @@ def test_a_delegated_ORG_ADMIN_is_not_the_owner_and_cannot_override(db, programm
     assert rbac.has_permission(db, db.org, DANA, "tenant.admin")
     assert constants.OWNER_ROLE not in rbac.roles_for_user(db, db.org, DANA)
 
-    _concept_note(db, programme)                       # the evidence is not the problem
+    _approval_request(db, programme)                       # the evidence is not the problem
 
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, programme, "G01", DANA, audit=_audit(db))
+        workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", DANA, audit=_audit(db))
 
     status = db.execute(
         "SELECT status FROM enterprise_stage_gates WHERE tenant_id=? AND programme_id=? "
-        "AND gate_code='G01'", (db.org, programme)).fetchone()[0]
+        "AND gate_code='R4G1_INITIATION'", (db.org, programme)).fetchone()[0]
     assert status != "Approved"
 
 
@@ -275,9 +280,9 @@ def test_an_org_admin_cannot_GRANT_THEMSELVES_ownership_to_get_the_override(db, 
     assert constants.OWNER_ROLE not in rbac.roles_for_user(db, db.org, DANA)
 
     # And so she still cannot sign the sponsor's gate.
-    _concept_note(db, programme)
+    _approval_request(db, programme)
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, programme, "G01", DANA, audit=_audit(db))
+        workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", DANA, audit=_audit(db))
 
 
 def test_an_org_admin_cannot_STRIP_the_owner_of_ownership(db, programme):
@@ -298,8 +303,8 @@ def test_an_org_admin_cannot_STRIP_the_owner_of_ownership(db, programme):
 
     assert constants.OWNER_ROLE in rbac.roles_for_user(db, db.org, OWNER)
     # ...and the owner can still sign, which is the thing the strip would have destroyed.
-    _concept_note(db, programme)
-    workflows.approve_gate(db, db.org, programme, "G01", OWNER, audit=_audit(db))
+    _approval_request(db, programme)
+    workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", OWNER, audit=_audit(db))
 
 
 def test_the_owner_role_is_still_conferred_by_CREATING_the_organisation(db):
@@ -310,20 +315,28 @@ def test_the_owner_role_is_still_conferred_by_CREATING_the_organisation(db):
 
 def test_the_named_sponsor_can_still_sign_their_own_gate(db, programme):
     """The override must not have broken the ordinary path it was bolted onto."""
-    _concept_note(db, programme)
-    workflows.approve_gate(db, db.org, programme, "G01", SPONSOR, audit=_audit(db))
+    _approval_request(db, programme)
+    workflows.approve_gate(db, db.org, programme, "R4G1_INITIATION", SPONSOR, audit=_audit(db))
 
     role = db.execute(
         "SELECT decided_by_role FROM enterprise_approvals "
-        " WHERE tenant_id=? AND programme_id=? AND subject_id='G01'",
+        " WHERE tenant_id=? AND programme_id=? AND subject_id='R4G1_INITIATION'",
         (db.org, programme)).fetchone()[0]
     assert role == "programme_sponsor"
 
 
-def test_the_owner_holds_every_release_1_gate_authority(db):
-    """The bundle the owner is granted at onboarding must cover every gate they can reach."""
+def test_the_owner_holds_every_gate_authority(db):
+    """The bundle the owner is granted at onboarding must cover every gate they can reach.
+
+    Under Revision 4 that is ALL FIVE of them: every gate asks only for its own phase's
+    approval document, which the app itself writes, so nothing is deferred
+    (rev4_phases.GATES_DEFERRED_BEYOND_RELEASE_1 is empty) and every gate is reachable.
+    """
+    assert not rev4_phases.GATES_DEFERRED_BEYOND_RELEASE_1, (
+        "a deferred gate would mean this test no longer covers every gate the owner can reach"
+    )
     owner_roles = set(constants.ONBOARDING_OWNER_ROLES)
-    for code in constants.R1_GATE_CODES:
+    for code in rev4_phases.GATE_CODES:
         authority = gates.gate_authority(code)
         assert authority in owner_roles, (
             f"the onboarding owner does not hold {authority}, the authority for {code}"

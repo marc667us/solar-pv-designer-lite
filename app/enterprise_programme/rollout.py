@@ -64,21 +64,20 @@ import json
 import math
 
 from . import beneficiaries, engines, gates, rbac, templates, txn
-from .constants import (
-    DESIGN_PATH_CODES,
-    LIFECYCLE_STAGES,
-    STAGE_OF_PHASE,
-)
+from .constants import DESIGN_PATH_CODES
+from .rev4_phases import DEFAULT_PHASE_CODE, PHASE_SEQ
 from .gates import EnterpriseGateError
 
 # Design may not begin before Planning. The owner's lifecycle says the programme "opens
 # into" design when it reaches Planning -- so a programme still in Initiation has, by
 # definition, not yet decided what it is building.
 #
-# Derived from LIFECYCLE_STAGES rather than written out, so that if the stage grouping is
-# ever re-cut, this rule moves with it instead of quietly meaning something else.
-_STAGE_ORDER: tuple[str, ...] = tuple(code for code, _n, _p in LIFECYCLE_STAGES)
-_DESIGN_FROM_STAGE = "S2_PLANNING"
+# ASKED OF THE PHASE, NOT OF A "STAGE". This used to index into LIFECYCLE_STAGES and compare
+# against "S2_PLANNING" -- the old 16-phase model grouped its phases into five stages because
+# sixteen of them were unreadable otherwise. Revision 4 has six phases and no stages, so the
+# rule is now stated as what it always meant: the phase after Initiation is Planning, and
+# design opens there.
+_DESIGN_FROM_SEQ = PHASE_SEQ[DEFAULT_PHASE_CODE] + 1
 
 # How many sites one drain pass will generate. Each site is a full design pass plus two
 # inserts; 25 keeps a drain comfortably inside a 120s request even when the standard engine
@@ -194,14 +193,19 @@ def _require_planning_or_later(programme: dict) -> None:
 
     Raises RolloutError("PLANNING") when the programme is still in Initiation.
     """
-    stage = STAGE_OF_PHASE.get(programme["current_phase_code"])
-    if stage is None:  # pragma: no cover -- the phase vocabulary is closed
-        raise RolloutError("PLANNING", "this programme is in an unknown phase")
-    if _STAGE_ORDER.index(stage) < _STAGE_ORDER.index(_DESIGN_FROM_STAGE):
+    seq = PHASE_SEQ.get(programme["current_phase_code"])
+    if seq is None:
+        # A hold or terminal pseudo-state (SUSPENDED, CLOSED, ...) has no sequence number, and
+        # neither has an unknown phase. Both refuse, and refusing is right: a suspended
+        # programme has no business starting a design either.
+        raise RolloutError(
+            "PLANNING", "this programme is not in a phase that can open a design"
+        )
+    if seq < _DESIGN_FROM_SEQ:
         raise RolloutError(
             "PLANNING",
             "the programme is still in Initiation. A programme opens into its design at "
-            "the Planning stage -- move it to Planning first.",
+            "the Planning phase -- move it to Planning first.",
         )
 
 

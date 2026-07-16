@@ -1,15 +1,14 @@
-"""Slice 0 foundation tests -- the Revision 4 six-phase lifecycle model.
+"""The Revision 4 six-phase lifecycle model.
 
-These lock the owner's spec (enterprise-revision-4-owner-spec.txt sections 6-14, 38)
-against `app/enterprise_programme/rev4_phases.py`. They do NOT touch the app, the DB, or
-the (still 16-phase) live lifecycle code -- that wiring is Slice 0b. Their job is to make
-the six-phase contract and the old->new migration mapping impossible to drift silently.
+These lock the owner's spec (enterprise-revision-4-owner-spec.txt sections 6-14, 38) against
+`app/enterprise_programme/rev4_phases.py`, which is now THE lifecycle -- Slice 0b-ii repointed
+every consumer onto it and deleted the old 16-phase map. Their job is to make the six-phase
+contract, and the deliverable codes derived from it, impossible to drift silently.
 """
 
 from __future__ import annotations
 
 from app.enterprise_programme import rev4_phases as r4
-from app.enterprise_programme import constants as old
 
 
 def test_exactly_six_phases_in_spec_order():
@@ -46,50 +45,64 @@ def test_deliverable_counts_match_spec_sections_9_to_14():
 
 def test_specific_owner_deliverables_present_in_right_phase():
     # spot-checks straight from the spec so a reorder can't quietly move a button
-    assert "Programme Charter" in r4.PHASE_DELIVERABLES["R4_INITIATION"]       # section 9
-    assert "Programme Feasibility Study" in r4.PHASE_DELIVERABLES["R4_PLANNING"]  # section 10
-    assert "Commissioning" in r4.PHASE_DELIVERABLES["R4_EXECUTION"]            # section 11
-    assert "Maintenance Handover" in r4.PHASE_DELIVERABLES["R4_VALUE"]         # section 13
-    # section 14 lists Expansion + Replication as CLOSURE deliverables -- the reason
-    # old P16_EXPANSION maps to Closure, not a sixth "expansion" phase.
-    assert "Expansion Recommendation" in r4.PHASE_DELIVERABLES["R4_CLOSURE"]
-    assert "Replication Plan" in r4.PHASE_DELIVERABLES["R4_CLOSURE"]
+    assert "Programme Charter" in r4.PHASE_DELIVERABLE_NAMES["R4_INITIATION"]       # section 9
+    assert "Programme Feasibility Study" in r4.PHASE_DELIVERABLE_NAMES["R4_PLANNING"]  # s.10
+    assert "Commissioning" in r4.PHASE_DELIVERABLE_NAMES["R4_EXECUTION"]            # section 11
+    assert "Maintenance Handover" in r4.PHASE_DELIVERABLE_NAMES["R4_VALUE"]         # section 13
+    # section 14 lists Expansion + Replication as CLOSURE deliverables -- which is why
+    # Rev 4 has no separate "expansion" phase at all.
+    assert "Expansion Recommendation" in r4.PHASE_DELIVERABLE_NAMES["R4_CLOSURE"]
+    assert "Replication Plan" in r4.PHASE_DELIVERABLE_NAMES["R4_CLOSURE"]
 
 
 def test_no_deliverable_name_repeats_within_a_phase():
-    for code, names in r4.PHASE_DELIVERABLES.items():
+    for code, names in r4.PHASE_DELIVERABLE_NAMES.items():
         assert len(names) == len(set(names)), f"duplicate deliverable in {code}"
 
 
-def test_every_old_phase_maps_to_a_real_new_phase():
-    # Migration 032 must not orphan a live programme sitting in any old phase (Codex G-1).
-    old_codes = {code for code, _, _ in old.PHASES}
-    assert set(r4.OLD_PHASE_TO_NEW) == old_codes, "an old phase has no new-model target"
-    assert set(r4.OLD_PHASE_TO_NEW.values()) <= set(r4.PHASE_CODES)
+# --- the derived coded layer (slice 0b-ii) ----------------------------------
+# The codes are what every consumer actually uses: the report button's POST value, the
+# document's doc_type, the engine map. These assert the derivation, because a code that
+# drifts from the name it points at is a report generated under the wrong title.
 
 
-def test_every_old_gate_maps_to_a_real_new_gate():
-    old_gates = {code for code, _, _, _ in old.GATES}
-    assert set(r4.OLD_GATE_TO_NEW) == old_gates, "an old gate has no new-model target"
-    assert set(r4.OLD_GATE_TO_NEW.values()) <= set(r4.GATE_CODES)
+def test_every_deliverable_has_a_code_that_resolves_back_to_its_own_name():
+    for phase, items in r4.PHASE_DELIVERABLES.items():
+        for code, title in items:
+            assert r4.DELIVERABLE_INDEX[code] == (phase, title)
+    assert len(r4.DELIVERABLE_CODES) == 112
 
 
-def test_phase_mapping_is_forward_only():
-    # A programme must never be mapped BACKWARDS into an earlier phase than its old one
-    # implies -- that would resurrect a gate it had already passed. We assert the mapping
-    # is non-decreasing in sequence: old phase i -> new phase whose seq >= a sane floor.
-    # Concretely: the first two old phases -> Initiation, the last -> Closure.
-    assert r4.OLD_PHASE_TO_NEW["P01_CONCEPT"] == "R4_INITIATION"
-    assert r4.OLD_PHASE_TO_NEW["P02_INITIATION"] == "R4_INITIATION"
-    assert r4.OLD_PHASE_TO_NEW["P16_EXPANSION"] == "R4_CLOSURE"
-    # planning band
-    for pc in ("P03_NEEDS", "P04_FEASIBILITY", "P05_STRUCTURING",
-               "P06_TEMPLATES", "P07_FUNDING", "P08_PROCUREMENT"):
-        assert r4.OLD_PHASE_TO_NEW[pc] == "R4_PLANNING"
-    # execution band
-    for pc in ("P09_ENGINEERING", "P10_MOBILISATION",
-               "P11_CONSTRUCTION", "P12_COMMISSIONING"):
-        assert r4.OLD_PHASE_TO_NEW[pc] == "R4_EXECUTION"
+def test_codes_are_positional_within_their_phase():
+    # R4P<phase seq>_D<nn>. Initiation is phase 1, so its first deliverable is R4P1_D01.
+    assert r4.PHASE_DELIVERABLES["R4_INITIATION"][0] == ("R4P1_D01", "Programme Concept Note")
+    assert r4.PHASE_DELIVERABLES["R4_CLOSURE"][0][0] == "R4P6_D01"
+
+
+def test_each_gate_is_opened_by_exactly_one_deliverable_in_its_own_phase():
+    # A gate whose evidence lived in another phase could never be produced in time to open it.
+    for code, doc_type in r4.DELIVERABLE_GATE_DOC_TYPE.items():
+        phase, _title = r4.DELIVERABLE_INDEX[code]
+        assert r4.GATE_FOR_PHASE[phase], f"{code} opens a gate for un-gated phase {phase}"
+        assert r4.deliverable_doc_type(code) == doc_type
+    assert len(r4.DELIVERABLE_GATE_DOC_TYPE) == len(r4.GATE_CODES) == 5
+
+
+def test_a_deliverable_that_opens_no_gate_is_stored_under_its_own_code():
+    # Otherwise two different reports would collide in the register under one doc_type.
+    assert r4.deliverable_doc_type("R4P1_D01") == "R4P1_D01"
+
+
+def test_every_engine_written_deliverable_is_a_real_deliverable():
+    assert set(r4.DELIVERABLE_ENGINE) <= r4.DELIVERABLE_CODES
+
+
+# The OLD -> NEW mapping tables (OLD_PHASE_TO_NEW, OLD_GATE_TO_NEW) and their three tests were
+# deleted on 2026-07-16 with the rest of the old map. They remapped live rows off the 16-phase
+# model; that remap never ran, because the live enterprise data was cleared to a clean slate
+# first, so a programme is now born into the six-phase model with nothing to translate. The
+# tables' keys were the deleted phases and gates -- keeping them would have preserved the old
+# map inside the file that replaced it.
 
 
 def test_status_is_defined_for_every_phase():

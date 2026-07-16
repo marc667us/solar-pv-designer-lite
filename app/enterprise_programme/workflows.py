@@ -10,7 +10,7 @@ THE FIVE THINGS EVERY MATERIAL ACTION DOES, IN ORDER
 ----------------------------------------------------
     1. resolve the programme WITHIN THE CALLER'S TENANT      (control C13)
     2. check the caller's permission -- and for a gate, their ROLE  (rbac)
-    3. check the transition is legal for the current phase   (constants.TRANSITIONS)
+    3. check the transition is legal for the current phase   (rev4_phases.TRANSITIONS)
     4. run the gate predicates / control guards              (gates)
     5. write the row, THEN the audit -- and if the audit fails, roll ALL of it back
                                                              (control C12)
@@ -23,10 +23,10 @@ transition is recoverable; losing the evidence is not.
 
 WHY STATUS IS NEVER A PARAMETER
 -------------------------------
-20 programme statuses and 16 phases are two views of one truth. If a caller could pass
+A programme's status and its phase are two views of one truth. If a caller could pass
 a status, the two would drift and eventually contradict each other -- a programme
-"Under Construction" sitting in the Feasibility phase. Status is DERIVED from the phase
-(constants.PHASE_STATUS). There is no argument that sets it.
+"Closure" sitting in the Planning phase. Status is DERIVED from the phase
+(rev4_phases.PHASE_STATUS). There is no argument that sets it.
 
 HOLDS ARE NOT AMNESIA
 ---------------------
@@ -39,18 +39,25 @@ that could quietly resume anywhere would make the hold meaningless.
 from __future__ import annotations
 
 from . import flags, gates, rbac
-from .constants import (
+# THE LIFECYCLE IS REVISION 4's SIX PHASES (Slice 0b-ii, 2026-07-16). The owner rejected the
+# 16-phase / 14-gate model as "made too large" and asked for the old map to be removed, not
+# left dormant. Everything phase- or gate-shaped therefore comes from rev4_phases; what stays
+# in constants is only what the six-phase model does not redefine (the design strategies a
+# programme may pick, and who owns a programme).
+from .rev4_phases import (
     DEFAULT_PHASE_CODE,
-    DESIGN_STRATEGIES,
     GATE_AUTHORITY_HOLDER_COLUMN,
     GATE_CLOSING_PHASE,
     HOLD_STATES,
-    OWNER_ROLE,
     PHASE_ENTRY_REQUIRED_GATES,
     PHASE_STATUS,
     PSEUDO_STATE_STATUS,
     PSEUDO_STATES,
     TRANSITIONS,
+)
+from .constants import (
+    DESIGN_STRATEGIES,
+    OWNER_ROLE,
 )
 from . import txn
 from .gates import EnterpriseGateError
@@ -91,8 +98,8 @@ _SQLITE_SCHEMA = [
         sponsor_user_id      INTEGER,
         director_user_id     INTEGER,
         manager_user_id      INTEGER,
-        current_phase_code   TEXT NOT NULL DEFAULT 'P01_CONCEPT',
-        status               TEXT NOT NULL DEFAULT 'Concept',
+        current_phase_code   TEXT NOT NULL DEFAULT 'R4_INITIATION',
+        status               TEXT NOT NULL DEFAULT 'Initiation',
         held_from_phase_code TEXT,
         target_capacity_kwp  REAL,
         target_beneficiaries INTEGER,
@@ -500,7 +507,7 @@ def create_programme(c, tenant_id: str, user_id: int, *, code: str, name: str,
             )
             programme_id = _inserted_id(c, cur)
 
-            from .constants import GATES, PHASES  # local: keeps the module header short
+            from .rev4_phases import GATES, PHASES  # local: keeps the module header short
 
             # executemany, not 30 separate round trips. The database is remote (Render free
             # tier), so each INSERT is a network hop; seeding a programme should cost 3 trips,
@@ -881,7 +888,7 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
     # The target must still BE a phase. "Any phase" is not "any string": a typo'd or
     # hand-rolled target would otherwise write a phase code no screen can render and no
     # gate is seeded against, and the programme would simply disappear from its own lifecycle.
-    from .constants import PHASE_CODES
+    from .rev4_phases import PHASE_CODES
     if not flags.advisory_governance(c):
         legal = TRANSITIONS.get(current_phase, ())
         if target not in legal:
@@ -905,7 +912,7 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
                                    user_id, note, audit)
 
     # A real phase move. Is it forward (advance) or backward (rework)?
-    from .constants import PHASES
+    from .rev4_phases import PHASES
 
     seq = {p[0]: p[1] for p in PHASES}
     advancing = seq[target] > seq[current_phase]

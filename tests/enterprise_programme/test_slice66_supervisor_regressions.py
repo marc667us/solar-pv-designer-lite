@@ -13,9 +13,9 @@ import sqlite3
 import pytest
 
 from app.enterprise_programme import (
-    beneficiaries, constants, documents, imports, members, rbac, tenancy, txn, workflows,
+    beneficiaries, documents, imports, members, rbac, tenancy, txn, workflows,
 )
-from app.enterprise_programme.documents import DocumentError
+from app.enterprise_programme.rev4_phases import DELIVERABLE_INDEX
 from app.security import audit as audit_mod
 
 
@@ -148,34 +148,96 @@ def test_the_postgres_adapter_reports_whether_a_transaction_is_open():
 # --- HIGH-3: a click must not fan out into hundreds of LLM calls ------------
 
 
-def test_a_document_cannot_cover_an_unbounded_number_of_activities(db):
-    """HIGH -- "Select the whole Planning stage" ticks 183 activities in one click.
+def test_a_report_cannot_fan_out_into_an_unbounded_number_of_llm_calls(db, monkeypatch):
+    """HIGH -- an ordinary click could take the site down.
 
-    With AI drafting on (the default) that was up to 366 SEQUENTIAL LLM round trips inside a
-    single HTTP request, holding a database connection, against gunicorn's 120s timeout on a
-    two-worker instance. An ordinary click could take the site down.
+    Every drafted section is one SEQUENTIAL LLM round trip inside a single HTTP request,
+    holding a database connection, against gunicorn's 120s timeout on a two-worker instance.
+    The old model let one click tick 183 activities and cost a round trip each; Rev 4's reports
+    are structurally narrower (a report is ONE deliverable and its sections are its topics), but
+    the budget is what actually bounds the cost -- MAX_AI_SECTIONS -- and it must be ENFORCED
+    rather than merely declared.
+
+    So the budget is squeezed below the widest report the app can write and the calls are
+    counted. Past the budget the report must keep generating on the deterministic path -- the
+    same path it takes when no LLM is reachable at all -- so a long report degrades in quality,
+    never in availability.
     """
     c, org, pid = db
-    many = [a for p in ("P03_NEEDS", "P04_FEASIBILITY", "P05_STRUCTURING")
-            for a, _t in constants.PHASE_ACTIVITIES[p]]
-    assert len(many) > documents.MAX_ACTIVITIES_PER_DOCUMENT
 
-    with pytest.raises(DocumentError, match="the limit is"):
-        documents.generate_document(c, org, OWNER, pid, activity_codes=many,
-                                    use_ai=False, audit=_audit(c))
+    # The widest report Rev 4 can ask for: the most sections any deliverable resolves to.
+    widest = max(DELIVERABLE_INDEX, key=lambda d: len(documents._sections_for_deliverable(d)))
+    n_sections = len(documents._sections_for_deliverable(widest))
+    assert n_sections > 2, "no report is wide enough for this test to bound anything"
+
+    calls = []
+
+    def _counting_ai_write(subject, facts, passage_body="", *, brief="", document_title=""):
+        calls.append(subject)
+        return f"{subject} is drafted by the writing service."
+
+    monkeypatch.setattr(documents, "_ai_write", _counting_ai_write)
+    monkeypatch.setattr(documents, "MAX_AI_SECTIONS", 2)
+
+    md = documents.build_markdown(c, org, pid, widest,
+                                  title=DELIVERABLE_INDEX[widest][1], use_ai=True)
+
+    assert len(calls) == 2, "the AI budget did not stop the fan-out"
+    # ...and the report is still a report: every section is present. Past the model budget it
+    # uses the deterministic path; a failed first model call is covered by the loud-failure
+    # document tests instead of being passed off as a report.
+    assert md.count("## ") == n_sections
 
 
-def test_the_whole_planning_stage_really_does_exceed_the_cap():
-    """The cap is not theoretical -- the stage select-all button genuinely exceeds it."""
-    planning = [p for s, _n, ps in constants.LIFECYCLE_STAGES if s == "S2_PLANNING"
-                for p in ps]
-    n = sum(len(constants.PHASE_ACTIVITIES[p]) for p in planning)
-    assert n > documents.MAX_ACTIVITIES_PER_DOCUMENT
+def test_the_duplicate_RETRY_is_charged_to_the_ai_budget_too(db, monkeypatch):
+    """HIGH -- the retry must not double the request's model calls behind the budget's back.
+
+    The duplicate-statement guard (2026-07-16) gives a repeating model ONE chance to rewrite the
+    section. That retry is another SEQUENTIAL round trip to a free-tier model inside the same
+    HTTP request, against gunicorn's 120s timeout on a two-worker instance. If it is not charged
+    to MAX_AI_SECTIONS, the budget stops meaning what it says: a report that happens to repeat
+    itself can make twice the calls the budget allows, and it is precisely the slow, repetitive
+    report that times the request out.
+
+    The sibling fan-out test cannot catch this: its stub returns UNIQUE prose per subject, so the
+    retry never fires there. This one forces the retry by parroting one sentence at every
+    section -- the owner's real "same statement" failure -- and holds the total call count to the
+    budget.
+    """
+    c, org, pid = db
+
+    widest = max(DELIVERABLE_INDEX, key=lambda d: len(documents._sections_for_deliverable(d)))
+    assert len(documents._sections_for_deliverable(widest)) > 3, "report too narrow to bound"
+
+    calls = []
+    PARROT = "The programme is progressing in line with its objectives."
+
+    def _parroting_ai_write(subject, facts, passage_body="", *, brief="", document_title=""):
+        # Every call repeats -> every section after the first triggers a retry.
+        calls.append(subject)
+        return PARROT
+
+    monkeypatch.setattr(documents, "_ai_write", _parroting_ai_write)
+    monkeypatch.setattr(documents, "MAX_AI_SECTIONS", 3)
+
+    documents.build_markdown(c, org, pid, widest,
+                             title=DELIVERABLE_INDEX[widest][1], use_ai=True)
+
+    assert len(calls) <= 3, (
+        "the retry escaped the AI budget: %d calls against a budget of 3. Every retry is a "
+        "sequential round trip inside one request." % len(calls)
+    )
 
 
-def test_the_ai_budget_is_smaller_than_the_document_cap():
-    """A document may be long; the number of LLM calls it costs may not scale with it."""
-    assert documents.MAX_AI_ACTIVITIES < documents.MAX_ACTIVITIES_PER_DOCUMENT
+def test_the_ai_budget_is_never_reached_by_a_report_the_app_can_actually_write():
+    """The budget is a backstop, not a ceiling an operator meets in normal use.
+
+    A report whose sections outran the budget would silently lose its drafting on the sections
+    past it -- so if a future edit widens the topic table past MAX_AI_SECTIONS, that is a
+    decision someone must take deliberately, not discover in production.
+    """
+    widest = max(len(documents._sections_for_deliverable(d)) for d in DELIVERABLE_INDEX)
+    assert widest <= documents.MAX_AI_SECTIONS
 
 
 # --- MED-1: re-inviting must not silently restore old authority -------------

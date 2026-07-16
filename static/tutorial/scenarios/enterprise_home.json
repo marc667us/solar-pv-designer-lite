@@ -45,9 +45,9 @@
     },
     {
       "title": "Your programmes",
-      "description": "Each one carries 16 phases and 14 stage gates.",
-      "voiceScript": "Each programme carries sixteen lifecycle phases and fourteen stage gates. It opens at Phase 1, Concept.",
-      "captionText": "Each programme carries sixteen lifecycle phases and fourteen stage gates. It opens at Phase 1, Concept.",
+      "description": "Each one carries six phases and five stage gates.",
+      "voiceScript": "Each programme carries six lifecycle phases and five stage gates. It opens at Phase 1, Initiation.",
+      "captionText": "Each programme carries six lifecycle phases and five stage gates. It opens at Phase 1, Initiation.",
       "targetSelector": ".table, table",
       "action": "moveCursor",
       "duration": 700,

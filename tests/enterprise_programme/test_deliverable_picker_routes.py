@@ -11,15 +11,17 @@ So these tests drive the ROUTES, not the service (the service is covered by
 test_deliverables_open_gates.py). They ask the three questions that decide whether the model
 is actually wired:
 
-  * does the page OFFER the 144 deliverables, and say which nine open a gate?
+  * does the page OFFER Revision 4's 112 deliverables, and say which five open a gate?
   * does choosing one in the form make the generated document open that gate?
-  * does a bad choice get REFUSED, rather than quietly downgraded to a free-form document
-    that looks right and opens nothing?
+  * does a bad choice get REFUSED, rather than quietly downgraded to a document that looks
+    right and opens nothing?
 
-And one invariant the picker's convenience depends on: selecting a deliverable ticks its
-phase's activities for the operator, so no phase may hold more activities than one document
-is allowed to cover -- otherwise the friendliest button on the page would be a guaranteed
-error.
+REVISION 4 (2026-07-16): the model behind this page is now six phases of deliverable BUTTONS
+(rev4_phases), and the 453 lifecycle activities are gone. So is the invariant this module
+used to close last -- "no phase holds more activities than one document may cover" -- because
+nothing is ticked and nothing is derived any more: a report's sections come from the
+deliverable itself. A report is one of the 112 or it is refused; there is no free-form path
+left to downgrade to.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ import pytest
 import web_app as _wa  # noqa: E402
 from enterprise_programme_routes import register_enterprise_programme  # noqa: E402
 
-from app.enterprise_programme import constants, documents, flags, gates, rbac  # noqa: E402
+from app.enterprise_programme import documents, flags, gates, rbac, rev4_phases  # noqa: E402
 from app.security import audit as audit_mod                             # noqa: E402
 
 if "enterprise_home" not in _wa.app.view_functions:
@@ -140,34 +142,53 @@ def _latest_doc_id(wa, programme: int) -> int:
         ).fetchone()[0]
 
 
+def _doc_count(wa, programme: int) -> int:
+    with wa.get_db() as c:
+        return c.execute(
+            "SELECT COUNT(*) FROM enterprise_documents WHERE programme_id=?", (programme,)
+        ).fetchone()[0]
+
+
+def _stub_ai_writer(monkeypatch):
+    """Route tests are about routing; the writing service is stubbed as reachable."""
+    def _write(subject, facts, passage_body="", *, brief="", document_title=""):
+        return (f"This section writes {subject} for {facts['name']} in "
+                f"{facts.get('country') or 'the recorded country'}.")
+
+    monkeypatch.setattr(documents, "_ai_write", _write)
+
+
 # ------------------------------------------------------------------ the page offers them
 
-def test_the_page_offers_every_one_of_the_144_deliverables(ent, programme):
-    """A Key Output the operator cannot select is a document the app cannot be asked for."""
+def test_the_page_offers_every_one_of_the_112_deliverables(ent, programme):
+    """A deliverable the operator cannot select is a document the app cannot be asked for."""
     client, _wa, uid = ent
     _login(client, uid)
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
 
     assert 'name="deliverable_code"' in body, "the picker is not on the page at all"
-    missing = [code for code in constants.DELIVERABLE_INDEX
+    missing = [code for code in rev4_phases.DELIVERABLE_INDEX
                if f'value="{code}"' not in body]
     assert not missing, f"deliverables the operator cannot choose: {sorted(missing)[:10]}"
 
 
-def test_the_page_names_the_gate_each_of_the_nine_opens(ent, programme):
+def test_the_page_names_the_gate_each_of_the_five_opens(ent, programme):
     """The operator must know, BEFORE clicking, which report is a gate's evidence.
 
     OWNER 2026-07-15: reports are BUTTONS now, not <option>s. The gate must still be
     announced ON THE REPORT'S OWN BUTTON -- not merely somewhere on the page, which would
     pass even if the gate badge sat on the wrong report.
+
+    Revision 4 has five gates rather than fourteen, and each asks for exactly one document:
+    its phase's own approval/closure report (rev4_phases.DELIVERABLE_GATE_DOC_TYPE).
     """
     client, _wa, uid = ent
     _login(client, uid)
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
 
-    for code, doc_type in constants.DELIVERABLE_GATE_DOC_TYPE.items():
+    for code, doc_type in rev4_phases.DELIVERABLE_GATE_DOC_TYPE.items():
         gate = gates.GATE_OF_DOC_TYPE[doc_type]
         # the <button> for THIS deliverable, from its value to the closing tag
         m = re.search(rf'<button[^>]*value="{code}"[^>]*>(.*?)</button>', body, re.S)
@@ -175,7 +196,7 @@ def test_the_page_names_the_gate_each_of_the_nine_opens(ent, programme):
         assert gate in m.group(1), (
             f"{code}'s own button does not announce that it opens {gate}: {m.group(0)[:200]}"
         )
-    assert "opens stage gate G01" in body
+    assert "opens stage gate R4G1_INITIATION" in body
 
 
 def test_free_form_is_no_longer_offered_reports_are_buttons(ent, programme):
@@ -183,8 +204,8 @@ def test_free_form_is_no_longer_offered_reports_are_buttons(ent, programme):
 
     The old page offered a "free-form document" option that satisfied no gate. The owner
     replaced the whole picker with report buttons, so free-form is no longer offered on the
-    page (the route still accepts an empty deliverable_code for back-compat -- that is
-    covered by test_omitting_the_deliverable_still_generates_a_free_form_document).
+    page -- and under Revision 4 the route no longer accepts an empty deliverable_code either
+    (see test_omitting_the_deliverable_is_REFUSED_and_writes_nothing).
     """
     client, _wa, uid = ent
     _login(client, uid)
@@ -197,86 +218,113 @@ def test_free_form_is_no_longer_offered_reports_are_buttons(ent, programme):
 
 # ------------------------------------------------- choosing one in the form opens the gate
 
-def test_choosing_the_charter_in_the_FORM_opens_gate_2(ent, programme):
+def test_choosing_the_planning_approval_request_in_the_FORM_opens_gate_2(
+        ent, programme, monkeypatch):
     """The end-to-end claim: a browser POST is what must open the gate.
 
-    Gate 2 is used rather than Gate 1 because its only demand IS the document -- so if the
-    gate opens, it opened because of what the form sent, and nothing else.
+    Gate 2 (R4G2_PLANNING) is used rather than Gate 1 because its only demand IS the document
+    -- Gate 1 also requires the programme to name a sponsor -- so if the gate opens, it opened
+    because of what the form sent, and nothing else.
+
+    The route now fails loudly if the writing service is unreachable. This test is not about
+    that outage path, so it stubs the writer as reachable and keeps the assertion on the route:
+    the posted deliverable becomes the gate document.
     """
     client, wa, uid = ent
     _login(client, uid)
+    _stub_ai_writer(monkeypatch)
 
     with wa.get_db() as c:
         tenant = c.execute(
             "SELECT tenant_id FROM enterprise_programme_registry WHERE id=?", (programme,)
         ).fetchone()[0]
         with pytest.raises(gates.EnterpriseGateError):
-            gates.evaluate_gate(c, tenant, programme, "G02")   # shut, for want of a charter
+            # shut, for want of the Planning Approval Request
+            gates.evaluate_gate(c, tenant, programme, "R4G2_PLANNING")
 
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "deliverable_code": "P02_D01",
-              "activities": ["P02_A01", "P02_A02"]},
+        data={"_csrf": "testtoken", "deliverable_code": "R4P2_D27"},
         follow_redirects=True,
     )
     assert r.status_code == 200
     # The document OPENS as a report (owner, 2026-07-13) rather than landing in the
     # downloads folder -- with the PDF and the email offered from that page.
-    assert b"Programme charter" in r.data
+    assert b"Planning Approval Request" in r.data
     assert b"Download PDF" in r.data
 
-    assert _doc_type_of(wa, _latest_doc_id(wa, programme)) == "programme_charter"
+    assert (_doc_type_of(wa, _latest_doc_id(wa, programme))
+            == "planning_approval_request")
 
     with wa.get_db() as c:
-        gates.evaluate_gate(c, tenant, programme, "G02")       # ...and now it opens
+        gates.evaluate_gate(c, tenant, programme, "R4G2_PLANNING")   # ...and now it opens
 
 
-def test_omitting_the_deliverable_still_generates_a_free_form_document(ent, programme):
-    """The old behaviour is intact -- and stamped as evidence for nothing."""
+def test_omitting_the_deliverable_is_REFUSED_and_writes_nothing(ent, programme):
+    """REV 4: there is no free-form document any more, so there is nothing to fall back to.
+
+    The route used to accept an empty deliverable_code and write a "lifecycle_document" --
+    evidence for nothing, but a document. Revision 4's model is a phase of deliverable
+    BUTTONS: every button posts its own code, so a POST with no code is a broken form, not a
+    request for a general-purpose document. It is refused with an instruction, and nothing is
+    written -- the same discipline as an unknown code below.
+    """
     client, wa, uid = ent
     _login(client, uid)
+    before = _doc_count(wa, programme)
+
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "deliverable_code": "", "title": "Working Notes",
-              "activities": ["P01_A01"]},
+        data={"_csrf": "testtoken", "deliverable_code": "", "title": "Working Notes"},
         follow_redirects=True,
     )
-    assert r.status_code == 200
-    assert _doc_type_of(wa, _latest_doc_id(wa, programme)) == "lifecycle_document"
+    assert r.status_code == 200, "an empty form is a user error, not a 500"
+    assert b"Choose a report to generate." in r.data
+    assert _doc_count(wa, programme) == before, "a document was written with no deliverable"
 
 
 def test_an_unknown_deliverable_from_the_browser_is_refused_not_downgraded(ent, programme):
     """A tampered or stale form must not yield a document that opens nothing in silence.
 
-    Silently falling back to "lifecycle_document" would give the operator a document that
-    looks right, is named right, and satisfies no gate -- the exact failure the deliverable
-    model exists to end, wearing a better disguise. It must be refused, out loud.
+    Silently falling back to a generic "lifecycle_document" would give the operator a document
+    that looks right, is named right, and satisfies no gate -- the exact failure the
+    deliverable model exists to end, wearing a better disguise. It must be refused, out loud.
+
+    The code below is shaped like a Rev 4 code and is not one: a form left over from the old
+    16-phase page, or one edited by hand, must be caught by what the app KNOWS rather than by
+    what the string looks like.
     """
     client, wa, uid = ent
     _login(client, uid)
-    before = _latest_doc_id(wa, programme)
+    before = _doc_count(wa, programme)
 
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "deliverable_code": "P99_D99",
-              "activities": ["P01_A01"]},
+        data={"_csrf": "testtoken", "deliverable_code": "R4P9_D99"},
         follow_redirects=True,
     )
     assert r.status_code == 200, "a bad code is a user error, not a 500"
     assert b"unknown deliverable" in r.data.lower()
-    assert _latest_doc_id(wa, programme) == before, "nothing may be written for a bad code"
+    assert _doc_count(wa, programme) == before, "nothing may be written for a bad code"
 
 
-def test_the_register_says_what_each_document_counts_as(ent, programme):
+def test_the_register_says_what_each_document_counts_as(ent, programme, monkeypatch):
     """A document's whole purpose is what it is evidence FOR. The register must say."""
     client, _wa, uid = ent
     _login(client, uid)
+    _stub_ai_writer(monkeypatch)
+    client.post(
+        f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
+        data={"_csrf": "testtoken", "deliverable_code": "R4P2_D27"},
+        follow_redirects=True,
+    )
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
-    # The charter generated above (G02), and the free-form document that opens nothing.
-    # OWNER 2026-07-15: a document that is not one of the 144 is now simply labelled a
-    # "Report"; the old "Free-form -- satisfies no gate" wording went with the picker option.
-    assert "Gate G02 evidence" in body
+    # The Planning Approval Request generated above, which is R4G2_PLANNING's evidence.
+    # OWNER 2026-07-15: a document that is not one of the deliverables is now simply labelled
+    # a "Report"; the old "Free-form -- satisfies no gate" wording went with the picker option
+    # it described, and Revision 4 removed the free-form path that produced such documents.
+    assert "Gate R4G2_PLANNING evidence" in body
     assert "Free-form — satisfies no gate" not in body
 
 
@@ -292,7 +340,7 @@ def test_report_generate_alone_cannot_manufacture_gate_evidence():
     programme_sponsor and steering_committee, who are the people who SIGN the gates.
 
     Had generate_document stamped a gate doc_type under `report.generate` alone:
-      * an auditor could have manufactured the evidence for Gate 8, and
+      * an auditor could have manufactured a programme's closure certificate, and
       * a sponsor could have generated a gate's evidence and then approved that same gate,
         which collapses the separation between producing evidence and signing it.
     """
@@ -340,8 +388,8 @@ def test_a_generator_without_edit_rights_is_REFUSED_a_gate_deliverable(ent, prog
 
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "deliverable_code": "P08_D07",   # -> signed_contract
-              "activities": ["P08_A01"]},
+        # -> programme_approval_request, the evidence R4G1_INITIATION will not open without
+        data={"_csrf": "testtoken", "deliverable_code": "R4P1_D12"},
     )
     assert r.status_code == 403, "an auditor minted stage-gate evidence"
     assert _latest_doc_id(wa, programme) == before, "a document was written anyway"
@@ -351,28 +399,12 @@ def test_a_generator_without_edit_rights_is_REFUSED_a_gate_deliverable(ent, prog
 
 # ---------------------------------------------------------------------- the picker's promise
 
-def test_no_phase_holds_more_activities_than_one_document_may_cover():
-    """Selecting a deliverable ticks its phase for you. That must never be an instant error.
-
-    The page's one-click convenience is auto-ticking the deliverable's phase. If a phase held
-    more than MAX_ACTIVITIES_PER_DOCUMENT activities, the friendliest button on the page
-    would produce a document the server always refuses -- which is what already happens with
-    "select the whole stage" (Planning holds 183), and is why that path now warns instead of
-    failing.
-    """
-    for phase_code, _no, name in constants.PHASES:
-        n = len(constants.PHASE_ACTIVITIES[phase_code])
-        assert n <= documents.MAX_ACTIVITIES_PER_DOCUMENT, (
-            f"phase {name} holds {n} activities but a document may cover only "
-            f"{documents.MAX_ACTIVITIES_PER_DOCUMENT} -- auto-ticking it would always fail"
-        )
-
-
 def test_gate_of_doc_type_is_derived_from_the_real_predicates():
-    """The page's "opens gate G0x" promise must not be a hand-kept copy that can go stale."""
-    assert len(gates.GATE_OF_DOC_TYPE) == 9, (
-        "expected the 9 gate documents by introspection -- if this is empty, every claim "
-        "the picker makes about gates is unverified"
+    """The page's "opens stage gate R4Gx" promise must not be a hand-kept copy that can go
+    stale."""
+    assert len(gates.GATE_OF_DOC_TYPE) == 5, (
+        "expected Revision 4's 5 gate documents by introspection -- if this is empty, every "
+        "claim the picker makes about gates is unverified"
     )
     for doc_type, gate in gates.GATE_OF_DOC_TYPE.items():
         assert any(getattr(p, "required_doc_type", None) == doc_type

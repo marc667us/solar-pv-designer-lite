@@ -78,7 +78,13 @@ GATE_FOR_PHASE: dict[str, str] = {phase: code for code, phase, _, _ in GATES}
 # These are the deliverable BUTTONS the owner wants on each phase page (spec section 8).
 # Clicking one opens the consistent Deliverable Workspace (spec section 15). Do NOT
 # rebucket the old 144 into these -- these ARE the contract (Codex finding F).
-PHASE_DELIVERABLES: dict[str, list[str]] = {
+#
+# AUTHORED AS NAMES, CODED BY DERIVATION. The spec gives the owner's deliverable NAMES and
+# nothing else, so the names are what this file authors verbatim -- that is the contract.
+# The codes every consumer needs (the button's POST value, the document's doc_type key, the
+# engine map) are DERIVED from these lists below, never hand-written beside them. A
+# hand-kept second column would be one edit away from naming the wrong deliverable.
+PHASE_DELIVERABLE_NAMES: dict[str, list[str]] = {
     # ---- section 9: Initiation Deliverable Buttons (12) ----
     "R4_INITIATION": [
         "Programme Concept Note",
@@ -211,68 +217,131 @@ PHASE_DELIVERABLES: dict[str, list[str]] = {
     ],
 }
 
-# Flat list of (phase_code, deliverable_name) for seeding / indexing.
-DELIVERABLE_INDEX: list[tuple[str, str]] = [
-    (phase, name)
+# =============================================================================
+# The coded deliverable layer -- DERIVED from the authored names above
+# =============================================================================
+# Codes are R4P<phase seq>_D<nn>, e.g. R4P1_D01 is Initiation's first deliverable. They are
+# positional by design: the code IS the deliverable's place in the owner's own list, so a
+# code cannot drift from the name it points at. This is why the lists above are append-only
+# (reordering one would silently re-point every code after it, and a stored document's
+# doc_type would then name a different deliverable than the one that wrote it).
+#
+# SHAPE IS DELIBERATELY IDENTICAL TO THE OLD constants.PHASE_DELIVERABLES:
+# {phase_code: ((code, title), ...)}. The report buttons, the generator and the gate check
+# all read that shape already, so the six-phase repoint is a genuine import swap rather than
+# a rewrite of every consumer -- which is what makes this change reviewable.
+PHASE_DELIVERABLES: dict[str, tuple[tuple[str, str], ...]] = {
+    phase: tuple(
+        (f"R4P{PHASE_SEQ[phase]}_D{n:02d}", name)
+        for n, name in enumerate(PHASE_DELIVERABLE_NAMES[phase], start=1)
+    )
     for phase in PHASE_CODES
-    for name in PHASE_DELIVERABLES[phase]
-]
+}
+
+# code -> (phase_code, title). One flat index so a deliverable resolves without knowing its
+# phase -- the UI, the generator and the gate check all need this.
+DELIVERABLE_INDEX: dict[str, tuple[str, str]] = {
+    code: (phase, title)
+    for phase, items in PHASE_DELIVERABLES.items()
+    for code, title in items
+}
+
+DELIVERABLE_CODES: frozenset[str] = frozenset(DELIVERABLE_INDEX)
+
+
+def _code_for(phase: str, name: str) -> str:
+    """The code of a deliverable named verbatim from the owner's spec.
+
+    Input:  a phase code, the deliverable's exact title.
+    Output: its derived code, e.g. "R4P1_D12".
+    Raises: KeyError at IMPORT time if no deliverable in that phase carries that name.
+
+    The maps below are keyed BY NAME rather than by a hand-written code on purpose. A code
+    is positional, so a typo'd "R4P1_D11" is still a perfectly valid code -- it just points
+    at the wrong document, and a gate would then demand evidence nobody can produce while
+    the real approval request opens nothing. A wrong NAME cannot fail that quietly: it
+    raises here, on import, before a single request is served.
+    """
+    for code, title in PHASE_DELIVERABLES[phase]:
+        if title == name:
+            return code
+    raise KeyError(f"{phase} has no deliverable named {name!r}")
 
 
 # =============================================================================
-# OLD (16-phase) -> NEW (6-phase) mapping  -- used by migration 032
+# The five gate-opening deliverables (one per gate)
 # =============================================================================
-# Every old phase code from constants.PHASES maps to exactly one new phase. The mapping
-# is monotonic-by-intent: early old phases -> Initiation/Planning, build phases ->
-# Execution, evaluation -> Monitoring, handover/operations -> Value Realisation, and
-# expansion/replication -> Closure (spec section 14 lists Expansion Recommendation and
-# Replication Plan as CLOSURE deliverables, which is why P16 lands in Closure).
-OLD_PHASE_TO_NEW: dict[str, str] = {
-    "P01_CONCEPT":       "R4_INITIATION",
-    "P02_INITIATION":    "R4_INITIATION",
-    "P03_NEEDS":         "R4_PLANNING",
-    "P04_FEASIBILITY":   "R4_PLANNING",
-    "P05_STRUCTURING":   "R4_PLANNING",
-    "P06_TEMPLATES":     "R4_PLANNING",
-    "P07_FUNDING":       "R4_PLANNING",
-    "P08_PROCUREMENT":   "R4_PLANNING",
-    "P09_ENGINEERING":   "R4_EXECUTION",
-    "P10_MOBILISATION":  "R4_EXECUTION",
-    "P11_CONSTRUCTION":  "R4_EXECUTION",
-    "P12_COMMISSIONING": "R4_EXECUTION",
-    "P13_HANDOVER":      "R4_VALUE",
-    "P14_OPERATIONS":    "R4_VALUE",
-    "P15_EVALUATION":    "R4_MONITORING",
-    "P16_EXPANSION":     "R4_CLOSURE",
+# WHAT A REV 4 GATE ASKS FOR, AND WHY IT IS ONE DOCUMENT AND NOT NINE.
+#
+# The old model had 14 gates, each with its own evidence-document predicate zoo. Rev 4 has
+# five boundaries, and the owner's spec section 38 phrases each as an APPROVAL: the named
+# authority signs the phase off. So each gate asks for exactly one thing -- the phase's own
+# approval/closure document -- and the AUTHORITY's signature does the rest. That keeps the
+# 2026-07-13 win (a document the app WROTE is what the gate READS, rather than a gate passed
+# by typing a name) without carrying the 14-gate machinery the owner rejected as too large.
+#
+# deliverable code -> the doc_type it is stored under, which is what the gate reads.
+DELIVERABLE_GATE_DOC_TYPE: dict[str, str] = {
+    _code_for("R4_INITIATION", "Programme Approval Request"): "programme_approval_request",
+    _code_for("R4_PLANNING",   "Planning Approval Request"):  "planning_approval_request",
+    _code_for("R4_EXECUTION",  "Handover Preparation"):       "handover_preparation",
+    _code_for("R4_VALUE",      "Post-Implementation Review"): "post_implementation_review",
+    _code_for("R4_CLOSURE",    "Programme Closure Certificate"): "programme_closure_certificate",
 }
 
-# OLD (14-gate) -> NEW (5-gate) mapping. Each new phase-gate is closed by the OLD gate
-# that closed the LAST old phase inside it, so an in-flight programme keeps the strictest
-# gate it had already reached:
-#   Initiation  closed by old G02 (Programme Initiation Approval)
-#   Planning    closed by old G08 (Contract Award / Notice to Proceed)
-#   Execution   closed by old G12 (Commissioning / Taking-Over)
-#   Value       closed by old G13 (Handover / Closeout)
-#   Closure     closed by old G14 (Benefits / Performance Review)
-# The remaining old gates (G01, G03-G07, G09-G11) collapse into the new gate of their
-# phase -- their prior approvals are preserved read-only in the archive, not lost.
-OLD_GATE_TO_NEW: dict[str, str] = {
-    "G01": "R4G1_INITIATION",
-    "G02": "R4G1_INITIATION",
-    "G03": "R4G2_PLANNING",
-    "G04": "R4G2_PLANNING",
-    "G05": "R4G2_PLANNING",
-    "G06": "R4G2_PLANNING",
-    "G07": "R4G2_PLANNING",
-    "G08": "R4G2_PLANNING",
-    "G09": "R4G3_EXECUTION",
-    "G10": "R4G3_EXECUTION",
-    "G11": "R4G3_EXECUTION",
-    "G12": "R4G3_EXECUTION",
-    "G13": "R4G4_VALUE",
-    "G14": "R4G5_CLOSURE",
+
+def deliverable_doc_type(deliverable_code: str) -> str:
+    """The `doc_type` a generated deliverable is stored under.
+
+    Input:  a deliverable code, e.g. "R4P1_D12".
+    Output: the gate's doc_type when this deliverable opens a gate
+            ("programme_approval_request"), and the deliverable's own code otherwise.
+
+    Same contract as the old constants.deliverable_doc_type: a gate predicate is a bare
+    existence check on doc_type, so a deliverable that opens a gate MUST be stored under the
+    type that gate reads. Everything else is stored under its own code, which keeps one
+    deliverable's documents distinguishable from another's.
+    """
+    return DELIVERABLE_GATE_DOC_TYPE.get(deliverable_code, deliverable_code)
+
+
+# =============================================================================
+# The engine-written deliverables
+# =============================================================================
+# Some deliverables are ENGINEERING documents: the programme's approved reference design IS
+# their content, and SolarPro's capital-investment engine already writes each one from a real
+# design. Assembling those out of prose would produce a document with no engineering in it
+# while the actual kWp, BOQ and funding figure sat one table away.
+#
+# Everything NOT in this map is written by the deliverable writer, which is honest about what
+# it does not know. An engine-written document must never be -- so this map stays SMALL and
+# only names deliverables the engine genuinely produces. When in doubt, leave it out: the
+# writer path degrades to "[To be completed]", which an operator can see and fix, whereas a
+# wrongly-mapped engine document would confidently print the wrong report.
+#
+# deliverable code -> the CI report key that writes it (see reports.py).
+DELIVERABLE_ENGINE: dict[str, str] = {
+    _code_for("R4_PLANNING", "Programme Feasibility Study"):   "technical",
+    _code_for("R4_PLANNING", "Programme Cost Plan"):           "financial",
+    _code_for("R4_PLANNING", "Programme BOQ"):                 "boq",
+    _code_for("R4_PLANNING", "Funding Strategy"):              "bankability",
+    _code_for("R4_PLANNING", "Programme Implementation Plan"): "implementation_plan",
+    _code_for("R4_PLANNING", "Executive Planning Report"):     "investment_memo",
+    _code_for("R4_MONITORING", "Executive Status Report"):     "monitoring",
 }
 
+
+# =============================================================================
+# There is no OLD -> NEW mapping table here, deliberately
+# =============================================================================
+# An earlier cut of this file carried OLD_PHASE_TO_NEW (16 -> 6) and OLD_GATE_TO_NEW (14 -> 5)
+# to remap live rows off the old model. That remap never happened: the live enterprise data
+# was cleared to a CLEAN SLATE on 2026-07-15/16, so a programme is now simply BORN into the
+# six-phase model and there is nothing to translate. Keeping the tables would have preserved
+# the 16 phases and 14 gates -- as dictionary keys -- inside the very file that replaced them,
+# which is the "remnant of the old map" the owner asked to have deleted. If a future import
+# ever needs to read pre-Rev-4 rows, the mapping belongs in that migration, next to the data
+# it converts, not in the model.
 
 # =============================================================================
 # Derived programme status from phase (Rev 4 keeps status a VIEW of the phase, never
@@ -360,15 +429,33 @@ _EXPECTED_DELIVERABLE_COUNTS = {
     "R4_CLOSURE":    16,
 }
 for _code, _n in _EXPECTED_DELIVERABLE_COUNTS.items():
-    assert len(PHASE_DELIVERABLES[_code]) == _n, (
+    assert len(PHASE_DELIVERABLE_NAMES[_code]) == _n, (
         f"{_code} deliverable count drifted: expected {_n}, "
-        f"got {len(PHASE_DELIVERABLES[_code])}"
+        f"got {len(PHASE_DELIVERABLE_NAMES[_code])}"
     )
 
-# Every old phase and old gate MUST have a new-model target, or the migration would
-# orphan a live programme sitting in the unmapped code (Codex risk G-1).
-assert set(OLD_PHASE_TO_NEW.values()) <= set(PHASE_CODES)
-assert set(OLD_GATE_TO_NEW.values()) <= set(GATE_CODES)
+# The derived coded layer must not lose or duplicate a deliverable. A duplicate title inside
+# one phase would make _code_for return the first of them for both, so two buttons would
+# generate the same document -- silently.
+assert len(DELIVERABLE_INDEX) == sum(_EXPECTED_DELIVERABLE_COUNTS.values()), (
+    "the derived deliverable codes do not cover every authored deliverable"
+)
+for _p in PHASE_CODES:
+    _titles = [t for _c, t in PHASE_DELIVERABLES[_p]]
+    assert len(_titles) == len(set(_titles)), (
+        f"{_p} lists the same deliverable name twice, so its codes are ambiguous: "
+        f"{sorted({t for t in _titles if _titles.count(t) > 1})}"
+    )
+
+# Every gate must have exactly one deliverable that opens it, and no two gates may share a
+# doc_type -- a doc_type keyed map silently keeps the last binding, so two gates reading the
+# same type would mean one of them could never be told which document it was waiting for.
+_gate_doc_types = list(DELIVERABLE_GATE_DOC_TYPE.values())
+assert len(_gate_doc_types) == len(set(_gate_doc_types)) == len(GATE_CODES), (
+    "each of the five gates needs exactly one distinct evidence document type"
+)
+del _gate_doc_types
+
 
 # State-machine integrity: every source is a real phase; every destination is a real phase
 # or a known pseudo-state; the default phase exists; every phase is reachable from the
@@ -397,8 +484,10 @@ for _reqs in PHASE_ENTRY_REQUIRED_GATES.values():
 __all__ = [
     "PHASES", "PHASE_CODES", "PHASE_NAME", "PHASE_SEQ",
     "GATES", "GATE_CODES", "GATE_FOR_PHASE", "GATE_AUTHORITY",
-    "PHASE_DELIVERABLES", "DELIVERABLE_INDEX",
-    "OLD_PHASE_TO_NEW", "OLD_GATE_TO_NEW", "PHASE_STATUS",
+    "PHASE_DELIVERABLE_NAMES", "PHASE_DELIVERABLES", "DELIVERABLE_INDEX",
+    "DELIVERABLE_CODES", "DELIVERABLE_GATE_DOC_TYPE", "deliverable_doc_type",
+    "DELIVERABLE_ENGINE",
+    "PHASE_STATUS",
     # state-machine drop-in (Slice 0b)
     "DEFAULT_PHASE_CODE", "TRANSITIONS", "GATE_CLOSING_PHASE",
     "PHASE_ENTRY_REQUIRED_GATES", "GATE_PREREQUISITE_GATES",

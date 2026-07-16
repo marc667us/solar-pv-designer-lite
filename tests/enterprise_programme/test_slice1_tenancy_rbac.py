@@ -18,7 +18,7 @@ import uuid
 
 import pytest
 
-from app.enterprise_programme import constants, rbac, tenancy
+from app.enterprise_programme import constants, rbac, rev4_phases, tenancy
 
 
 @pytest.fixture()
@@ -234,8 +234,10 @@ def test_gate_approval_requires_the_named_role_not_just_a_permission(db):
     tenancy.add_member(db, org, 2, "procurement_manager", invited_by_user_id=1)
     assert rbac.has_permission(db, org, 2, "programme.approve")
 
-    # ...but Gate 1's authority is the Programme Sponsor, and Bob is not one.
-    gate1_authority = next(g[3] for g in constants.GATES if g[0] == "G01")
+    # ...but the Initiation gate's authority is the Programme Sponsor, and Bob is not one.
+    gate1_authority = rev4_phases.GATE_AUTHORITY[
+        rev4_phases.GATE_CLOSING_PHASE[rev4_phases.DEFAULT_PHASE_CODE]
+    ]
     assert gate1_authority == "programme_sponsor"
     with pytest.raises(rbac.EnterprisePermissionError):
         rbac.require_role(db, org, 2, gate1_authority)
@@ -243,19 +245,24 @@ def test_gate_approval_requires_the_named_role_not_just_a_permission(db):
 
 # --- the vocabularies the state machine is built on -------------------------
 
-def test_doc3_vocabularies_are_complete():
-    """The owner's spec is explicit about these counts. Drift here breaks the spec."""
-    assert len(constants.PHASES) == 16
-    assert len(constants.GATES) == 14
+def test_the_vocabularies_are_complete():
+    """The owner's spec is explicit about these counts. Drift here breaks the spec.
+
+    The phase and gate counts are Revision 4's (owner-spec sections 6 and 38) -- the old
+    16/14 model was deleted on 2026-07-16. The 15 controls and the status lists survived the
+    rebuild unchanged and still live in constants.
+    """
+    assert len(rev4_phases.PHASES) == 6
+    assert len(rev4_phases.GATES) == 5
     assert len(constants.PROGRAMME_STATUSES) == 20
     assert len(constants.CONTROLS) == 15
     assert constants.PROGRAMME_STATUSES[0] == "Concept"
-    assert constants.DEFAULT_PHASE_CODE == "P01_CONCEPT"
+    assert rev4_phases.DEFAULT_PHASE_CODE == "R4_INITIATION"
 
 
 def test_every_gate_closes_a_real_phase_and_names_a_real_role():
-    phase_codes = {p[0] for p in constants.PHASES}
-    for code, phase_code, _name, authority in constants.GATES:
+    phase_codes = set(rev4_phases.PHASE_CODES)
+    for code, phase_code, _name, authority in rev4_phases.GATES:
         assert phase_code in phase_codes, f"{code} closes unknown phase {phase_code}"
         assert authority in constants.ROLE_CODES, f"{code} names unknown role {authority}"
 

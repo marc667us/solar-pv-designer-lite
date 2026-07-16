@@ -1,0 +1,179 @@
+# Apply migration 033 -- DROP enterprise_documents.activity_codes.
+#
+# The code side of the Rev 4 lifecycle repoint (Slice 0b-ii) deleted the old map's 453
+# lifecycle activities. This removes the last artefact of them on live: the `activity_codes`
+# column on enterprise_documents (added by migration 028), which nothing reads any more.
+#
+# Owner's rule: "the exist[ing] remnant of the old map must be removed and deleted."
+#
+# DEFAULT IS DRY-RUN. Dropping needs -f confirm=DROP_ACTIVITY_CODES_APPLY.
+# The dry-run prints what would be lost BEFORE anything is destroyed -- read it and believe it
+# over any claim about the blast radius made in advance (2026-07-16: a table described as
+# "likely near-empty" held 33 rows; the dry-run is what caught it).
+
+name: Apply Migration 033 (DROP enterprise_documents.activity_codes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type DROP_ACTIVITY_CODES_APPLY to actually DROP the column."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  drop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4.
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "DROP_ACTIVITY_CODES_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- activity_codes WILL BE DROPPED ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be dropped ==="
+            echo "Re-run with -f confirm=DROP_ACTIVITY_CODES_APPLY to commit."
+          fi
+
+      - name: Verify the migration file exists
+        run: test -f migrations/033_drop_enterprise_documents_activity_codes.sql && echo "OK"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # WHAT IS ABOUT TO BE DESTROYED, stated out loud before it is.
+      - name: Report exactly what will be lost
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- does the column still exist? ---"
+          EXISTS=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='enterprise_documents'
+               AND column_name='activity_codes';")
+          echo "  exists: $EXISTS  (0 = already gone, this run is a no-op)"
+
+          if [ "$EXISTS" = "0" ]; then
+            echo "Nothing to drop."; exit 0
+          fi
+
+          echo ""
+          echo "--- how many documents are there at all? ---"
+          psql "$DATABASE_URL" -c "SELECT count(*) AS documents FROM enterprise_documents;"
+
+          # THE ONLY QUESTION THAT MATTERS: does any row carry a value the drop would destroy?
+          # Rev 4 writes NULL here (generate_document stopped writing the column), and the
+          # live data was cleared on 2026-07-16 -- so this is expected to be 0. If it is NOT,
+          # STOP: something still writes activity_codes, and that is a bug to understand
+          # before this column goes anywhere.
+          echo ""
+          echo "--- ROWS CARRYING A REAL VALUE (expect 0 -- if not, STOP and investigate) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT count(*) AS rows_with_a_value
+              FROM enterprise_documents
+             WHERE activity_codes IS NOT NULL
+               AND btrim(activity_codes) NOT IN ('', '[]');"
+
+          echo ""
+          echo "--- what those rows are, if any ---"
+          psql "$DATABASE_URL" -c "
+            SELECT id, programme_id, doc_type, title, left(activity_codes, 60) AS activity_codes
+              FROM enterprise_documents
+             WHERE activity_codes IS NOT NULL
+               AND btrim(activity_codes) NOT IN ('', '[]')
+             ORDER BY id LIMIT 20;"
+
+          echo ""
+          echo "--- SAFETY: nothing may index or constrain this column (expect 0 rows) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT indexname, indexdef FROM pg_indexes
+             WHERE schemaname='public' AND tablename='enterprise_documents'
+               AND indexdef ILIKE '%activity_codes%';"
+
+      - name: Dry-run -- nothing dropped
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The column WOULD be dropped. It was not."
+          echo "  Check 'rows_with_a_value' above is 0 before you commit."
+          echo "  Re-run with -f confirm=DROP_ACTIVITY_CODES_APPLY to commit."
+          echo "================================================================"
+
+      - name: Apply 033 (DROP the column)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/033_drop_enterprise_documents_activity_codes.sql
+          echo "OK: 033 applied."
+
+      - name: Verify it is gone
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          GONE=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='enterprise_documents'
+               AND column_name='activity_codes';")
+          if [ "$GONE" != "0" ]; then
+            echo "::error::the column is STILL THERE after the drop"; exit 1
+          fi
+          echo "CONFIRMED: enterprise_documents.activity_codes no longer exists on live."
+          echo ""
+          echo "=== the columns that remain on enterprise_documents ==="
+          psql "$DATABASE_URL" -c "
+            SELECT column_name, data_type FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='enterprise_documents'
+             ORDER BY ordinal_position;"

@@ -615,22 +615,17 @@ def test_equipment_validation_fails_closed_when_the_catalogue_is_unreachable(db)
     assert "standard_equipment_ids" not in ok
 
 
-# --- gate 6 ----------------------------------------------------------------
-
-
-def test_gate_6_now_demands_a_real_approved_template(db):
-    """Standardisation Approval used to accept a document CLAIMING a standard existed."""
-    c, org, _ = db
-    # OWNER registers the programme: programme.create is the Enterprise Owner's, not the
-    # Programme Engineer's. (Before slice 6.5 the engineer WAS the org creator, so this
-    # read as though an engineer could open a programme. They cannot, and should not.)
-    pid = workflows.create_programme(c, org, OWNER, code="P1", name="Schools",
-                                     sponsor_user_id=OWNER, audit=_audit(c))
-    workflows.register_document(c, org, OWNER, pid, doc_type="template_version_pack",
-                                title="Pack", audit=_audit(c))
-
-    with pytest.raises(EnterpriseGateError, match="no approved programme template"):
-        gates.evaluate_gate(c, org, pid, "G06")
-
-    _approved(c, org)                      # a tenant-wide approved template
-    gates.evaluate_gate(c, org, pid, "G06")  # now the gate has something real to point at
+# THE OLD GATE 6 TEST WAS DELETED HERE (Rev 4, 2026-07-16).
+#
+# `test_gate_6_now_demands_a_real_approved_template` asserted that the old G06
+# (Standardisation Approval) reached into the template store and refused to open on a
+# `template_version_pack` document merely CLAIMING a standard existed.
+#
+# Revision 4 has no such gate and no such predicate. Its five gates each demand exactly one
+# thing -- their phase's own approval document -- plus the named authority's signature
+# (gates.GATE_PREDICATES, whose own comment names G03 and G06 as the two predicates that are
+# "GONE rather than remapped"). `template_version_pack` opens nothing at all now, so there is
+# no Rev 4 gate to repoint this test at: the property it guarded no longer exists.
+#
+# The template store's own rules are untouched and still tested above -- validation, the
+# approval transition, and who may make it.

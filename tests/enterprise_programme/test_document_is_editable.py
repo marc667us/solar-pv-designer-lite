@@ -4,9 +4,10 @@ OWNER, 2026-07-14: "app writes the report for that activity and user preview and
 save", and "the owner must be able to walk through without blocks".
 
 A document the app will not let the operator correct is a document they cannot stand behind
--- and NINE of these documents are the evidence a stage gate will not open without. So the
-generated markdown is editable, and the edit is what the PDF, the email and the gate evidence
-all read from afterwards.
+-- and FIVE of these documents are the evidence a stage gate will not open without (Revision
+4 has five gates, each opened by one deliverable -- rev4_phases.DELIVERABLE_GATE_DOC_TYPE).
+So the generated markdown is editable, and the edit is what the PDF, the email and the gate
+evidence all read from afterwards.
 
 WHAT MUST STILL HOLD
   * C13 -- another tenant's document is 404, never 403, never editable.
@@ -32,6 +33,12 @@ from app.security import audit as audit_mod
 
 OWNER = 1
 READER = 2          # can read the programme; holds no `programme.edit`
+
+# Revision 4's Programme Approval Request -- Initiation's twelfth deliverable, and the one
+# that opens Initiation's stage gate (R4G1_INITIATION). The gate-evidence deliverable is what
+# these tests generate on purpose: an edit to an ordinary report is an edit, but an edit to
+# the document a gate is standing on is the case that has to hold.
+GATE_DELIVERABLE = "R4P1_D12"
 
 
 class _Conn(sqlite3.Connection):
@@ -78,8 +85,8 @@ def doc(db):
         design_strategy="standard", sponsor_user_id=OWNER,
         description="Rooftop solar for 100 rural schools.", audit=_audit(db))
     did = documents.generate_document(
-        db, db.org, OWNER, pid, activity_codes=["P01_A01"],
-        deliverable_code="P01_D01", use_ai=False, audit=_audit(db))
+        db, db.org, OWNER, pid,
+        deliverable_code=GATE_DELIVERABLE, use_ai=False, audit=_audit(db))
     db.commit()
     return pid, did
 
@@ -90,12 +97,12 @@ def test_the_operator_can_edit_the_document_the_agent_wrote(db, doc):
 
     documents.update_document(db, db.org, OWNER, did,
                               markdown="## Background\n\nThe Ministry approved the shortlist.",
-                              title="Concept Note (final)", audit=_audit(db))
+                              title="Programme Approval Request (final)", audit=_audit(db))
 
     after = documents.get_document(db, db.org, did)
     assert after["markdown"] != before
     assert "the Ministry approved the shortlist".lower() in after["markdown"].lower()
-    assert after["title"] == "Concept Note (final)"
+    assert after["title"] == "Programme Approval Request (final)"
 
 
 def test_the_edit_is_what_the_PDF_and_the_gate_read_afterwards(db, doc):
@@ -111,7 +118,7 @@ def test_the_edit_is_what_the_PDF_and_the_gate_read_afterwards(db, doc):
         "byte_size still describes the draft, so anything trusting it reads a stale length"
     )
     # the doc_type is untouched, so the gate it opens still finds it
-    assert after["doc_type"] == documents.deliverable_doc_type("P01_D01")
+    assert after["doc_type"] == documents.deliverable_doc_type(GATE_DELIVERABLE)
     assert documents.render_pdf(after["markdown"], after["title"])
 
 

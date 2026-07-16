@@ -109,7 +109,7 @@ def programme(ent):
             "SELECT id FROM enterprise_programme_registry WHERE code='GH-HOMES'"
         ).fetchone()[0]
         # A programme opens into its design at PLANNING.
-        c.execute("UPDATE enterprise_programme_registry SET current_phase_code='P03_NEEDS' "
+        c.execute("UPDATE enterprise_programme_registry SET current_phase_code='R4_PLANNING' "
                   " WHERE id=?", (pid,))
     return pid
 

@@ -1095,16 +1095,6 @@
       "estimatedDuration": 9
     },
     {
-      "pageId": "enterprise_answers",
-      "title": "Lifecycle answers",
-      "module": "Enterprise",
-      "steps": 5,
-      "screens": [
-        "Answers"
-      ],
-      "estimatedDuration": 8
-    },
-    {
       "pageId": "enterprise_lifecycle_documents",
       "title": "Lifecycle documents",
       "module": "Enterprise",

@@ -1,10 +1,11 @@
 """Slice 6.6 over HTTP -- the pages the owner actually uses.
 
 The services are tested in test_slice66_lifecycle_documents.py. This drives the real routes:
-each phase renders its reports as buttons (OWNER, 2026-07-15 -- no activity checkboxes),
-clicking a report has the agent write it and open it, uploading a source document works, and
-the gaps the app cannot ground are marked [To be completed] for the operator to fill in by
-editing the report (OWNER, 2026-07-15 -- "remove them checkboxes and questions").
+each of Revision 4's six phases renders its deliverables as report buttons (OWNER, 2026-07-15
+-- no activity checkboxes), clicking a report posts its `deliverable_code` and has the agent
+write it and open it, uploading a source document works, and the gaps the app cannot ground
+are marked [To be completed] for the operator to fill in by editing the report (OWNER,
+2026-07-15 -- "remove them checkboxes and questions").
 """
 
 from __future__ import annotations
@@ -45,6 +46,15 @@ def _login(client, uid):
         s["user_id"] = uid
         s["_csrf"] = "testtoken"
         s.pop("enterprise_active_tenant", None)
+
+
+def _stub_ai_writer(monkeypatch):
+    """This route test is about the button plumbing, not provider availability."""
+    def _write(subject, facts, passage_body="", *, brief="", document_title=""):
+        return (f"This section writes {subject} for {facts['name']} in "
+                f"{facts.get('country') or 'the recorded country'}.")
+
+    monkeypatch.setattr(documents, "_ai_write", _write)
 
 
 @pytest.fixture(scope="module")
@@ -112,9 +122,9 @@ def test_the_page_renders_reports_as_buttons_grouped_by_phase(ent, programme):
     assert r.status_code == 200
     body = r.data.decode()
     # A phase heading and one of its report buttons, straight from the deliverable list.
-    assert "Programme Concept and Opportunity Identification" in body
-    assert 'name="deliverable_code" value="P01_D01"' in body
-    assert "Programme concept note" in body
+    assert "Initiation" in body
+    assert 'name="deliverable_code" value="R4P1_D01"' in body
+    assert "Programme Concept Note" in body
 
 
 def test_reports_are_buttons_not_activity_checkboxes(ent, programme):
@@ -124,27 +134,33 @@ def test_reports_are_buttons_not_activity_checkboxes(ent, programme):
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
 
-    # Every report is a submit button carrying its own deliverable_code.
-    assert 'name="deliverable_code" value="P01_D01"' in body
-    assert 'name="deliverable_code" value="P03_D01"' in body
+    # Every report is a submit button carrying its own deliverable_code -- and every phase
+    # renders its own, not merely the one the programme happens to be sitting in.
+    assert 'name="deliverable_code" value="R4P1_D01"' in body     # Initiation
+    assert 'name="deliverable_code" value="R4P3_D01"' in body     # Execution
     # And nothing on the page is an activity checkbox any more.
     assert 'name="activities"' not in body
 
 
-def test_ticking_activities_and_generating_OPENS_the_report(ent, programme):
-    """THE feature: tick activities -> the app writes the document and OPENS it as a report.
+def test_clicking_a_report_button_writes_it_and_OPENS_it(ent, programme, monkeypatch):
+    """THE feature: click a report -> the app writes that deliverable and OPENS it.
 
     It used to push the PDF straight at the browser as a download. The owner asked for the
     report page instead (2026-07-13: "open it in html page with pdf and email, just like we
     did in the start project design report") -- so the document is now something you read,
     with the PDF and the email offered beside it.
+
+    Rev 4 (2026-07-16): the POST carries a `deliverable_code` and nothing else -- there are no
+    activities to tick, and the report's sections come from the deliverable itself. The route
+    now fails loudly if no writer is reachable, so this plumbing test stubs the writer.
     """
     client, _wa, uid = ent
     _login(client, uid)
+    _stub_ai_writer(monkeypatch)
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
         data={"_csrf": "testtoken", "title": "Concept Pack",
-              "activities": ["P01_A01", "P01_A02", "P03_A01"]},
+              "deliverable_code": "R4P1_D01"},        # Programme Concept Note
         follow_redirects=True,
     )
     assert r.status_code == 200
@@ -165,21 +181,28 @@ def test_generating_with_no_report_chosen_is_refused(ent, programme):
     assert b"Choose a report to generate" in r.data
 
 
-def test_engine_written_report_bypasses_the_choose_a_report_refusal(ent, programme):
-    """An engine-written report (e.g. the technical feasibility report) takes NO activities --
-    the design engine IS its content. Clicking it must NOT be refused with "Choose a report";
-    it proceeds to the engine, which (with no approved reference design yet) asks for one
-    rather than 500ing or falling back to prose."""
+def test_engine_written_report_reaches_the_engine_and_fails_closed(ent, programme):
+    """An engine-written report's content IS the programme's approved reference design.
+
+    Clicking it must NOT be refused with "Choose a report" -- the operator chose one. It must
+    reach the engine, which with no approved reference design yet ASKS FOR ONE rather than
+    500ing or quietly falling back to topic prose, which would hand back a "Programme
+    Feasibility Study" with no engineering in it.
+    """
     client, _wa, uid = ent
     _login(client, uid)
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "deliverable_code": "P04_D01"},  # engine: technical
+        data={"_csrf": "testtoken",
+              "deliverable_code": "R4P2_D07"},   # Programme Feasibility Study -- engine
         follow_redirects=True,
     )
     assert r.status_code == 200
-    # The no-activities refusal did NOT fire -- is_engine_written short-circuits it.
+    # The operator named a report, so the "choose one" refusal must not fire...
     assert b"Choose a report to generate" not in r.data
+    # ...and the engine refused with the instruction, rather than writing a hollow report.
+    assert b"written by the design engine" in r.data
+    assert b"Download PDF" not in r.data      # no report was opened
 
 
 def test_uploading_a_source_document_then_using_it(ent, programme):

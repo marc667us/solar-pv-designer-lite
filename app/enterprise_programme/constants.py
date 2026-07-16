@@ -2,64 +2,51 @@
 
 WHY THIS FILE EXISTS
 --------------------
-The owner's specification (docs/enterprise-programme/source/02-lifecycle-workflows.txt)
-hands us ready-made vocabularies: 16 lifecycle phases, 14 stage gates, 20 programme
-statuses, 21 project statuses, 15 management controls. Those are NOT suggestions and
-they are NOT free text -- they are the state machine.
+The owner's specification hands us ready-made vocabularies -- programme statuses, project
+statuses, roles and their permissions, the 15 management controls, the beneficiary and
+template lifecycles. Those are NOT suggestions and they are NOT free text: they are the
+state machine.
 
 Every one of them is declared here ONCE, and everything downstream (DB seed rows,
 dropdown option lists, guard predicates, tests) reads from here. A status a user can
 type is a status the state machine cannot reason about, so the UI never accepts one:
 see docs/enterprise-programme/rebuild/06-dropdown-and-ux-spec.md.
 
-Ordering is significant for PHASES (sequence_no) and GATES (gate order). Do not
-reorder; append only.
+THE LIFECYCLE IS NOT HERE ANY MORE (Slice 0b-ii, 2026-07-16)
+------------------------------------------------------------
+This file used to own the lifecycle as well: 16 phases, 14 stage gates, 453 activities and
+144 deliverables. The owner rejected that model as "made too large" and asked for the old map
+to be removed rather than left dormant, so it is DELETED -- not deprecated, not kept beside
+the new one. Revision 4's SIX phases, FIVE gates and 112 deliverables live in `rev4_phases.py`,
+which is the single source of truth for anything phase- or gate-shaped.
+
+`rev4_phases` imports the hold/terminal pseudo-states back from this file, so do not add an
+import of it at this module's top level -- that would be circular. Where this file genuinely
+needs the model (the owner's onboarding role bundle), the import is local to the function.
+
+Ordering is significant for the status lists (index 0 is the creation default) and for ROLES.
+Do not reorder; append only.
 """
 
 from __future__ import annotations
 
 
-# --- lifecycle phases (doc 3, "SOLAR PROGRAMME INITIATION..." phases 1-16) ---
-# (code, sequence_no, display name)
-PHASES: list[tuple[str, int, str]] = [
-    ("P01_CONCEPT",        1,  "Programme Concept and Opportunity Identification"),
-    ("P02_INITIATION",     2,  "Programme Initiation"),
-    ("P03_NEEDS",          3,  "Needs Assessment and Baseline Study"),
-    ("P04_FEASIBILITY",    4,  "Feasibility Study and Business Case"),
-    ("P05_STRUCTURING",    5,  "Programme Structuring and Master Planning"),
-    ("P06_TEMPLATES",      6,  "Programme Template and Standardisation Development"),
-    ("P07_FUNDING",        7,  "Funding and Commercial Structuring"),
-    ("P08_PROCUREMENT",    8,  "Procurement Strategy and EPC Packaging"),
-    ("P09_ENGINEERING",    9,  "Detailed Engineering and Project Generation"),
-    ("P10_MOBILISATION",  10,  "Mobilisation and Implementation Readiness"),
-    ("P11_CONSTRUCTION",  11,  "Construction, Installation and Delivery"),
-    ("P12_COMMISSIONING", 12,  "Inspection, Testing and Commissioning"),
-    ("P13_HANDOVER",      13,  "Handover and Programme Closeout"),
-    ("P14_OPERATIONS",    14,  "Operations and Maintenance"),
-    ("P15_EVALUATION",    15,  "Monitoring, Evaluation and Programme Optimisation"),
-    ("P16_EXPANSION",     16,  "Programme Expansion and Replication"),
-]
-
-# --- stage gates (doc 3, Gate 1..Gate 14) -----------------------------------
-# (code, phase_code it closes, display name, approving authority)
-# `approving_authority` is a ROLE code from ROLES below -- the gate cannot be
-# approved by anyone who does not hold that role (see rbac.py).
-GATES: list[tuple[str, str, str, str]] = [
-    ("G01",  "P01_CONCEPT",       "Programme Concept Approval",            "programme_sponsor"),
-    ("G02",  "P02_INITIATION",    "Programme Initiation Approval",         "steering_committee"),
-    ("G03",  "P03_NEEDS",         "Needs Assessment Approval",             "programme_manager"),
-    ("G04",  "P04_FEASIBILITY",   "Feasibility and Business Case Approval","programme_sponsor"),
-    ("G05",  "P05_STRUCTURING",   "Programme Master Plan Approval",        "programme_director"),
-    ("G06",  "P06_TEMPLATES",     "Standardisation Approval",              "technical_director"),
-    ("G07",  "P07_FUNDING",       "Financial Close or Funding Approval",   "funding_manager"),
-    ("G08",  "P08_PROCUREMENT",   "Contract Award and Notice to Proceed",  "procurement_manager"),
-    ("G09",  "P09_ENGINEERING",   "Design Approval and Construction Release","engineering_manager"),
-    ("G10",  "P10_MOBILISATION",  "Site Mobilisation Approval",            "site_engineer"),
-    ("G11",  "P11_CONSTRUCTION",  "Construction Completion Approval",      "qa_qc_manager"),
-    ("G12",  "P12_COMMISSIONING", "Commissioning and Taking-Over Approval","commissioning_engineer"),
-    ("G13",  "P13_HANDOVER",      "Handover and Closeout Approval",        "programme_director"),
-    ("G14",  "P15_EVALUATION",    "Benefits and Performance Review",       "steering_committee"),
-]
+# --- the lifecycle: SEE rev4_phases.py ---------------------------------------
+# THE OLD MAP IS GONE (Slice 0b-ii, 2026-07-16). This file used to carry doc 3's 16 phases,
+# 14 stage gates, 453 "Main Activities" and doc 2's 144 "Key Outputs", plus the state machine
+# over them. The owner rejected that model as "made too large" and asked for Revision 4:
+# "the app you are building now can not be touched, but the exist[ing] remnant of the old map
+# must be removed and deleted" -- and, on leaving things dormant instead: "item marked to be
+# removed must be removed and delected".
+#
+# The lifecycle now lives in `rev4_phases.py`: SIX phases, FIVE gates, 112 deliverables, and
+# no activities at all (a report IS one deliverable). Everything phase- or gate-shaped is
+# imported from there.
+#
+# WHAT REMAINS IN THIS FILE is the vocabulary Revision 4 does not redefine -- the 15 controls,
+# the roles and their permissions, the beneficiary/template/qualification lifecycles, the
+# design strategies, and the hold/terminal pseudo-states (which rev4_phases imports back,
+# because a suspended programme is suspended whether the model has six phases or sixteen).
 
 # --- programme status (doc 3, "RECOMMENDED PROGRAMME STATUS VALUES") ---------
 # Verbatim, in the owner's order. Index 0 is the creation default.
@@ -704,51 +691,6 @@ HOLD_STATES: frozenset[str] = frozenset({"SUSPENDED", "ON_HOLD"})
 TERMINAL_STATES: frozenset[str] = frozenset({"CANCELLED", "CLOSED", "ARCHIVED"})
 PSEUDO_STATES: frozenset[str] = HOLD_STATES | TERMINAL_STATES
 
-# phase_code -> the phases (or pseudo-states) it may legally move to.
-# Straight from docs/enterprise-programme/rebuild/05-lifecycle-gates-and-workflows.md.
-# Anything not listed here is an ILLEGAL transition -- there is no "any -> any" escape,
-# which is the whole point of having a spine.
-TRANSITIONS: dict[str, tuple[str, ...]] = {
-    "P01_CONCEPT":      ("P02_INITIATION", "CANCELLED", "ON_HOLD"),
-    "P02_INITIATION":   ("P03_NEEDS", "P01_CONCEPT", "CANCELLED", "ON_HOLD"),
-    "P03_NEEDS":        ("P04_FEASIBILITY", "P02_INITIATION", "ON_HOLD"),
-    "P04_FEASIBILITY":  ("P05_STRUCTURING", "P03_NEEDS", "CANCELLED", "ON_HOLD"),
-    "P05_STRUCTURING":  ("P06_TEMPLATES", "P04_FEASIBILITY", "SUSPENDED"),
-    "P06_TEMPLATES":    ("P07_FUNDING", "P09_ENGINEERING", "P05_STRUCTURING"),
-    "P07_FUNDING":      ("P08_PROCUREMENT", "P06_TEMPLATES", "ON_HOLD"),
-    "P08_PROCUREMENT":  ("P09_ENGINEERING", "P10_MOBILISATION", "P07_FUNDING"),
-    "P09_ENGINEERING":  ("P10_MOBILISATION", "P08_PROCUREMENT", "SUSPENDED"),
-    "P10_MOBILISATION": ("P11_CONSTRUCTION", "P09_ENGINEERING", "SUSPENDED"),
-    "P11_CONSTRUCTION": ("P12_COMMISSIONING", "P10_MOBILISATION", "SUSPENDED"),
-    "P12_COMMISSIONING":("P13_HANDOVER", "P11_CONSTRUCTION", "SUSPENDED"),
-    "P13_HANDOVER":     ("P14_OPERATIONS", "P15_EVALUATION", "CLOSED"),
-    "P14_OPERATIONS":   ("P15_EVALUATION", "SUSPENDED", "CLOSED"),
-    "P15_EVALUATION":   ("P16_EXPANSION", "P14_OPERATIONS", "CLOSED"),
-    "P16_EXPANSION":    ("P01_CONCEPT", "P05_STRUCTURING", "CLOSED"),
-}
-
-# phase_code -> the programme status the phase puts the programme in.
-# The status is DERIVED, never typed. That is what keeps 20 statuses and 16 phases
-# from drifting apart into two independent (and eventually contradictory) truths.
-PHASE_STATUS: dict[str, str] = {
-    "P01_CONCEPT":      "Concept",
-    "P02_INITIATION":   "Under Initiation",
-    "P03_NEEDS":        "Under Assessment",
-    "P04_FEASIBILITY":  "Under Feasibility",
-    "P05_STRUCTURING":  "Approved",
-    "P06_TEMPLATES":    "Approved",
-    "P07_FUNDING":      "Funding Pending",
-    "P08_PROCUREMENT":  "Procurement Planning",
-    "P09_ENGINEERING":  "Under Design",
-    "P10_MOBILISATION": "Contracted",
-    "P11_CONSTRUCTION": "Under Construction",
-    "P12_COMMISSIONING":"Under Commissioning",
-    "P13_HANDOVER":     "Closing",
-    "P14_OPERATIONS":   "Operational",
-    "P15_EVALUATION":   "Operational",
-    "P16_EXPANSION":    "Approved",
-}
-
 # pseudo-state -> programme status.
 PSEUDO_STATE_STATUS: dict[str, str] = {
     "SUSPENDED": "Suspended",
@@ -756,55 +698,6 @@ PSEUDO_STATE_STATUS: dict[str, str] = {
     "CANCELLED": "Cancelled",
     "CLOSED":    "Closed",
     "ARCHIVED":  "Archived",
-}
-
-# The gate that must be APPROVED before a programme may LEAVE a phase going forward.
-# P14 has no numbered gate (doc 3) -- it is controlled by O&M permissions instead --
-# and P16's exit is controlled by an expansion approval record, not a numbered gate.
-GATE_CLOSING_PHASE: dict[str, str] = {g[1]: g[0] for g in GATES}
-
-# --- what a phase demands to be ENTERED --------------------------------------
-# "The gate that closes the phase you are leaving" is NOT a sufficient rule, and the
-# reviewer found the proof: doc 3 permits P06 -> P09 (start engineering while funding and
-# tendering run in parallel) and P09 -> P10. Chain them and a programme reaches
-# MOBILISATION having approved only G06 and G09 -- no funding close (G07), no contract
-# award (G08). It would be mobilising contractors it never hired with money it never
-# raised. A rework edge (P09 -> P08) walked around G07 the same way.
-#
-# Patching each edge is whack-a-mole, because the hole is a property of the DESTINATION,
-# not of the route taken to it. So each phase declares what must be true to ENTER it, and
-# that is checked on EVERY entry -- forward, skipping, or backward.
-#
-# The entries below are doc 3's own "blocked until passed" column, read as preconditions:
-#   Gate 7 blocks major procurement    -> P08 cannot be entered without G07
-#   Gate 8 blocks contractor mobilisation, Gate 9 blocks site installation
-#                                      -> P10 cannot be entered without G08 and G09
-#   Gate 10 blocks construction start  -> P11 needs G10, and so on down the chain.
-# Phases not listed here impose no entry gate of their own.
-PHASE_ENTRY_REQUIRED_GATES: dict[str, tuple[str, ...]] = {
-    "P08_PROCUREMENT":   ("G07",),
-    "P10_MOBILISATION":  ("G08", "G09"),
-    "P11_CONSTRUCTION":  ("G10",),
-    "P12_COMMISSIONING": ("G11",),
-    "P13_HANDOVER":      ("G12",),
-    "P14_OPERATIONS":    ("G13",),
-}
-
-# --- gates that cannot be approved before other gates ------------------------
-# The remaining leak: nothing stopped G08 (Contract Award) being approved before G07
-# (Financial Close). Awarding a contract you have no money for is not a routing mistake,
-# it is the thing Gate 7 exists to prevent -- so the dependency belongs on the GATE, not
-# on every edge that might reach it. With G08 requiring G07, mobilisation transitively
-# requires funding no matter which path a programme takes to get there.
-#
-# G09 (Design Approval) deliberately has NO prerequisite: detailed engineering running
-# ahead of financial close is normal practice and doc 3 explicitly allows P06 -> P09.
-GATE_PREREQUISITE_GATES: dict[str, tuple[str, ...]] = {
-    "G08": ("G07",),           # no contract award before financial close
-    "G10": ("G08", "G09"),     # no mobilisation approval without a contract and a design
-    "G11": ("G10",),           # no completion sign-off without mobilisation
-    "G12": ("G11",),           # no commissioning without construction completion
-    "G13": ("G12",),           # no handover without commissioning
 }
 
 # --- named post-holders: when the role is not enough -------------------------
@@ -826,21 +719,20 @@ GATE_AUTHORITY_HOLDER_COLUMN: dict[str, str] = {
     "programme_manager":  "manager_user_id",
 }
 
-# Release 1 delivers a COMPLETE lifecycle through Gate 9 (Supervisor adjudication,
-# doc 09). Gates 10-14 exist, are seeded, and are deliberately BLOCKED: their guards
-# fail closed until the slices that produce their evidence (construction reports, test
-# results, handover dossiers) ship. A lifecycle with holes in the middle is worse than
-# a shorter one that cannot be bypassed.
-RELEASE_1_FINAL_GATE = "G09"
-GATES_DEFERRED_BEYOND_RELEASE_1: frozenset[str] = frozenset(
-    {"G10", "G11", "G12", "G13", "G14"}
-)
+# Release 1's "complete lifecycle through Gate 9, Gates 10-14 seeded but BLOCKED" lived here
+# (RELEASE_1_FINAL_GATE / GATES_DEFERRED_BEYOND_RELEASE_1). Both were the old 14-gate model's
+# vocabulary and are gone with it. Revision 4's five gates are ALL operable -- each asks only
+# for its own phase's approval document, which the app itself writes, so none of them waits on
+# an unshipped slice. rev4_phases.GATES_DEFERRED_BEYOND_RELEASE_1 is therefore empty, and kept
+# only so the "seeded but honestly blocked" mechanism still exists for a future gate that
+# needs it.
 
 
 # --- convenience lookups (used by dropdown builders and guards) -------------
+# PHASE_CODES / GATE_CODES / DEFAULT_PHASE_CODE used to live here too. They are lifecycle,
+# so they went to rev4_phases with the rest of the model (Slice 0b-ii); what is left is the
+# role and status vocabulary, which Revision 4 does not redefine.
 
-PHASE_CODES: list[str] = [p[0] for p in PHASES]
-GATE_CODES: list[str] = [g[0] for g in GATES]
 ROLE_CODES: frozenset[str] = frozenset(r[0] for r in ROLES)
 PERMISSION_CODES: frozenset[str] = frozenset(p[0] for p in PERMISSIONS)
 
@@ -851,7 +743,6 @@ ROLE_LABELS: dict[str, str] = dict(ROLES)
 
 DEFAULT_PROGRAMME_STATUS = PROGRAMME_STATUSES[0]          # "Concept"
 DEFAULT_PROJECT_STATUS = PROJECT_STATUSES[0]              # "Beneficiary Registered"
-DEFAULT_PHASE_CODE = PHASES[0][0]                         # "P01_CONCEPT"
 
 
 # --- what the person who creates an organisation actually gets (slice 6.5) ---
@@ -889,26 +780,61 @@ DEFAULT_PHASE_CODE = PHASES[0][0]                         # "P01_CONCEPT"
 #
 # So: grant the roles, keep the map honest, and let the members screen do the rest.
 #
-# Release 1 runs the lifecycle through Gate 9, so the bundle is DERIVED from the gate table
-# -- if a future edit changes who signs Gate 6, this follows automatically rather than
-# rotting into a hand-typed list that no longer matches the gates it exists to satisfy.
-R1_GATE_CODES: tuple[str, ...] = ("G01", "G02", "G03", "G04", "G05",
-                                  "G06", "G07", "G08", "G09")
+# The bundle is DERIVED from the gate table -- if a future edit changes who signs a gate,
+# this follows automatically rather than rotting into a hand-typed list that no longer
+# matches the gates it exists to satisfy.
+#
+# IT IS DERIVED FROM THE LIVE MODEL, WHICH IS NOW REVISION 4's (Slice 0b-ii, 2026-07-16).
+# It used to read the OLD 14-gate table, filtered to a hand-written `R1_GATE_CODES` tuple of
+# G01..G09. That was a latent lock-out: the owner's bundle would have gone on being computed
+# from a lifecycle the app no longer runs, so a Rev 4 gate whose authority sits outside the
+# old G01-G09 set would leave the owner unable to sign it -- with nothing in the code
+# pointing at why. Read off rev4_phases.GATE_AUTHORITY, the bundle cannot drift from the
+# gates it exists to satisfy.
+#
+# The import is local to keep the module import graph acyclic: rev4_phases imports the
+# pseudo-states from THIS module, so a top-level import back would be circular.
+def _gate_authorities() -> frozenset[str]:
+    """The named approving authority of every gate in the live lifecycle model.
 
-# The named approving authority for every gate in Release 1. Without these the lifecycle
-# dead-ends at the first gate the owner cannot sign.
-_R1_GATE_AUTHORITIES: frozenset[str] = frozenset(
-    authority for code, _phase, _name, authority in GATES if code in R1_GATE_CODES
-)
+    Input:  none.
+    Output: the set of role codes that sign gates.
+
+    Without these in the owner's bundle the lifecycle dead-ends at the first gate the owner
+    cannot sign -- which is why this is derived, and why a test asserts the owner holds every
+    gate authority rather than trusting this comment.
+    """
+    from .rev4_phases import GATE_AUTHORITY
+    return frozenset(GATE_AUTHORITY.values())
+
+
+_R1_GATE_AUTHORITIES: frozenset[str] = _gate_authorities()
 
 # The operational roles the gate authorities do NOT already cover:
 #   programme_engineer   -> template.manage (author a template), design.generate
 #   district_coordinator -> beneficiary.import, qualification.score
-# (template.approve comes with technical_director, beneficiary.approve and
-#  qualification.approve with programme_manager -- both already gate authorities.)
+#   programme_manager    -> beneficiary.approve, qualification.approve
+#   technical_director   -> template.approve
+#
+# THE LAST TWO ARE NAMED HERE BECAUSE REVISION 4 STOPPED BRINGING THEM (Slice 0b-ii,
+# 2026-07-16). This set used to read: "template.approve comes with technical_director,
+# beneficiary.approve and qualification.approve with programme_manager -- both already gate
+# authorities", and that was true of the OLD 14 gates, where Gate 3 was the Programme
+# Manager's to sign and Gate 6 the Technical Director's. Rev 4 has five gates and the owner's
+# spec (section 20) reduces the authorities to sponsor and director -- so those two roles
+# stopped arriving through _R1_GATE_AUTHORITIES, and the owner silently lost the power to
+# approve a beneficiary, a qualification or a template. The live suite caught it exactly as
+# it caught the original version of this bug: 32 rollout tests, all 403.
+#
+# The lesson is the one the block above already states and this file then leaned on anyway:
+# a derived bundle is only as good as what it is derived FROM. The gate table answers "who
+# signs?", never "what does a solo operator need in order to work?" -- so the operational
+# half must be named, not inferred from whoever happens to sign a gate this release.
 _R1_OPERATIONAL_ROLES: frozenset[str] = frozenset({
     "programme_engineer",
     "district_coordinator",
+    "programme_manager",
+    "technical_director",
 })
 
 # THE OWNER. One role, named once, so that "is this person the owner?" has exactly one
@@ -951,913 +877,3 @@ def permissions_for_roles(role_codes) -> frozenset[str]:
     for rc in role_codes or ():
         out.update(ROLE_PERMISSIONS.get(rc, ()))
     return frozenset(out)
-
-
-# --- lifecycle activities (doc 3, "Main Activities" per phase) ----------------
-#
-# WHY THESE EXIST
-# ---------------
-# The lifecycle board could show a programme's PHASE and its GATES, but not the WORK. Doc 3
-# lists the "Main Activities" for each of the 16 phases -- 453 of them -- and none of that
-# ever reached the code, so an operator could see that they were in Phase 4 and had not yet
-# passed Gate 4, with nothing telling them what Phase 4 actually consists of.
-#
-# They are now selectable: an operator ticks the activities they want and the app generates
-# a document covering exactly those, optionally drafted from a source document they upload
-# (see app/enterprise_programme/documents.py).
-#
-# VERBATIM FROM THE SOURCE, NOT PARAPHRASED. Extracted mechanically from
-# docs/enterprise-programme/source/02-lifecycle-workflows.txt so the wording an operator
-# ticks is the wording the programme's own governing document uses. An activity that opens
-# an option list in the doc ("Import beneficiary data through: Spreadsheet; CSV; GIS...")
-# keeps its options inline rather than fragmenting into unusable half-sentences.
-#
-# The code is positional (P03_A07 = phase 3, seventh activity) and is what gets stored on a
-# generated document, so a document can always say which activities it answered.
-PHASE_ACTIVITIES: dict[str, tuple[tuple[str, str], ...]] = {
-    "P01_CONCEPT": (
-        ("P01_A01", "Register the programme idea."),
-        ("P01_A02", "Identify the sponsoring institution."),
-        ("P01_A03", "Define the target sector."),
-        ("P01_A04", "Define the geographical coverage."),
-        ("P01_A05", "Identify the energy-access or energy-security problem."),
-        ("P01_A06", "Estimate the number of potential beneficiaries."),
-        ("P01_A07", "Select an initial programme category."),
-        ("P01_A08", "Identify possible programme funding sources."),
-        ("P01_A09", "Define initial expected benefits."),
-        ("P01_A10", "Conduct an initial policy and regulatory review."),
-        ("P01_A11", "Identify key stakeholders."),
-        ("P01_A12",
-         "Determine whether the programme will use: Standard distributed designs; "
-         "Generation-station designs; Mini-grid designs; Hybrid designs; A "
-         "combination of these approaches."
-         ),
-        ("P01_A13", "Prepare an initial programme concept note."),
-        ("P01_A14", "Submit the concept for sponsor review."),
-    ),
-    "P02_INITIATION": (
-        ("P02_A01", "Create the programme in SolarPro."),
-        ("P02_A02", "Assign the enterprise tenant."),
-        ("P02_A03", "Assign the programme sponsor."),
-        ("P02_A04", "Appoint the programme director."),
-        ("P02_A05", "Appoint the programme manager."),
-        ("P02_A06", "Establish programme governance."),
-        ("P02_A07", "Define programme departments and workstreams."),
-        ("P02_A08", "Define programme-level roles."),
-        ("P02_A09", "Define approval authorities."),
-        ("P02_A10", "Establish regional and district implementation structures."),
-        ("P02_A11", "Define programme objectives."),
-        ("P02_A12", "Define programme scope."),
-        ("P02_A13", "Define exclusions."),
-        ("P02_A14", "Define programme boundaries."),
-        ("P02_A15", "Establish preliminary budget."),
-        ("P02_A16", "Define programme duration."),
-        ("P02_A17", "Define programme phases."),
-        ("P02_A18", "Establish reporting requirements."),
-        ("P02_A19", "Define stakeholder engagement arrangements."),
-        ("P02_A20", "Create the programme document register."),
-        ("P02_A21", "Create the initial programme schedule."),
-        ("P02_A22", "Establish the programme risk and issue registers."),
-        ("P02_A23", "Create the programme communications plan."),
-        ("P02_A24", "Define audit and assurance requirements."),
-        ("P02_A25", "Approve the programme charter."),
-    ),
-    "P03_NEEDS": (
-        ("P03_A01", "Define beneficiary categories."),
-        ("P03_A02", "Register potential beneficiaries."),
-        ("P03_A03",
-         "Import beneficiary data through: Spreadsheet; CSV; GIS; API; Manual "
-         "registration."
-         ),
-        ("P03_A04", "Validate beneficiary records."),
-        ("P03_A05", "Remove or merge duplicates."),
-        ("P03_A06", "Conduct preliminary site screening."),
-        ("P03_A07", "Collect current electricity bills."),
-        ("P03_A08", "Collect historical energy consumption."),
-        ("P03_A09", "Record generator use."),
-        ("P03_A10", "Record fuel consumption."),
-        ("P03_A11", "Record outage frequency."),
-        ("P03_A12", "Record critical loads."),
-        ("P03_A13", "Record priority loads."),
-        ("P03_A14", "Assess roof area."),
-        ("P03_A15", "Assess available land."),
-        ("P03_A16", "Assess existing electrical infrastructure."),
-        ("P03_A17", "Assess transformer and grid capacity."),
-        ("P03_A18", "Assess access roads."),
-        ("P03_A19", "Assess security conditions."),
-        ("P03_A20", "Assess flood and environmental risks."),
-        ("P03_A21", "Assess communications coverage."),
-        ("P03_A22", "Assess maintenance capability."),
-        ("P03_A23", "Identify social and economic priorities."),
-        ("P03_A24", "Categorise sites by need and suitability."),
-        ("P03_A25", "Calculate initial site qualification scores."),
-        ("P03_A26", "Prioritise beneficiaries."),
-        ("P03_A27", "Develop the programme baseline."),
-    ),
-    "P04_FEASIBILITY": (
-        ("P04_A01", "Define alternative programme scenarios."),
-        ("P04_A02", "Develop preliminary demand forecasts."),
-        ("P04_A03", "Estimate total PV capacity."),
-        ("P04_A04", "Estimate total battery capacity."),
-        ("P04_A05", "Estimate grid-support requirements."),
-        ("P04_A06", "Assess possible generation-station locations."),
-        ("P04_A07", "Assess distributed-system options."),
-        ("P04_A08", "Evaluate rooftop, ground-mounted and hybrid options."),
-        ("P04_A09", "Assess generator integration."),
-        ("P04_A10", "Assess UPS integration."),
-        ("P04_A11", "Assess mini-grid options."),
-        ("P04_A12", "Assess grid-interconnection requirements."),
-        ("P04_A13", "Develop preliminary technical concepts."),
-        ("P04_A14", "Prepare preliminary equipment schedules."),
-        ("P04_A15", "Prepare preliminary BOQs."),
-        ("P04_A16", "Develop programme cost estimates."),
-        ("P04_A17", "Develop CAPEX estimates."),
-        ("P04_A18", "Develop OPEX estimates."),
-        ("P04_A19", "Estimate lifecycle cost."),
-        ("P04_A20", "Estimate expected energy generation."),
-        ("P04_A21", "Estimate grid-energy savings."),
-        ("P04_A22", "Estimate diesel savings."),
-        ("P04_A23", "Estimate carbon reduction."),
-        ("P04_A24", "Estimate programme revenue where applicable."),
-        ("P04_A25", "Assess affordability."),
-        ("P04_A26", "Assess funding options."),
-        ("P04_A27", "Conduct financial modelling."),
-        ("P04_A28", "Assess PPP or IPP suitability."),
-        ("P04_A29", "Conduct economic analysis."),
-        ("P04_A30", "Conduct preliminary environmental and social assessment."),
-        ("P04_A31", "Assess regulatory requirements."),
-        ("P04_A32", "Assess land and ownership constraints."),
-        ("P04_A33", "Assess procurement options."),
-        ("P04_A34", "Assess EPC packaging options."),
-        ("P04_A35", "Assess implementation capacity."),
-        ("P04_A36", "Conduct programme risk analysis."),
-        ("P04_A37", "Recommend the preferred programme option."),
-        ("P04_A38", "Prepare the programme business case."),
-    ),
-    "P05_STRUCTURING": (
-        ("P05_A01", "Confirm programme scope."),
-        ("P05_A02", "Confirm total target capacity."),
-        ("P05_A03", "Confirm target beneficiaries."),
-        ("P05_A04", "Divide the programme into phases."),
-        ("P05_A05", "Divide the programme by region or district."),
-        ("P05_A06", "Create implementation lots."),
-        ("P05_A07", "Define programme workstreams."),
-        ("P05_A08", "Define programme milestones."),
-        ("P05_A09", "Define delivery sequence."),
-        ("P05_A10", "Define programme dependencies."),
-        ("P05_A11", "Define procurement strategy."),
-        ("P05_A12", "Define EPC strategy."),
-        ("P05_A13", "Define funding-disbursement sequence."),
-        ("P05_A14", "Define stakeholder-engagement activities."),
-        ("P05_A15", "Define land and permitting activities."),
-        ("P05_A16", "Define engineering approval workflow."),
-        ("P05_A17", "Define contract approval workflow."),
-        ("P05_A18", "Define commissioning workflow."),
-        ("P05_A19", "Define operational handover strategy."),
-        ("P05_A20", "Define programme KPI framework."),
-        ("P05_A21", "Define monitoring and evaluation requirements."),
-        ("P05_A22", "Define reporting frequency."),
-        ("P05_A23", "Define audit requirements."),
-        ("P05_A24", "Define change-control procedure."),
-        ("P05_A25", "Define programme escalation process."),
-        ("P05_A26",
-         "Establish programme baselines for: Scope; Cost; Schedule; Capacity; "
-         "Beneficiaries; Energy generation; Carbon reduction."
-         ),
-        ("P05_A27", "Approve the programme master plan."),
-    ),
-    "P06_TEMPLATES": (
-        ("P06_A01", "Define standard beneficiary categories."),
-        ("P06_A02", "Define standard site categories."),
-        ("P06_A03", "Define typical load profiles."),
-        ("P06_A04", "Develop standard design packages."),
-        ("P06_A05", "Develop generation-station design templates."),
-        ("P06_A06", "Define standard battery packages."),
-        ("P06_A07", "Define standard inverter arrangements."),
-        ("P06_A08", "Define standard generator-integration arrangements."),
-        ("P06_A09", "Define standard UPS-integration arrangements."),
-        ("P06_A10", "Define standard protection schemes."),
-        ("P06_A11", "Define standard metering arrangements."),
-        ("P06_A12", "Define standard SCADA arrangements."),
-        ("P06_A13", "Define standard communication arrangements."),
-        ("P06_A14", "Define standard civil requirements."),
-        ("P06_A15", "Define standard structural requirements."),
-        ("P06_A16", "Develop standard drawings."),
-        ("P06_A17", "Develop standard single-line diagrams."),
-        ("P06_A18", "Develop standard equipment schedules."),
-        ("P06_A19", "Develop standard BOQs."),
-        ("P06_A20", "Develop standard cost models."),
-        ("P06_A21", "Develop standard construction schedules."),
-        ("P06_A22", "Develop standard inspection plans."),
-        ("P06_A23", "Develop standard testing procedures."),
-        ("P06_A24", "Develop standard commissioning procedures."),
-        ("P06_A25", "Develop standard O&M plans."),
-        ("P06_A26", "Develop standard warranties."),
-        ("P06_A27", "Define approved equipment alternatives."),
-        ("P06_A28", "Define approved product substitutions."),
-        ("P06_A29", "Define template approval workflow."),
-        ("P06_A30", "Publish approved template versions."),
-    ),
-    "P07_FUNDING": (
-        ("P07_A01", "Confirm total funding requirement."),
-        ("P07_A02", "Confirm programme cash-flow requirements."),
-        ("P07_A03", "Identify funding sources."),
-        ("P07_A04", "Structure government contributions."),
-        ("P07_A05", "Structure development-bank funding."),
-        ("P07_A06", "Structure commercial loans."),
-        ("P07_A07", "Structure grants."),
-        ("P07_A08", "Structure green bonds."),
-        ("P07_A09", "Structure climate finance."),
-        ("P07_A10", "Structure PPP arrangements."),
-        ("P07_A11", "Structure IPP arrangements."),
-        ("P07_A12", "Structure community contributions."),
-        ("P07_A13", "Structure carbon-finance arrangements."),
-        ("P07_A14", "Define funding conditions."),
-        ("P07_A15", "Define eligible project costs."),
-        ("P07_A16", "Define disbursement conditions."),
-        ("P07_A17", "Define counterpart-funding requirements."),
-        ("P07_A18", "Define repayment arrangements."),
-        ("P07_A19", "Define guarantee requirements."),
-        ("P07_A20", "Define insurance requirements."),
-        ("P07_A21", "Establish programme funding accounts."),
-        ("P07_A22", "Allocate funds by programme phase."),
-        ("P07_A23", "Allocate funds by region."),
-        ("P07_A24", "Allocate funds by project."),
-        ("P07_A25", "Define payment-certification processes."),
-        ("P07_A26", "Define financial reporting."),
-        ("P07_A27", "Define audit requirements."),
-        ("P07_A28", "Approve the funding plan."),
-    ),
-    "P08_PROCUREMENT": (
-        ("P08_A01", "Consolidate project BOQs."),
-        ("P08_A02", "Standardise units of measurement."),
-        ("P08_A03", "Group identical equipment."),
-        ("P08_A04", "Identify bulk-purchase opportunities."),
-        ("P08_A05", "Divide procurement by region."),
-        ("P08_A06", "Divide procurement by phase."),
-        ("P08_A07", "Divide procurement by technology."),
-        ("P08_A08", "Define equipment-only packages."),
-        ("P08_A09", "Define installation packages."),
-        ("P08_A10", "Define EPC packages."),
-        ("P08_A11", "Define EPCM packages."),
-        ("P08_A12", "Define turnkey packages."),
-        ("P08_A13", "Define O&M packages."),
-        ("P08_A14", "Define warehouse and logistics packages."),
-        ("P08_A15", "Define framework agreements."),
-        ("P08_A16", "Prepare procurement schedules."),
-        ("P08_A17", "Prepare tender documents."),
-        ("P08_A18", "Prepare technical specifications."),
-        ("P08_A19", "Prepare employer’s requirements."),
-        ("P08_A20", "Prepare bidder qualification criteria."),
-        ("P08_A21", "Prepare evaluation criteria."),
-        ("P08_A22", "Prepare contract conditions."),
-        ("P08_A23", "Define FIDIC contract form where applicable."),
-        ("P08_A24", "Invite bidders."),
-        ("P08_A25", "Conduct pre-bid meetings."),
-        ("P08_A26", "Respond to clarifications."),
-        ("P08_A27", "Receive bids."),
-        ("P08_A28", "Conduct technical evaluation."),
-        ("P08_A29", "Conduct financial evaluation."),
-        ("P08_A30", "Conduct due diligence."),
-        ("P08_A31", "Recommend award."),
-        ("P08_A32", "Obtain procurement approval."),
-        ("P08_A33", "Negotiate and execute contracts."),
-    ),
-    "P09_ENGINEERING": (
-        ("P09_A01", "Confirm approved beneficiary list."),
-        ("P09_A02", "Confirm site qualification."),
-        ("P09_A03", "Select the applicable template."),
-        ("P09_A04", "Generate individual SolarPro projects."),
-        ("P09_A05", "Assign programme and phase references."),
-        ("P09_A06", "Assign region and district references."),
-        ("P09_A07", "Assign design teams."),
-        ("P09_A08", "Conduct detailed site surveys."),
-        ("P09_A09", "Verify load data."),
-        ("P09_A10", "Verify roof or land availability."),
-        ("P09_A11", "Complete shading analysis."),
-        ("P09_A12", "Complete energy simulation."),
-        ("P09_A13", "Complete PV sizing."),
-        ("P09_A14", "Complete battery sizing."),
-        ("P09_A15", "Complete inverter sizing."),
-        ("P09_A16", "Complete cable sizing."),
-        ("P09_A17", "Complete protection design."),
-        ("P09_A18", "Complete earthing design."),
-        ("P09_A19", "Complete lightning-protection design where required."),
-        ("P09_A20", "Complete structural design."),
-        ("P09_A21", "Complete civil design."),
-        ("P09_A22", "Complete drainage design for generation stations."),
-        ("P09_A23", "Complete transformer and MV design."),
-        ("P09_A24", "Complete substation design."),
-        ("P09_A25", "Complete grid-interconnection design."),
-        ("P09_A26", "Complete SCADA design."),
-        ("P09_A27", "Complete communication-system design."),
-        ("P09_A28", "Complete fire-protection design."),
-        ("P09_A29", "Prepare detailed drawings."),
-        ("P09_A30", "Prepare equipment schedules."),
-        ("P09_A31", "Prepare detailed BOQs."),
-        ("P09_A32", "Prepare project cost estimates."),
-        ("P09_A33", "Conduct design reviews."),
-        ("P09_A34", "Resolve review comments."),
-        ("P09_A35", "Obtain engineering approval."),
-        ("P09_A36", "Issue construction documents."),
-    ),
-    "P10_MOBILISATION": (
-        ("P10_A01", "Issue notice to proceed."),
-        ("P10_A02", "Confirm contractor mobilisation plan."),
-        ("P10_A03", "Confirm site-access arrangements."),
-        ("P10_A04", "Confirm land availability."),
-        ("P10_A05", "Confirm permits and approvals."),
-        ("P10_A06", "Confirm insurance."),
-        ("P10_A07", "Confirm performance securities."),
-        ("P10_A08", "Approve contractor programme."),
-        ("P10_A09", "Approve method statements."),
-        ("P10_A10", "Approve quality plan."),
-        ("P10_A11", "Approve health and safety plan."),
-        ("P10_A12", "Approve environmental and social plan."),
-        ("P10_A13", "Approve logistics plan."),
-        ("P10_A14", "Establish warehouses."),
-        ("P10_A15", "Establish regional stores."),
-        ("P10_A16", "Register equipment."),
-        ("P10_A17", "Establish QR-code or serial-number controls."),
-        ("P10_A18", "Confirm delivery schedules."),
-        ("P10_A19", "Assign regional implementation teams."),
-        ("P10_A20", "Assign site supervisors."),
-        ("P10_A21", "Conduct site handover."),
-        ("P10_A22", "Conduct pre-construction meetings."),
-        ("P10_A23", "Establish reporting procedures."),
-        ("P10_A24", "Establish communication channels."),
-        ("P10_A25", "Establish document-control procedures."),
-        ("P10_A26", "Confirm construction-readiness checklist."),
-    ),
-    "P11_CONSTRUCTION": (
-        ("P11_A01", "Site establishment."),
-        ("P11_A02", "Site clearing where required."),
-        ("P11_A03", "Civil works."),
-        ("P11_A04", "Foundations."),
-        ("P11_A05", "Drainage works."),
-        ("P11_A06", "Access roads."),
-        ("P11_A07", "Fencing and security works."),
-        ("P11_A08", "Mounting-structure installation."),
-        ("P11_A09", "PV-module installation."),
-        ("P11_A10", "Inverter installation."),
-        ("P11_A11", "Battery-system installation."),
-        ("P11_A12", "Cable installation."),
-        ("P11_A13", "Cable containment."),
-        ("P11_A14", "Earthing installation."),
-        ("P11_A15", "Lightning-protection installation."),
-        ("P11_A16", "Distribution-board installation."),
-        ("P11_A17", "Transformer installation."),
-        ("P11_A18", "MV switchgear installation."),
-        ("P11_A19", "Substation works."),
-        ("P11_A20", "Metering installation."),
-        ("P11_A21", "SCADA installation."),
-        ("P11_A22", "Communication-system installation."),
-        ("P11_A23", "Generator integration."),
-        ("P11_A24", "UPS integration."),
-        ("P11_A25", "Grid-interface works."),
-        ("P11_A26", "Labelling."),
-        ("P11_A27", "Asset tagging."),
-        ("P11_A28", "Daily progress reporting."),
-        ("P11_A29", "Material-consumption reporting."),
-        ("P11_A30", "Quality inspections."),
-        ("P11_A31", "Safety inspections."),
-        ("P11_A32", "Environmental monitoring."),
-        ("P11_A33", "Progress measurement."),
-        ("P11_A34", "Delay reporting."),
-        ("P11_A35", "Variation management."),
-        ("P11_A36", "Claims management."),
-        ("P11_A37", "Contractor performance assessment."),
-        ("P11_A38", "Programme-dashboard updates."),
-    ),
-    "P12_COMMISSIONING": (
-        ("P12_A01", "Conduct installation inspections."),
-        ("P12_A02", "Complete punch lists."),
-        ("P12_A03", "Correct non-conformances."),
-        ("P12_A04", "Conduct visual inspections."),
-        ("P12_A05", "Conduct continuity tests."),
-        ("P12_A06", "Conduct insulation-resistance tests."),
-        ("P12_A07", "Conduct earthing tests."),
-        ("P12_A08", "Conduct polarity tests."),
-        ("P12_A09", "Conduct protection tests."),
-        ("P12_A10", "Conduct inverter tests."),
-        ("P12_A11", "Conduct battery tests."),
-        ("P12_A12", "Conduct transformer tests."),
-        ("P12_A13", "Conduct switchgear tests."),
-        ("P12_A14", "Conduct metering tests."),
-        ("P12_A15", "Conduct SCADA tests."),
-        ("P12_A16", "Conduct communication-system tests."),
-        ("P12_A17", "Conduct generator-integration tests."),
-        ("P12_A18", "Conduct UPS-integration tests."),
-        ("P12_A19", "Conduct grid-synchronisation tests."),
-        ("P12_A20", "Conduct functional tests."),
-        ("P12_A21", "Conduct performance tests."),
-        ("P12_A22", "Verify alarms."),
-        ("P12_A23", "Verify monitoring data."),
-        ("P12_A24", "Verify safety systems."),
-        ("P12_A25", "Conduct training."),
-        ("P12_A26", "Prepare commissioning records."),
-        ("P12_A27", "Prepare test certificates."),
-        ("P12_A28", "Obtain utility approval where required."),
-        ("P12_A29", "Issue commissioning approval."),
-        ("P12_A30", "Update asset status."),
-    ),
-    "P13_HANDOVER": (
-        ("P13_A01", "Compile as-built drawings."),
-        ("P13_A02", "Compile equipment manuals."),
-        ("P13_A03", "Compile test certificates."),
-        ("P13_A04", "Compile warranty documents."),
-        ("P13_A05", "Compile spare-parts records."),
-        ("P13_A06", "Finalise asset register."),
-        ("P13_A07", "Finalise training."),
-        ("P13_A08", "Transfer monitoring access."),
-        ("P13_A09", "Transfer SCADA access."),
-        ("P13_A10", "Transfer software credentials."),
-        ("P13_A11", "Transfer maintenance schedules."),
-        ("P13_A12", "Transfer supplier contacts."),
-        ("P13_A13", "Transfer contractor contacts."),
-        ("P13_A14", "Resolve outstanding punch-list items."),
-        ("P13_A15", "Issue taking-over certificate."),
-        ("P13_A16", "Record defects-notification period."),
-        ("P13_A17", "Reconcile programme quantities."),
-        ("P13_A18", "Reconcile contract values."),
-        ("P13_A19", "Reconcile funding allocations."),
-        ("P13_A20", "Reconcile procurement records."),
-        ("P13_A21", "Prepare project closeout reports."),
-        ("P13_A22", "Prepare regional closeout reports."),
-        ("P13_A23", "Prepare programme closeout report."),
-        ("P13_A24", "Record lessons learned."),
-        ("P13_A25", "Archive programme documents."),
-        ("P13_A26", "Update programme status."),
-    ),
-    "P14_OPERATIONS": (
-        ("P14_A01", "Monitor generation."),
-        ("P14_A02", "Monitor consumption."),
-        ("P14_A03", "Monitor grid import and export."),
-        ("P14_A04", "Monitor battery state of charge."),
-        ("P14_A05", "Monitor battery health."),
-        ("P14_A06", "Monitor inverter status."),
-        ("P14_A07", "Monitor transformer status."),
-        ("P14_A08", "Monitor meter status."),
-        ("P14_A09", "Monitor SCADA communications."),
-        ("P14_A10", "Monitor alarms."),
-        ("P14_A11", "Monitor system availability."),
-        ("P14_A12", "Monitor performance ratio."),
-        ("P14_A13", "Conduct preventive maintenance."),
-        ("P14_A14", "Conduct corrective maintenance."),
-        ("P14_A15", "Conduct condition-based maintenance."),
-        ("P14_A16", "Conduct predictive maintenance."),
-        ("P14_A17", "Manage faults."),
-        ("P14_A18", "Manage spare parts."),
-        ("P14_A19", "Manage warranty claims."),
-        ("P14_A20", "Manage service contractors."),
-        ("P14_A21", "Conduct periodic testing."),
-        ("P14_A22", "Update asset records."),
-        ("P14_A23", "Update maintenance records."),
-        ("P14_A24", "Report operational KPIs."),
-        ("P14_A25", "Report carbon savings."),
-        ("P14_A26", "Report fuel savings."),
-        ("P14_A27", "Report financial savings."),
-        ("P14_A28", "Train replacement operators."),
-        ("P14_A29", "Review maintenance performance."),
-        ("P14_A30", "Optimise operating strategies."),
-    ),
-    "P15_EVALUATION": (
-        ("P15_A01", "Compare actual performance against baseline."),
-        ("P15_A02", "Compare actual cost against budget."),
-        ("P15_A03", "Compare actual schedule against plan."),
-        ("P15_A04", "Compare actual installed capacity against target."),
-        ("P15_A05", "Compare actual beneficiaries against target."),
-        ("P15_A06", "Compare actual energy generation against forecast."),
-        ("P15_A07", "Compare actual carbon reduction against target."),
-        ("P15_A08", "Evaluate regional performance."),
-        ("P15_A09", "Evaluate contractor performance."),
-        ("P15_A10", "Evaluate supplier performance."),
-        ("P15_A11", "Evaluate technology performance."),
-        ("P15_A12", "Evaluate battery performance."),
-        ("P15_A13", "Evaluate maintenance performance."),
-        ("P15_A14", "Evaluate social impact."),
-        ("P15_A15", "Evaluate jobs created."),
-        ("P15_A16", "Evaluate local-content performance."),
-        ("P15_A17", "Evaluate funding utilisation."),
-        ("P15_A18", "Identify underperforming systems."),
-        ("P15_A19", "Identify programme bottlenecks."),
-        ("P15_A20", "Conduct root-cause analysis."),
-        ("P15_A21", "Develop corrective actions."),
-        ("P15_A22", "Reallocate resources."),
-        ("P15_A23", "Revise programme templates."),
-        ("P15_A24", "Revise procurement strategy."),
-        ("P15_A25", "Revise maintenance strategy."),
-        ("P15_A26", "Update future programme phases."),
-        ("P15_A27", "Produce programme-evaluation reports."),
-    ),
-    "P16_EXPANSION": (
-        ("P16_A01", "Identify successful programme templates."),
-        ("P16_A02", "Identify high-performing contractors."),
-        ("P16_A03", "Identify approved suppliers."),
-        ("P16_A04", "Identify successful financing models."),
-        ("P16_A05", "Identify high-performing technologies."),
-        ("P16_A06", "Update standard designs."),
-        ("P16_A07", "Update standard BOQs."),
-        ("P16_A08", "Update cost assumptions."),
-        ("P16_A09", "Update risk models."),
-        ("P16_A10", "Update qualification scoring."),
-        ("P16_A11", "Clone the programme structure."),
-        ("P16_A12", "Adapt the programme to a new region."),
-        ("P16_A13", "Adapt the programme to a new sector."),
-        ("P16_A14", "Adapt the programme to a new country."),
-        ("P16_A15", "Launch the next implementation phase."),
-        ("P16_A16", "Develop a scale-up funding plan."),
-        ("P16_A17", "Develop a scale-up procurement plan."),
-        ("P16_A18", "Approve the expanded programme."),
-    ),
-}
-
-
-# Flat lookup: activity code -> (phase code, text). Built once, because a document that
-# names 40 activities would otherwise scan 453 tuples 40 times.
-ACTIVITY_INDEX: dict[str, tuple[str, str]] = {
-    acode: (phase_code, text)
-    for phase_code, items in PHASE_ACTIVITIES.items()
-    for acode, text in items
-}
-ACTIVITY_CODES: frozenset[str] = frozenset(ACTIVITY_INDEX)
-
-
-# --- the five lifecycle stages (owner, 2026-07-13) ---------------------------
-#
-# "lifecycle is initiation, planning, implementation, monitoring and closing ... each stage
-#  of the life cycle is a phase like initiation is a selectable phase, planning is a
-#  selectable phase..."
-#
-# So the operator sees the FIVE stages every project manager already knows, each selectable
-# as a whole, with the activities underneath.
-#
-# WHY THE 16 PHASES SURVIVE UNDERNEATH RATHER THAN BEING REPLACED
-# ---------------------------------------------------------------
-# Doc 3's 16 phases are not a display choice -- they are the state machine. The 14 stage
-# gates each CLOSE a named phase, TRANSITIONS is keyed by phase code, PHASE_ENTRY_REQUIRED_GATES
-# decides what a programme may enter, and the live database has a `current_phase_code` on
-# every programme row and 14 seeded gate rows per programme. Collapsing them to five would
-# mean rewriting the lifecycle spine, dropping nine gates, and migrating live programme rows
-# -- to change how a page is grouped.
-#
-# So the five stages are a GROUPING over the sixteen phases: the vocabulary the operator
-# works in, mapped onto the governance the module enforces. Selecting "Planning" selects
-# every activity in the six doc-3 phases that make up planning. Both things stay true.
-LIFECYCLE_STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("S1_INITIATION", "Initiation", (
-        "P01_CONCEPT",
-        "P02_INITIATION",
-    )),
-    ("S2_PLANNING", "Planning", (
-        "P03_NEEDS",
-        "P04_FEASIBILITY",
-        "P05_STRUCTURING",
-        "P06_TEMPLATES",
-        "P07_FUNDING",
-        "P08_PROCUREMENT",
-    )),
-    ("S3_IMPLEMENTATION", "Implementation", (
-        "P09_ENGINEERING",
-        "P10_MOBILISATION",
-        "P11_CONSTRUCTION",
-        "P12_COMMISSIONING",
-    )),
-    ("S4_MONITORING", "Monitoring", (
-        "P14_OPERATIONS",
-        "P15_EVALUATION",
-    )),
-    # Handover and closeout is the closing act; the replication decision is TAKEN at
-    # closeout ("do we do this again, and where"), which is why doc 3's Phase 16 sits here
-    # rather than trailing after Monitoring as a stage of its own.
-    ("S5_CLOSURE", "Closure", (
-        "P13_HANDOVER",
-        "P16_EXPANSION",
-    )),
-)
-
-# phase code -> the stage that owns it. Every one of the 16 must be claimed by exactly one
-# stage; the guard below is what stops a phase silently vanishing from the picker if a phase
-# is ever renamed and the mapping is not updated with it.
-STAGE_OF_PHASE: dict[str, str] = {
-    phase: stage
-    for stage, _label, phases in LIFECYCLE_STAGES
-    for phase in phases
-}
-_ALL_STAGE_PHASES = [p for _s, _l, ps in LIFECYCLE_STAGES for p in ps]
-assert len(_ALL_STAGE_PHASES) == len(set(_ALL_STAGE_PHASES)), \
-    "a phase is claimed by two lifecycle stages"
-assert set(_ALL_STAGE_PHASES) == {p[0] for p in PHASES}, (
-    "LIFECYCLE_STAGES must cover exactly the 16 phases -- a phase missing here disappears "
-    "from the activity picker, and its activities become unselectable"
-)
-
-
-# --- the DELIVERABLES each phase must produce (doc 2, "Key Outputs") ------------
-#
-# WHY THIS EXISTS, AND WHAT WAS MISSING WITHOUT IT
-# ------------------------------------------------
-# Doc 2 gives every phase TWO lists: its "Main Activities" and its "Key Outputs". The
-# activities were encoded (PHASE_ACTIVITIES, 453 of them). The Key Outputs -- the 144 NAMED
-# DOCUMENTS the programme is actually supposed to produce -- were never encoded at all.
-#
-# The consequence was worse than a missing feature. gates.py demands documents BY NAME
-# (concept_note, programme_charter, business_case, master_plan, funding_strategy, ...) and
-# refuses to advance the programme without them -- but nothing could WRITE one, because
-# generate_document hardcoded doc_type="lifecycle_document", a type no gate looks for. The
-# only thing that COULD satisfy a gate was workflows.register_document(), which stores a
-# doc_type and a TITLE STRING with no file and no content.
-#
-# So the module demanded exactly the documents it could not produce, and let a stage gate be
-# passed by TYPING ITS NAME INTO A BOX. That is the gap the owner named:
-# "the app must do the write of the documents across each phase".
-#
-# Titles are VERBATIM from doc 2's "Key Outputs" blocks (lines 60/121/189/249/320/389/438/
-# 504/561/608/679/733/781/833/876/916). The code is positional: P04_D02 is the second
-# deliverable of phase 4.
-PHASE_DELIVERABLES: dict[str, tuple[tuple[str, str], ...]] = {
-    "P01_CONCEPT": (
-        ("P01_D01", "Programme concept note"),
-        ("P01_D02", "Preliminary programme title"),
-        ("P01_D03", "Programme sponsor record"),
-        ("P01_D04", "Initial objectives"),
-        ("P01_D05", "Preliminary geographical scope"),
-        ("P01_D06", "Preliminary beneficiary estimate"),
-        ("P01_D07", "Initial implementation model"),
-        ("P01_D08", "Initial risk register"),
-        ("P01_D09", "Concept approval decision"),
-    ),
-    "P02_INITIATION": (
-        ("P02_D01", "Programme charter"),
-        ("P02_D02", "Governance structure"),
-        ("P02_D03", "Programme organisation chart"),
-        ("P02_D04", "Role and responsibility matrix"),
-        ("P02_D05", "Approval matrix"),
-        ("P02_D06", "Preliminary master schedule"),
-        ("P02_D07", "Communications plan"),
-        ("P02_D08", "Document-control plan"),
-        ("P02_D09", "Programme risk register"),
-        ("P02_D10", "Programme initiation report"),
-    ),
-    "P03_NEEDS": (
-        ("P03_D01", "Beneficiary register"),
-        ("P03_D02", "Site register"),
-        ("P03_D03", "Energy-demand baseline"),
-        ("P03_D04", "Existing infrastructure assessment"),
-        ("P03_D05", "Critical-load schedule"),
-        ("P03_D06", "Site qualification report"),
-        ("P03_D07", "Priority list"),
-        ("P03_D08", "Regional needs assessment"),
-        ("P03_D09", "Programme baseline report"),
-    ),
-    "P04_FEASIBILITY": (
-        ("P04_D01", "Technical feasibility report"),
-        ("P04_D02", "Financial feasibility report"),
-        ("P04_D03", "Economic assessment"),
-        ("P04_D04", "Environmental and social screening"),
-        ("P04_D05", "Preliminary programme design"),
-        ("P04_D06", "Preliminary CAPEX and OPEX"),
-        ("P04_D07", "Funding-options report"),
-        ("P04_D08", "Programme business case"),
-        ("P04_D09", "Recommended implementation model"),
-        ("P04_D10", "Feasibility approval report"),
-    ),
-    "P05_STRUCTURING": (
-        ("P05_D01", "Programme master plan"),
-        ("P05_D02", "Programme breakdown structure"),
-        ("P05_D03", "Phasing strategy"),
-        ("P05_D04", "Regional rollout plan"),
-        ("P05_D05", "Programme master schedule"),
-        ("P05_D06", "Programme cost baseline"),
-        ("P05_D07", "Programme KPI framework"),
-        ("P05_D08", "Programme monitoring framework"),
-        ("P05_D09", "Programme implementation manual"),
-        ("P05_D10", "Change-control plan"),
-    ),
-    "P06_TEMPLATES": (
-        ("P06_D01", "Programme template library"),
-        ("P06_D02", "Standard design catalogue"),
-        ("P06_D03", "Approved equipment catalogue"),
-        ("P06_D04", "Standard BOQ library"),
-        ("P06_D05", "Standard drawing library"),
-        ("P06_D06", "Standard testing manual"),
-        ("P06_D07", "Standard commissioning manual"),
-        ("P06_D08", "Template version register"),
-    ),
-    "P07_FUNDING": (
-        ("P07_D01", "Funding strategy"),
-        ("P07_D02", "Financing structure"),
-        ("P07_D03", "Funding commitment register"),
-        ("P07_D04", "Disbursement plan"),
-        ("P07_D05", "Financial model"),
-        ("P07_D06", "Cash-flow forecast"),
-        ("P07_D07", "Payment-certification workflow"),
-        ("P07_D08", "Financial risk register"),
-        ("P07_D09", "Funding approval"),
-    ),
-    "P08_PROCUREMENT": (
-        ("P08_D01", "Consolidated programme BOQ"),
-        ("P08_D02", "Procurement plan"),
-        ("P08_D03", "EPC packaging plan"),
-        ("P08_D04", "Tender documents"),
-        ("P08_D05", "Bid evaluation report"),
-        ("P08_D06", "Contract award recommendation"),
-        ("P08_D07", "Signed contracts"),
-        ("P08_D08", "Procurement baseline"),
-    ),
-    "P09_ENGINEERING": (
-        ("P09_D01", "Generated SolarPro project records"),
-        ("P09_D02", "Approved detailed designs"),
-        ("P09_D03", "Approved calculations"),
-        ("P09_D04", "Approved drawings"),
-        ("P09_D05", "Approved project BOQs"),
-        ("P09_D06", "Construction schedules"),
-        ("P09_D07", "Site-specific risk assessments"),
-        ("P09_D08", "Issued-for-construction documents"),
-    ),
-    "P10_MOBILISATION": (
-        ("P10_D01", "Mobilisation plan"),
-        ("P10_D02", "Approved contractor schedule"),
-        ("P10_D03", "Site handover certificates"),
-        ("P10_D04", "Approved method statements"),
-        ("P10_D05", "Quality plan"),
-        ("P10_D06", "Safety plan"),
-        ("P10_D07", "Logistics plan"),
-        ("P10_D08", "Warehouse setup"),
-        ("P10_D09", "Construction-readiness report"),
-    ),
-    "P11_CONSTRUCTION": (
-        ("P11_D01", "Installed systems"),
-        ("P11_D02", "Daily reports"),
-        ("P11_D03", "Progress reports"),
-        ("P11_D04", "Quality records"),
-        ("P11_D05", "Safety records"),
-        ("P11_D06", "Material records"),
-        ("P11_D07", "Updated programme schedule"),
-        ("P11_D08", "Updated cost report"),
-        ("P11_D09", "Variation records"),
-        ("P11_D10", "Claims records"),
-        ("P11_D11", "Construction-completion notice"),
-    ),
-    "P12_COMMISSIONING": (
-        ("P12_D01", "Inspection records"),
-        ("P12_D02", "Test results"),
-        ("P12_D03", "Non-conformance closure"),
-        ("P12_D04", "Commissioning certificates"),
-        ("P12_D05", "Performance-test report"),
-        ("P12_D06", "Training records"),
-        ("P12_D07", "As-built drawings"),
-        ("P12_D08", "Updated asset register"),
-        ("P12_D09", "Operational system status"),
-    ),
-    "P13_HANDOVER": (
-        ("P13_D01", "Handover dossier"),
-        ("P13_D02", "As-built documentation"),
-        ("P13_D03", "Final asset register"),
-        ("P13_D04", "Warranty register"),
-        ("P13_D05", "Spare-parts register"),
-        ("P13_D06", "Final account records"),
-        ("P13_D07", "Closeout report"),
-        ("P13_D08", "Lessons-learned register"),
-        ("P13_D09", "Taking-over certificate"),
-    ),
-    "P14_OPERATIONS": (
-        ("P14_D01", "Operations dashboard"),
-        ("P14_D02", "Maintenance schedule"),
-        ("P14_D03", "Fault register"),
-        ("P14_D04", "Warranty register"),
-        ("P14_D05", "Performance reports"),
-        ("P14_D06", "Energy-generation reports"),
-        ("P14_D07", "Carbon reports"),
-        ("P14_D08", "Asset-health reports"),
-        ("P14_D09", "Maintenance cost reports"),
-    ),
-    "P15_EVALUATION": (
-        ("P15_D01", "Programme performance report"),
-        ("P15_D02", "Benefits-realisation report"),
-        ("P15_D03", "Contractor scorecards"),
-        ("P15_D04", "Supplier scorecards"),
-        ("P15_D05", "Regional scorecards"),
-        ("P15_D06", "Technology-performance report"),
-        ("P15_D07", "Lessons-learned report"),
-        ("P15_D08", "Corrective-action plan"),
-        ("P15_D09", "Programme-optimisation plan"),
-    ),
-    "P16_EXPANSION": (
-        ("P16_D01", "Expansion business case"),
-        ("P16_D02", "Updated programme templates"),
-        ("P16_D03", "Scale-up implementation plan"),
-        ("P16_D04", "Revised funding plan"),
-        ("P16_D05", "Revised procurement plan"),
-        ("P16_D06", "New programme phase"),
-        ("P16_D07", "Replication package"),
-    ),
-}
-
-# Guarded so a careless edit cannot silently drop one: doc 2 names this many, and the
-# count is part of the contract with the owner's specification.
-assert sum(len(v) for v in PHASE_DELIVERABLES.values()) == 144, (
-    "PHASE_DELIVERABLES must carry all 144 of doc 2's Key Outputs")
-
-
-# --- which deliverable SATISFIES which stage gate ---------------------------------
-#
-# THIS MAPPING IS THE FIX. gates.GATE_PREDICATES requires a document of an exact `doc_type`
-# before a gate may be signed. Generated documents carried doc_type="lifecycle_document",
-# which matches NONE of them -- so a document the app wrote could never open a gate, and the
-# only thing that could was a typed-in title with no content behind it.
-#
-# With this map, generating the deliverable STAMPS IT WITH THE GATE'S OWN doc_type, so the
-# document the app actually wrote is the document the gate actually accepts. Evidence
-# replaces assertion.
-#
-# Only these nine deliverables carry a gate type -- the ones doc 2 and gates.py already
-# agreed on. The other 135 are real deliverables that no gate happens to demand; they are
-# stored under their own code (see deliverable_doc_type below).
-DELIVERABLE_GATE_DOC_TYPE: dict[str, str] = {
-    "P01_D01": "concept_note",           # G01  Programme concept note
-    "P02_D01": "programme_charter",      # G02  Programme charter
-    "P03_D01": "beneficiary_register",   # G03  Beneficiary register
-    "P04_D08": "business_case",          # G04  Programme business case
-    "P05_D01": "master_plan",            # G05  Programme master plan
-    "P06_D08": "template_version_pack",  # G06  Template version register
-    "P07_D01": "funding_strategy",       # G07  Funding strategy
-    "P08_D07": "signed_contract",        # G08  Signed contracts
-    "P09_D08": "ifc_package",            # G09  Issued-for-construction documents
-}
-
-# --- which ENGINE writes which deliverable ----------------------------------------
-#
-# The owner's instruction was "using existing design options", and it is the right call:
-# the Generation Station (capital-investment) engine ALREADY builds these reports from a
-# real design -- `_build_report_markdown` in new_capital_investment_routes.py has report
-# keys for exactly the documents the owner asked for. Nothing here needs a new engine; it
-# needs an ADAPTER that feeds the programme's own facts (its reference design, its scaled
-# BOQ, its funding requirement, its site register) into the engine that already exists.
-#
-# deliverable code -> the CI report key that writes it.
-#
-# Everything NOT in this map is written by the activity path (the operator ticks the
-# activities the document must answer, and the app drafts it, asking a question wherever it
-# cannot answer from the programme's own record). That path is honest about what it does not
-# know; an engine-written document must never be.
-DELIVERABLE_ENGINE: dict[str, str] = {
-    # the owner's four, named in their own words:
-    #   "create program technical and financial proposal, implementation plan,
-    #    direct the execution of the program, monitor and close the program"
-    "P04_D01": "technical",            # Technical feasibility report  -> the TECHNICAL PROPOSAL
-    "P04_D02": "financial",            # Financial feasibility report  -> the FINANCIAL PROPOSAL
-    "P04_D08": "investment_memo",      # Programme business case       (also opens Gate 4)
-    "P05_D01": "implementation_plan",  # Programme master plan         -> the IMPLEMENTATION PLAN
-    "P05_D09": "implementation_plan",  # Programme implementation manual
-    "P15_D01": "monitoring",           # Programme performance report  -> MONITOR
-    # supporting reports the same engine already produces
-    "P04_D03": "economic_impact",      # Economic assessment
-    "P04_D06": "financial",            # Preliminary CAPEX and OPEX
-    "P07_D05": "bankability",          # Financial model
-    "P08_D01": "boq",                  # Consolidated programme BOQ
-    "P14_D05": "monitoring",           # Performance reports
-}
-
-# code -> (phase_code, title). One flat index so a deliverable can be resolved without
-# knowing its phase -- the UI, the generator and the gate check all need this.
-DELIVERABLE_INDEX: dict[str, tuple[str, str]] = {
-    code: (phase, title)
-    for phase, items in PHASE_DELIVERABLES.items()
-    for code, title in items
-}
-
-DELIVERABLE_CODES: frozenset[str] = frozenset(DELIVERABLE_INDEX)
-
-
-def deliverable_doc_type(deliverable_code: str) -> str:
-    """The `doc_type` a generated deliverable is stored under.
-
-    Input:  a deliverable code, e.g. "P01_D01".
-    Output: the gate's doc_type when this deliverable opens a gate ("concept_note"), and
-            otherwise the deliverable's own code ("P04_D03").
-
-    WHY THE CODE ITSELF IS THE FALLBACK, rather than a new column:
-    `enterprise_documents.doc_type` is already the column every gate check reads. Reusing it
-    means a generated concept note is discoverable by exactly the query gates.py ALREADY
-    runs, with no migration against a live database and no second source of truth about what
-    a document IS. The nine gate types stay reserved words; every other deliverable is
-    identified by its own unique code, which cannot collide with them.
-    """
-    return DELIVERABLE_GATE_DOC_TYPE.get(deliverable_code, deliverable_code)
-
-
-# Every gate doc_type that gates.py demands MUST be produced by some deliverable, or the
-# lifecycle contains a gate nothing can ever open -- which is the bug this file exists to
-# fix, and it would be embarrassing to reintroduce it here. Asserted at import.
-_GATE_DOC_TYPES_REQUIRED = {
-    "concept_note", "programme_charter", "beneficiary_register", "business_case",
-    "master_plan", "template_version_pack", "funding_strategy", "signed_contract",
-    "ifc_package",
-}
-assert _GATE_DOC_TYPES_REQUIRED <= set(DELIVERABLE_GATE_DOC_TYPE.values()), (
-    "a stage gate demands a document that no deliverable can produce: "
-    f"{_GATE_DOC_TYPES_REQUIRED - set(DELIVERABLE_GATE_DOC_TYPE.values())}"
-)
-assert set(DELIVERABLE_GATE_DOC_TYPE) <= DELIVERABLE_CODES, "unknown deliverable code in the gate map"
-assert set(DELIVERABLE_ENGINE) <= DELIVERABLE_CODES, "unknown deliverable code in the engine map"

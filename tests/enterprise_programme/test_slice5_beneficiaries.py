@@ -21,7 +21,7 @@ import sqlite3
 import pytest
 
 from app.enterprise_programme import (
-    beneficiaries, gates, imports, tenancy, workflows,
+    beneficiaries, imports, tenancy, workflows,
 )
 from app.enterprise_programme.beneficiaries import BeneficiaryError
 from app.enterprise_programme.constants import BENEFICIARY_FIELD_SPEC, BENEFICIARY_FIELDS
@@ -193,27 +193,21 @@ def test_an_illegal_transition_is_refused(db):
         )
 
 
-# --- gate 3 -----------------------------------------------------------------
-
-
-def test_gate_3_demands_an_approved_beneficiary_not_just_a_document(db):
-    """Importing 4000 rows is not a decision to serve them. Gate 3 wants the decision."""
-    c, org, _other, pid = db
-    # Registering a programme document is the owner's act, not the field officer's.
-    workflows.register_document(c, org, OWNER, pid, doc_type="beneficiary_register",
-                                title="Register", audit=_audit(c))
-
-    with pytest.raises(EnterpriseGateError, match="empty of APPROVED sites"):
-        gates.evaluate_gate(c, org, pid, "G03")
-
-    bid = _site(c, org, pid)
-    with pytest.raises(EnterpriseGateError, match="empty of APPROVED sites"):
-        gates.evaluate_gate(c, org, pid, "G03")   # registered, but nobody admitted it
-
-    beneficiaries.transition_beneficiary(
-        c, org, MANAGER, bid, "Qualification Pending", audit=_audit(c)
-    )
-    gates.evaluate_gate(c, org, pid, "G03")       # now the gate has something real
+# THE OLD GATE 3 TEST WAS DELETED HERE (Rev 4, 2026-07-16).
+#
+# `test_gate_3_demands_an_approved_beneficiary_not_just_a_document` asserted that the old
+# G03 (Needs Assessment Approval) reached into the beneficiary register and refused to open
+# while it held no APPROVED site -- "importing 4000 rows is not a decision to serve them".
+#
+# Revision 4 has no such gate and no such predicate. Its five gates each demand exactly one
+# thing -- their phase's own approval document -- plus the named authority's signature
+# (gates.GATE_PREDICATES, and the comment above it says so explicitly: the old per-gate
+# evidence predicates "are GONE rather than remapped"). There is no Rev 4 gate to repoint
+# this test at, so the property it guarded no longer exists rather than having moved.
+#
+# The register's own rules are untouched and still tested above: a site cannot skip
+# Qualification Pending, an illegal transition is refused, and only the qualifying role may
+# make one. What is gone is a GATE consulting the register.
 
 
 # --- the field spec is the field spec ---------------------------------------

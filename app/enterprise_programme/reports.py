@@ -25,7 +25,7 @@ It is the WRONG way to produce a technical feasibility report. A technical repor
 from ticked activities would be a document whose engineering content came from prose, while
 the actual engineering -- the kWp, the inverter schedule, the BOQ, the cash flow -- sat in a
 table nobody read. Eleven of doc 2's Key Outputs are engineering documents
-(constants.DELIVERABLE_ENGINE), and for those the design IS the content.
+(rev4_phases.DELIVERABLE_ENGINE), and for those the design IS the content.
 
 THE PROGRAMME IS NOT THE PROJECT (and this is the subtle part)
 --------------------------------------------------------------
@@ -55,7 +55,7 @@ the PROGRAMME. There is no IDOR: no path lets a caller name a project id.
 from __future__ import annotations
 
 from . import rollout
-from .constants import DELIVERABLE_ENGINE, DELIVERABLE_INDEX
+from .rev4_phases import DELIVERABLE_ENGINE, DELIVERABLE_INDEX
 from .gates import EnterpriseGateError
 
 
@@ -209,10 +209,16 @@ def build_engine_document(c, tenant_id: str, programme_id: int,
     design = rollout.current_design(c, tenant_id, programme_id)
     if design is None:
         # FAIL CLOSED, WITH AN INSTRUCTION. The alternative -- quietly falling back to the
-        # activity path -- would hand the operator a "Technical feasibility report" written
-        # from ticked prose, containing no engineering, and (for the four gate deliverables
-        # in this set) open a stage gate on it. A document that looks right and is hollow is
-        # exactly what this module exists to abolish.
+        # deliverable writer -- would hand the operator a "Programme Feasibility Study"
+        # written from topic prose, containing no engineering at all. A document that looks
+        # right and is hollow is exactly what this module exists to abolish.
+        #
+        # Under Revision 4 no engine-written deliverable also opens a stage gate (the engine
+        # set and rev4_phases.DELIVERABLE_GATE_DOC_TYPE are disjoint), so a hollow one could
+        # no longer ALSO open a gate the way it could under the old 144 -- but that is a
+        # property of the current deliverable lists, not a reason to stop failing closed. If
+        # a future edit makes an approval document engine-written, this refusal is what stops
+        # the two failures from compounding.
         raise ReportError(
             "REPORT",
             "this deliverable is written by the design engine from the programme's "

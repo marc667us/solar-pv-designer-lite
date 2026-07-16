@@ -125,9 +125,11 @@ def live(tmp_path_factory):
         # and the "View" link the tutorial navigates to in order to reach the report page --
         # only exists once the programme HAS a document. Verified against a programme that
         # has never generated one, the documents tutorial proves nothing about the real page.
+        # R4P1_D01 is Revision 4's "Programme Concept Note" -- Initiation's first deliverable
+        # button (rev4_phases.PHASE_DELIVERABLES). `deliverable_code` is now REQUIRED and the
+        # activity codes are gone: a report IS one deliverable, so there is nothing to tick.
         documents.generate_document(
-            c, tid, uid, pid, activity_codes=["P01_A01"],
-            deliverable_code="P01_D01", use_ai=False,
+            c, tid, uid, pid, deliverable_code="R4P1_D01", use_ai=False,
         )
 
     with wa.app.test_client() as client:

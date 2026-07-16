@@ -95,10 +95,14 @@ def test_a_rolled_back_action_leaves_no_audit_row_and_no_gap(db):
                                sponsor_user_id=1, audit=_audit(c))
     before = _chain(c)
 
-    # A transition that the gates refuse: no concept note, no approved Gate 1 (C01).
+    # A transition that the gates refuse: no approval request, no approved Initiation gate
+    # (C01). Planning is the phase AFTER the birth phase, so this is the legal next hop --
+    # refused on its gate, which is the refusal this test is about. (Naming a phase Rev 4
+    # does not have would be refused too, but as an unknown phase, and would leave the C01
+    # path untested.)
     pid = c.execute("SELECT id FROM enterprise_programme_registry").fetchone()[0]
     with pytest.raises(EnterpriseGateError):
-        workflows.transition_programme_phase(c, org, pid, "P02_INITIATION", user_id=1,
+        workflows.transition_programme_phase(c, org, pid, "R4_PLANNING", user_id=1,
                                              audit=_audit(c))
 
     assert _chain(c) == before, "a refused action must add nothing to the audit trail"
@@ -115,10 +119,13 @@ def test_the_chain_still_links_across_several_audited_actions(db):
     a = _audit(c)
     pid = workflows.create_programme(c, org, 1, code="P1", name="One",
                                      sponsor_user_id=1, audit=a)
-    workflows.register_document(c, org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=a)
-    workflows.approve_gate(c, org, pid, "G01", user_id=1, audit=a)
-    workflows.transition_programme_phase(c, org, pid, "P02_INITIATION", user_id=1, audit=a)
+    # Rev 4's Initiation gate reads ONE document -- the Programme Approval Request, stored
+    # under `programme_approval_request` (rev4_phases.DELIVERABLE_GATE_DOC_TYPE). The old
+    # `concept_note` type opens nothing now.
+    workflows.register_document(c, org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request", audit=a)
+    workflows.approve_gate(c, org, pid, "R4G1_INITIATION", user_id=1, audit=a)
+    workflows.transition_programme_phase(c, org, pid, "R4_PLANNING", user_id=1, audit=a)
 
     rows = _chain(c)
     assert [r[1] for r in rows] == [

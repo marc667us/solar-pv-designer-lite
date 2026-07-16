@@ -144,20 +144,21 @@ def test_create_organisation_then_programme_seeds_the_whole_lifecycle(ent):
             "SELECT id, tenant_id FROM enterprise_programme_registry "
             " WHERE code='GH-SCHOOLS-01'"
         ).fetchone()
-        # Born at Concept, with the whole road already laid.
+        # Born at Initiation, with the whole road already laid. Revision 4 is six phases and
+        # five gates (rev4_phases.PHASES / GATES); the old sixteen-and-fourteen are gone.
         assert c.execute(
             "SELECT status FROM enterprise_programme_registry WHERE id=?", (pid,)
-        ).fetchone()[0] == "Concept"
+        ).fetchone()[0] == "Initiation"
         assert c.execute(
             "SELECT COUNT(*) FROM enterprise_programme_phase_states WHERE programme_id=?",
-            (pid,)).fetchone()[0] == 16
+            (pid,)).fetchone()[0] == 6
         assert c.execute(
             "SELECT COUNT(*) FROM enterprise_stage_gates WHERE programme_id=?",
-            (pid,)).fetchone()[0] == 14
+            (pid,)).fetchone()[0] == 5
 
     r = client.get(f"/enterprise/programmes/{pid}")
     assert r.status_code == 200
-    assert b"Programme Concept Approval" in r.data      # gate board rendered
+    assert b"Initiation to Planning Gate" in r.data     # gate board rendered
     assert b"Management Controls" in r.data             # the 15 controls are shown
 
 
@@ -233,23 +234,34 @@ def test_posting_the_approve_url_directly_is_not_a_way_round_the_gate(ent):
         ).fetchone()[0]
 
     _login(client, ids["mallory"])
-    r = client.post(f"/enterprise/programmes/{pid}/gates/G01/approve",
+    r = client.post(f"/enterprise/programmes/{pid}/gates/R4G1_INITIATION/approve",
                     data={"_csrf": "testtoken"})
     assert r.status_code in (403, 404)
 
     with wa.get_db() as c:
         assert c.execute(
             "SELECT status FROM enterprise_stage_gates "
-            " WHERE programme_id=? AND gate_code='G01'", (pid,)
+            " WHERE programme_id=? AND gate_code='R4G1_INITIATION'", (pid,)
         ).fetchone()[0] == "Pending"
 
 
 def test_gate_1_needs_its_document_then_the_sponsor_signs_and_the_phase_moves(ent):
     """The whole slice, end to end, through HTTP: document -> gate -> transition.
 
-    Alice is the named sponsor AND the enterprise owner, so she can do all three. Gate 1
-    is refused until the concept note exists, and the phase will not move until Gate 1 is
-    signed (control C01).
+    Alice is the named sponsor AND the enterprise owner, so she can do all three. The
+    Initiation gate is refused until its evidence document exists, and the phase will not
+    move until that gate is signed (control C01).
+
+    REVISION 4 VOCABULARY. The gate is R4G1_INITIATION, its evidence is the Programme
+    Approval Request (doc_type `programme_approval_request` --
+    rev4_phases.DELIVERABLE_GATE_DOC_TYPE), and the next phase is R4_PLANNING at status
+    "Planning". The old G01 / `concept_note` / P02_INITIATION / "Under Initiation" are gone.
+
+    KNOWN TO FAIL -- IT IS PINNING A REAL BUG, NOT A STALE EXPECTATION.
+    enterprise_programme_routes.REQUIRED_DOCUMENT_TYPES was never repointed at Revision 4:
+    it still offers the nine OLD doc types and rejects (400) every one of the five a Rev 4
+    gate actually reads. So the document POST below cannot register the evidence, the gate
+    stays Pending, and the phase never moves. See the note above this test.
     """
     client, wa, ids = ent
     _flag(wa, True)
@@ -259,32 +271,39 @@ def test_gate_1_needs_its_document_then_the_sponsor_signs_and_the_phase_moves(en
             "SELECT id FROM enterprise_programme_registry WHERE code='GH-SCHOOLS-01'"
         ).fetchone()[0]
 
-    # No concept note yet -> the gate refuses, and the phase cannot advance.
-    client.post(f"/enterprise/programmes/{pid}/gates/G01/approve", data={"_csrf": "testtoken"})
+    # No approval request yet -> the gate refuses, and the phase cannot advance.
+    client.post(f"/enterprise/programmes/{pid}/gates/R4G1_INITIATION/approve",
+                data={"_csrf": "testtoken"})
     client.post(f"/enterprise/programmes/{pid}/transition",
-                data={"_csrf": "testtoken", "target": "P02_INITIATION"})
+                data={"_csrf": "testtoken", "target": "R4_PLANNING"})
     with wa.get_db() as c:
         assert c.execute(
             "SELECT current_phase_code FROM enterprise_programme_registry WHERE id=?", (pid,)
-        ).fetchone()[0] == "P01_CONCEPT"
+        ).fetchone()[0] == "R4_INITIATION"
 
-    # Register the concept note, sign Gate 1, then advance.
-    client.post(f"/enterprise/programmes/{pid}/documents", data={
-        "_csrf": "testtoken", "doc_type": "concept_note", "title": "Concept Note v1"})
-    client.post(f"/enterprise/programmes/{pid}/gates/G01/approve", data={"_csrf": "testtoken"})
+    # Register the approval request, sign the Initiation gate, then advance.
+    r = client.post(f"/enterprise/programmes/{pid}/documents", data={
+        "_csrf": "testtoken", "doc_type": "programme_approval_request",
+        "title": "Programme Approval Request v1"})
+    assert r.status_code != 400, (
+        "the document form refuses the very doc_type Rev 4's Initiation gate reads -- "
+        "REQUIRED_DOCUMENT_TYPES still lists the old 16-phase document set"
+    )
+    client.post(f"/enterprise/programmes/{pid}/gates/R4G1_INITIATION/approve",
+                data={"_csrf": "testtoken"})
     with wa.get_db() as c:
         assert c.execute(
             "SELECT status FROM enterprise_stage_gates "
-            " WHERE programme_id=? AND gate_code='G01'", (pid,)
+            " WHERE programme_id=? AND gate_code='R4G1_INITIATION'", (pid,)
         ).fetchone()[0] == "Approved"
 
     client.post(f"/enterprise/programmes/{pid}/transition",
-                data={"_csrf": "testtoken", "target": "P02_INITIATION", "note": "charter next"})
+                data={"_csrf": "testtoken", "target": "R4_PLANNING", "note": "planning next"})
     with wa.get_db() as c:
         phase, status = c.execute(
             "SELECT current_phase_code, status FROM enterprise_programme_registry WHERE id=?",
             (pid,)).fetchone()
-        assert (phase, status) == ("P02_INITIATION", "Under Initiation")
+        assert (phase, status) == ("R4_PLANNING", "Planning")
 
 
 def test_an_unknown_document_type_is_rejected(ent):

@@ -48,13 +48,16 @@
 
              Owner, 2026-07-14: "phases must be buttons and click must open to activities
              with check boxes ... the controls are not needed like that, user must be able to
-             work at any phase."
+             work at any phase." The checkboxes were then withdrawn by the owner themselves
+             (2026-07-15: "each phase will have types [of] report as BUTTONS"), so a phase now
+             opens to its REPORT buttons -- but the second half of that instruction, "must be
+             able to work at any phase", is what this block is for and it still stands.
 
              So none of these is disabled. The programme's CURRENT phase is where its stage
              gates and its state machine are -- it is not a permission to think. An operator
-             may open Feasibility while the programme still sits in Concept, tick its
-             activities and have the app write that document; nothing about doing the work
-             early is illegitimate, and refusing to let them was the block. #}
+             may open Planning while the programme still sits in Initiation and have the app
+             write one of its reports; nothing about doing the work early is illegitimate, and
+             refusing to let them was the block. #}
           <div class="d-flex flex-wrap gap-2 mb-4">
             {% for p in phases %}
             <a class="btn btn-sm
@@ -63,7 +66,7 @@
                       {% else %}btn-outline-secondary{% endif %}"
                href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme.id,
                                 phase=p.code) }}#phase-{{ p.code }}"
-               title="Open this phase's activities">
+               title="Open this phase's reports">
               <span class="badge bg-dark bg-opacity-25 me-1">{{ p.sequence_no }}</span>
               {{ p.name }}
               {% if p.gate %}
@@ -74,8 +77,8 @@
           </div>
           <div class="text-muted small mb-4">
             <i class="bi bi-info-circle me-1"></i>
-            Click any phase to open its activities, tick what applies, and the app writes the
-            document — you can then preview, edit and save it. You may work in any phase; the
+            Click any phase to open its reports, then click the report you want and the app
+            writes it — you can then preview, edit and save it. You may work in any phase; the
             highlighted one is only where the programme's stage gates currently sit.
           </div>
 

@@ -41,7 +41,8 @@ from werkzeug.utils import secure_filename
 from app.enterprise_programme import (
     applications,
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, reports, rollout, site_qualification, sponsors, tenancy, txn, workflows,
+    rbac, reports, rev4_phases, rollout, site_qualification, sponsors, tenancy, txn,
+    workflows,
 )
 from app.enterprise_programme.documents import DocumentError
 from app.enterprise_programme.reports import ReportError
@@ -215,7 +216,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
             " WHERE tenant_id=? ORDER BY id DESC",
             (tenant_id,),
         ).fetchall()
-        phase_names = {p[0]: p[2] for p in constants.PHASES}
+        phase_names = {p[0]: p[2] for p in rev4_phases.PHASES}
         return [
             {
                 "id": r[0], "code": r[1], "name": r[2],
@@ -394,11 +395,11 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
             " WHERE tenant_id=? AND programme_id=? ORDER BY sequence_no",
             (tenant_id, programme_id),
         ).fetchall()
-        names = {p[0]: p[2] for p in constants.PHASES}
+        names = {p[0]: p[2] for p in rev4_phases.PHASES}
         return [
             {"code": r[0], "sequence_no": r[1], "status": r[2],
              "name": names.get(r[0], r[0]),
-             "gate": constants.GATE_CLOSING_PHASE.get(r[0])}
+             "gate": rev4_phases.GATE_CLOSING_PHASE.get(r[0])}
             for r in rows
         ]
 
@@ -424,10 +425,10 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         held_roles = rbac.roles_for_user(c, tenant_id, uid, programme_id=programme_id)
         holders = _named_post_holders(c, tenant_id, programme_id)
 
-        labels = {g[0]: g[2] for g in constants.GATES}
+        labels = {g[0]: g[2] for g in rev4_phases.GATES}
         out = []
         for code, phase_code, status, role, decided_by in rows:
-            deferred = code in constants.GATES_DEFERRED_BEYOND_RELEASE_1
+            deferred = code in rev4_phases.GATES_DEFERRED_BEYOND_RELEASE_1
             approved = status == "Approved"
             can = (not deferred and not approved
                    and _may_sign(uid, role, held_roles, holders))
@@ -450,7 +451,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         Mirrors workflows._require_named_post_holder, which is still the enforcement point.
         This is the render-time copy, read in one query instead of one per gate.
         """
-        columns = list(constants.GATE_AUTHORITY_HOLDER_COLUMN.items())
+        columns = list(rev4_phases.GATE_AUTHORITY_HOLDER_COLUMN.items())
         row = c.execute(
             f"SELECT {', '.join(col for _, col in columns)} "
             "  FROM enterprise_programme_registry WHERE tenant_id=? AND id=?",
@@ -1350,41 +1351,34 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
             # choice -- and, via the picker's auto-tick, their activities -- survive the
             # error instead of being silently discarded along with it.
             chosen = (request.args.get("deliverable") or "").strip()
-            if chosen not in constants.DELIVERABLE_INDEX:
+            if chosen not in rev4_phases.DELIVERABLE_INDEX:
                 chosen = ""
 
+            # THE STAGE GROUPING IS GONE, along with everything that fed it. The old model's
+            # 16 phases were grouped into lifecycle STAGES because 16 cards in one column is
+            # not a page anyone can scan. Revision 4 has six, so they are simply listed --
+            # and `stages`, `stage_counts`, `current_stage`, `phase_activities`,
+            # `max_activities`, `phase_names` and `phase_numbers` were already dead context
+            # here, unread by the template since the report-button rewrite replaced the
+            # activity accordion. Passing them on would have kept the old map alive in the
+            # one place nobody would think to look for it.
             return render_template(
                 "enterprise_programme/lifecycle_documents.html",
                 programme=prog,
                 programme_id=programme_id,
-                stages=constants.LIFECYCLE_STAGES,
-                phases_ordered=constants.PHASES,
-                phase_deliverables=constants.PHASE_DELIVERABLES,
+                phases_ordered=rev4_phases.PHASES,
+                phase_deliverables=rev4_phases.PHASE_DELIVERABLES,
                 deliverable_gate=gates.DELIVERABLE_GATE,
-                deliverable_engine=constants.DELIVERABLE_ENGINE,
+                deliverable_engine=rev4_phases.DELIVERABLE_ENGINE,
                 gate_of_doc_type=gates.GATE_OF_DOC_TYPE,
                 doc_type_labels=gates.DOC_TYPE_LABELS,
-                chosen_deliverable=chosen,
-                max_activities=documents.MAX_ACTIVITIES_PER_DOCUMENT,
-                phase_names={code: name for code, _no, name in constants.PHASES},
-                phase_numbers={code: no for code, no, _name in constants.PHASES},
-                phase_activities=constants.PHASE_ACTIVITIES,
-                # Counted here, not in Jinja: summing a nested length across a stage's
-                # phases in a template needs a filter Jinja does not have, and faking it
-                # with `map('extract', ...)` silently yields nothing.
-                stage_counts={
-                    scode: sum(len(constants.PHASE_ACTIVITIES[p]) for p in sphases)
-                    for scode, _sname, sphases in constants.LIFECYCLE_STAGES
-                },
                 current_phase=prog.get("phase_code"),
-                # OWNER, 2026-07-14: "phases must be buttons and click must open to
-                # activities with checkboxes". The programme page links straight to a phase;
-                # this opens the stage that holds it and scrolls to it, so the operator lands
-                # on the activities rather than on a page they must then go hunting through.
-                # It is NOT the programme's current phase: the operator may work in ANY
-                # phase, which is the whole point of "must be able to work at any phase".
+                # The programme page links straight to a phase; this highlights it and scrolls
+                # to it, so the operator lands on that phase's reports rather than on a page
+                # they must then go hunting through. It is NOT the programme's current phase:
+                # the operator may work in ANY phase, which is the whole point of "must be
+                # able to work at any phase" (owner, 2026-07-14).
                 open_phase=request.args.get("phase", ""),
-                current_stage=constants.STAGE_OF_PHASE.get(prog.get("phase_code")),
                 documents=docs,
                 sources=[d for d in docs if d["doc_kind"] == "uploaded"],
                 supported=sorted(documents.SUPPORTED_UPLOADS),
@@ -1462,38 +1456,33 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                methods=["POST"])
     @login_required
     def enterprise_lifecycle_document_generate(programme_id: int):
-        """Generate a document from the ticked activities. THE feature."""
+        """Write the report for the deliverable the operator clicked. THE feature."""
         _require_module()
         csrf_protect()
         uid = _uid()
 
-        # WHICH of doc 2's 144 Key Outputs this document IS. Empty = a free-form document,
-        # which is still legitimate: not everything a programme writes is one of the 144.
-        # An unknown code is NOT quietly downgraded to free-form -- generate_document
-        # refuses it, because a document that looks right, is named right and opens no gate
-        # is the exact failure this feature exists to end, wearing a better disguise.
-        deliverable_code = (request.form.get("deliverable_code") or "").strip() or None
+        # WHICH of Revision 4's 112 deliverables this report IS. Every report button posts one,
+        # so there is no free-form path left to fall back to -- the owner's model is a phase of
+        # deliverable buttons, and a report that is not one of them is not a report this page
+        # can write. An unknown code is NOT quietly downgraded: generate_document refuses it,
+        # because a document that looks right, is named right and opens no gate is the exact
+        # failure this feature exists to end, wearing a better disguise.
+        deliverable_code = (request.form.get("deliverable_code") or "").strip()
 
-        # Every failure path returns the operator to the page WITH THEIR DELIVERABLE STILL
-        # CHOSEN. Redirecting to a bare page threw away the choice along with the error, and
-        # the picker's auto-tick then restores the activities from it -- so the operator
-        # fixes what was wrong instead of rebuilding what was right.
+        # Every failure path returns the operator to the page WITH THEIR REPORT STILL CHOSEN.
+        # Redirecting to a bare page threw away the choice along with the error, so the
+        # operator fixes what was wrong instead of rebuilding what was right.
         back = redirect(url_for("enterprise_lifecycle_documents",
                                 programme_id=programme_id,
                                 deliverable=deliverable_code or None))
 
-        picked = request.form.getlist("activities")
-        # OWNER 2026-07-15: reports are BUTTONS now -- "each phase will have types [of] report
-        # to be produced as buttons and once clicked the agent writes the report". There are no
-        # activity checkboxes any more. When a report (deliverable) is chosen and nothing was
-        # ticked, the agent covers that report's WHOLE phase automatically -- every phase holds
-        # at most ~38 activities, comfortably under generate_document's per-document ceiling.
-        if deliverable_code and not picked and not reports.is_engine_written(deliverable_code):
-            phase = constants.DELIVERABLE_INDEX.get(deliverable_code, (None, None))[0]
-            picked = [ac for ac, _txt in constants.PHASE_ACTIVITIES.get(phase, [])]
-        # An engine-written deliverable takes NO activities: it is written from the
-        # programme's approved reference design, not from prose.
-        if not picked and not reports.is_engine_written(deliverable_code or ""):
+        # THE ACTIVITY DERIVATION IS GONE (Rev 4, 2026-07-16). This used to read a list of
+        # ticked `activities`, and -- once the checkboxes were replaced by report buttons --
+        # to auto-derive the clicked report's whole phase from the old 453-activity map. Rev 4
+        # deleted the activities: a report's sections now come from the deliverable itself
+        # (documents._sections_for_deliverable). Nothing is ticked, nothing is derived, and
+        # the only thing this route needs from the operator is WHICH report they pressed.
+        if not deliverable_code:
             flash("Choose a report to generate.", "error")
             return back
 
@@ -1507,9 +1496,8 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
             try:
                 doc_id = documents.generate_document(
                     c, active, uid, programme_id,
-                    activity_codes=picked,
-                    title=(request.form.get("title") or "").strip(),
                     deliverable_code=deliverable_code,
+                    title=(request.form.get("title") or "").strip(),
                     source_document_id=source_document_id,
                     # OWNER, 2026-07-15: the AI-drafting checkbox is gone -- the agent always
                     # drafts. If no free provider is reachable the writer degrades to the
@@ -1539,7 +1527,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         # stage gate is the whole point of naming the deliverable, and the operator has no
         # other way to learn that the gate they were blocked on is now satisfied.
         gate = gates.DELIVERABLE_GATE.get(deliverable_code) if deliverable_code else None
-        name = (constants.DELIVERABLE_INDEX[deliverable_code][1]
+        name = (rev4_phases.DELIVERABLE_INDEX[deliverable_code][1]
                 if deliverable_code else "Document")
 
         if gate and thin:
@@ -1954,15 +1942,18 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 abort(404)              # C13: not-yours and not-there are one answer
 
             design = rollout.current_design(c, active, programme_id)
-            stage = constants.STAGE_OF_PHASE.get(prog.get("phase_code"))
+            # A programme opens into its design once it has left Initiation. This used to be
+            # phrased as "its lifecycle STAGE is not S1_INITIATION" -- Rev 4 has no stages, so
+            # it is now asked of the phase directly, which is what it always meant. A
+            # programme on a hold/terminal pseudo-state has no sequence number and has not
+            # reached Planning, so it reads False rather than raising.
+            planning_seq = rev4_phases.PHASE_SEQ[rev4_phases.DEFAULT_PHASE_CODE] + 1
+            current_seq = rev4_phases.PHASE_SEQ.get(prog.get("phase_code"))
             return render_template(
                 "enterprise_programme/design.html",
                 programme=prog,
                 programme_id=programme_id,
-                stage=stage,
-                stage_name=dict((sc, sn) for sc, sn, _p
-                                in constants.LIFECYCLE_STAGES).get(stage, ""),
-                planning_reached=stage is not None and stage != "S1_INITIATION",
+                planning_reached=current_seq is not None and current_seq >= planning_seq,
                 options=rollout.design_options(c, active, programme_id),
                 design=design,
                 scope=(rollout.rollout_scope(c, active, programme_id, design["id"])
@@ -2487,16 +2478,22 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         return {"drained": drained}, 200
 
 
-# The document types the gate predicates actually look for. A form that offered anything
-# else would let a user register a "business case" the gate cannot see.
+# The document types the gate predicates actually look for. A form that offered anything else
+# would let a user register a document no gate can see.
+#
+# DERIVED FROM THE GATES, NOT TYPED BESIDE THEM (Slice 0b-ii, 2026-07-16). This was a
+# hand-written list of the OLD model's nine doc types, and the Rev 4 repoint proved exactly why
+# that shape is a trap: the intersection between what this form OFFERED and what the five Rev 4
+# gates actually READ was EMPTY. Every gate document was rejected with a 400, every option it
+# did offer opened nothing, and its own comment -- "the document types the gate predicates
+# actually look for" -- had quietly become the opposite of the truth. A second, hand-kept copy
+# of a mapping is one edit away from lying, and this one lied about the control that decides
+# whether a programme may proceed.
+#
+# Read off gates.GATE_OF_DOC_TYPE (itself derived from the predicates that do the enforcing),
+# so this form cannot drift from the gates again: change a gate's demand and the form follows.
 REQUIRED_DOCUMENT_TYPES: dict[str, str] = {
-    "concept_note":         "Concept Note (Gate 1)",
-    "programme_charter":    "Programme Charter (Gate 2)",
-    "beneficiary_register": "Beneficiary Register (Gate 3)",
-    "business_case":        "Business Case (Gate 4)",
-    "master_plan":          "Programme Master Plan (Gate 5)",
-    "template_version_pack": "Template Version Pack (Gate 6)",
-    "funding_strategy":     "Funding Strategy (Gate 7)",
-    "signed_contract":      "Signed Contract (Gate 8)",
-    "ifc_package":          "Issued-For-Construction Package (Gate 9)",
+    doc_type: f"{gates.DOC_TYPE_LABELS.get(doc_type, doc_type)} "
+              f"({dict((g[0], g[2]) for g in rev4_phases.GATES).get(gate_code, gate_code)})"
+    for doc_type, gate_code in gates.GATE_OF_DOC_TYPE.items()
 }

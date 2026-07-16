@@ -1,4 +1,4 @@
-"""Slice 2 -- the lifecycle spine: 16 phases, 14 gates, 15 controls.
+"""Slice 2 -- the lifecycle spine: Revision 4's 6 phases, 5 gates, and doc 3's 15 controls.
 
 WHAT THESE TESTS ARE FOR
 ------------------------
@@ -6,12 +6,27 @@ Doc 3's whole value is that certain things become IMPOSSIBLE. A test suite that 
 proves the happy path leaves the prohibitions untested, and an untested prohibition is
 a prohibition that quietly stops working. So most of what follows asserts a refusal:
 
-  * an illegal phase jump is refused                     (the state machine is real)
-  * leaving Concept without sponsor sign-off is refused  (control C01)
-  * an AI recommendation cannot approve anything         (control C11)
-  * a failed audit write rolls the action back           (control C12)
-  * another tenant's programme is invisible              (control C13)
-  * Gates 10-14 are blocked, not silently passable       (the Release 1 boundary)
+  * an illegal phase jump is refused                       (the state machine is real)
+  * leaving Initiation without sponsor sign-off is refused (control C01)
+  * an AI recommendation cannot approve anything           (control C11)
+  * a failed audit write rolls the action back             (control C12)
+  * another tenant's programme is invisible                (control C13)
+  * a phase cannot be entered by routing around its gate   (entry requirements)
+
+REVISION 4 (Slice 0b-ii, 2026-07-16)
+------------------------------------
+The owner rejected the 16-phase / 14-gate model as "made too large". The lifecycle these
+tests describe is now `rev4_phases`: a simple forward spine
+
+    R4_INITIATION -> R4_PLANNING -> R4_EXECUTION -> {R4_MONITORING, R4_VALUE} -> R4_CLOSURE
+
+with five gates. MONITORING is the odd one: it runs continuously alongside the others and
+has NO gate of its own, which is exactly why the phase-ENTRY rule (rather than an
+exit-only rule) is what keeps the spine honest -- see
+test_value_cannot_be_entered_from_monitoring_without_the_execution_gate.
+
+What did NOT move to Rev 4 is the 15 controls: they are model-agnostic and still come
+from `constants.CONTROLS`.
 
 The audit hook is injected in every test. In production it is
 app.security.audit.write_audit_event; here it is a spy, which is also how the C12
@@ -24,7 +39,7 @@ import sqlite3
 
 import pytest
 
-from app.enterprise_programme import constants, gates, rbac, tenancy, workflows
+from app.enterprise_programme import constants, gates, rbac, rev4_phases, tenancy, workflows
 from app.enterprise_programme.gates import EnterpriseGateError, GateBlockedError
 
 
@@ -61,15 +76,24 @@ class _Conn(sqlite3.Connection):
 
 @pytest.fixture()
 def db():
-    """In-memory SQLite with slice-1 + slice-2 schema, one org, and three users.
+    """In-memory SQLite with slice-1 + slice-2 schema, one org, and four members.
 
-    alice   = enterprise_owner (created the org) -> programme.create/edit/approve
-    bob     = programme_sponsor                  -> the only one who may approve Gate 1
-    carol   = steering_committee                 -> the only one who may approve Gate 2
-    dave    = programme_manager                  -> programme.edit but NOT programme.approve
-    mallory = member of no organisation          -> the IDOR probe
+    alice   = enterprise_owner (created the org) -> ONBOARDING_OWNER_ROLES, so she
+              genuinely holds programme_director and programme_sponsor among others
+    bob     = programme_sponsor    -> the NAMED sponsor, and therefore the only one who
+              may approve Gate 1. Rev 4 makes the sponsor the authority for four of the
+              five gates (G1 Initiation, G2 Planning, G4 Value, G5 Closure).
+    carol   = steering_committee   -> holds programme.approve but is NO Rev 4 gate's
+              authority. That is what makes her the probe for "the permission is not the
+              authority" -- under the old model she owned Gate 2; Rev 4 gave it to the
+              sponsor.
+    frank   = programme_director   -> the authority for Gate 3 (Execution). The programme
+              does not NAME a director, so his gate exercises the unfilled-post fallback.
+    dave    = programme_manager    -> programme.edit but NOT programme.approve
+    mallory = member of no organisation -> the IDOR probe
     """
-    users = ((1, "alice"), (2, "bob"), (3, "carol"), (4, "mallory"), (5, "dave"))
+    users = ((1, "alice"), (2, "bob"), (3, "carol"), (4, "mallory"), (5, "dave"),
+             (6, "frank"))
 
     c = sqlite3.connect(":memory:", factory=_Conn)
     # SQLite does not enforce foreign keys unless asked, per connection. Turn them ON here
@@ -92,6 +116,7 @@ def db():
     tenancy.add_member(c, org, 2, "programme_sponsor", invited_by_user_id=1)
     tenancy.add_member(c, org, 3, "steering_committee", invited_by_user_id=1)
     tenancy.add_member(c, org, 5, "programme_manager", invited_by_user_id=1)
+    tenancy.add_member(c, org, 6, "programme_director", invited_by_user_id=1)
 
     # Commit the baseline. Without this the whole fixture sits in an open transaction,
     # and any test that exercises rollback semantics would roll the fixture's own tables
@@ -104,10 +129,15 @@ def db():
 
 
 def _programme(db, audit, *, sponsor=2, code="GH-SCHOOLS-01") -> int:
-    """A programme at Phase 1 / Concept, sponsored by bob.
+    """A programme at Phase 1 / Initiation, sponsored by bob.
 
     `code` is a parameter because (tenant_id, code) is unique -- a test that needs two
     programmes must name them apart.
+
+    Note what it does NOT name: a director. Rev 4's Gate 3 authority is the Programme
+    Director, and leaving `director_user_id` NULL is deliberate -- it is the ordinary
+    case (an organisation that has not appointed one yet) and it is what the unfilled-post
+    fallback exists for.
     """
     return workflows.create_programme(
         db, db.org, 1, code=code, name="Ghana Schools Solar",
@@ -116,22 +146,33 @@ def _programme(db, audit, *, sponsor=2, code="GH-SCHOOLS-01") -> int:
 
 
 def _pass_gate_1(db, audit, pid):
-    """Everything Gate 1 demands: a concept note, then the sponsor's approval."""
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note v1", audit=audit)
-    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)
+    """Everything Gate 1 demands: the Programme Approval Request, then the sponsor's sign.
+
+    Rev 4 gives each gate exactly ONE evidence document -- its phase's own approval
+    document (rev4_phases.DELIVERABLE_GATE_DOC_TYPE). For Initiation that is
+    R4P1_D12 "Programme Approval Request", stored under doc_type
+    `programme_approval_request`. The old `concept_note` opens nothing now.
+    """
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request v1", audit=audit)
+    workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2, audit=audit)
 
 
 # --- the state machine is real ----------------------------------------------
 
 
-def test_programme_is_born_at_concept_with_all_phases_and_gates_seeded(db, audit):
+def test_programme_is_born_at_initiation_with_all_phases_and_gates_seeded(db, audit):
+    """Rev 4's birth phase is Initiation (rev4_phases.DEFAULT_PHASE_CODE), not Concept.
+
+    Concept is not a Rev 4 phase at all -- "Programme Concept Note" survives as the first
+    DELIVERABLE of Initiation, which is where the old phase's work actually went.
+    """
     pid = _programme(db, audit)
     state = workflows.get_programme_state(db, db.org, pid)
 
-    assert state["current_phase_code"] == "P01_CONCEPT"
-    assert state["status"] == "Concept"
-    assert state["gate_to_leave"] == "G01"
+    assert state["current_phase_code"] == "R4_INITIATION"
+    assert state["status"] == "Initiation"
+    assert state["gate_to_leave"] == "R4G1_INITIATION"
 
     phases = db.execute(
         "SELECT COUNT(*) FROM enterprise_programme_phase_states WHERE programme_id=?", (pid,)
@@ -139,78 +180,78 @@ def test_programme_is_born_at_concept_with_all_phases_and_gates_seeded(db, audit
     gate_rows = db.execute(
         "SELECT COUNT(*) FROM enterprise_stage_gates WHERE programme_id=?", (pid,)
     ).fetchone()[0]
-    assert phases == 16, "all 16 phases are seeded up front, not lazily"
-    assert gate_rows == 14, "a missing gate row would mean a check that never runs"
+    assert phases == 6, "all 6 phases are seeded up front, not lazily"
+    assert gate_rows == 5, "a missing gate row would mean a check that never runs"
 
 
 def test_illegal_transition_is_refused(db, audit):
-    """Concept may go to Initiation. It may not leap to Construction."""
+    """Initiation may go to Planning. It may not leap to Closure."""
     pid = _programme(db, audit)
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P11_CONSTRUCTION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_CLOSURE",
                                              user_id=1, audit=audit)
     assert "illegal transition" in str(e.value)
     assert workflows.get_programme_state(db, db.org, pid)["current_phase_code"] \
-        == "P01_CONCEPT"
+        == "R4_INITIATION"
 
 
 def test_status_is_derived_from_phase_never_typed(db, audit):
-    """20 statuses and 16 phases are two views of one truth; the phase drives."""
+    """The six phases and the statuses they show are two views of one truth; phase drives."""
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    state = workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    state = workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                                  user_id=1, audit=audit)
-    assert state["current_phase_code"] == "P02_INITIATION"
-    assert state["status"] == constants.PHASE_STATUS["P02_INITIATION"] == "Under Initiation"
+    assert state["current_phase_code"] == "R4_PLANNING"
+    assert state["status"] == rev4_phases.PHASE_STATUS["R4_PLANNING"] == "Planning"
 
 
 def test_every_phase_has_transitions_and_a_status(db):
-    """Drift between constants.PHASES and the state machine would strand a programme."""
-    for code, _seq, _label in constants.PHASES:
-        assert code in constants.TRANSITIONS, f"{code} has no legal transitions"
-        assert code in constants.PHASE_STATUS, f"{code} maps to no programme status"
-        for target in constants.TRANSITIONS[code]:
-            assert (target in constants.PHASE_STATUS
-                    or target in constants.PSEUDO_STATES), \
+    """Drift between rev4_phases.PHASES and the state machine would strand a programme."""
+    for code, _seq, _label in rev4_phases.PHASES:
+        assert code in rev4_phases.TRANSITIONS, f"{code} has no legal transitions"
+        assert code in rev4_phases.PHASE_STATUS, f"{code} maps to no programme status"
+        for target in rev4_phases.TRANSITIONS[code]:
+            assert (target in rev4_phases.PHASE_STATUS
+                    or target in rev4_phases.PSEUDO_STATES), \
                 f"{code} -> {target} is neither a phase nor a pseudo-state"
 
 
 # --- control C01: no programme proceeds without an approved sponsor ---------
 
 
-def test_cannot_leave_concept_until_the_sponsor_approves_gate_1(db, audit):
-    """C01. The concept note alone is not authority -- the sponsor must sign."""
+def test_cannot_leave_initiation_until_the_sponsor_approves_gate_1(db, audit):
+    """C01. The approval request alone is not authority -- the sponsor must sign."""
     pid = _programme(db, audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note v1", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request v1", audit=audit)
 
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                              user_id=1, audit=audit)
     assert e.value.control == "C01"
 
     _pass_gate_1(db, audit, pid)
-    state = workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    state = workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                                  user_id=1, audit=audit)
-    assert state["current_phase_code"] == "P02_INITIATION"
+    assert state["current_phase_code"] == "R4_PLANNING"
 
 
 def test_gate_1_cannot_be_approved_without_a_named_sponsor(db, audit):
     """The gate's own predicate. This is what stops C01 being circular."""
     pid = workflows.create_programme(db, db.org, 1, code="NO-SPONSOR",
                                      name="Unsponsored", sponsor_user_id=None, audit=audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request", audit=audit)
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)
+        workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2, audit=audit)
     assert "must name a sponsor" in str(e.value)
 
 
 def test_gate_1_cannot_be_approved_without_its_required_document(db, audit):
     pid = _programme(db, audit)
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)
-    assert "concept note" in str(e.value)
+        workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2, audit=audit)
+    assert "Programme Approval Request" in str(e.value)
 
 
 # --- gate authority: the RIGHT person signs, or nobody does -----------------
@@ -219,10 +260,15 @@ def test_gate_1_cannot_be_approved_without_its_required_document(db, audit):
 def test_gate_approval_requires_the_named_role_not_merely_the_permission(db, audit):
     """The named authority still means something -- for everyone except the OWNER.
 
-    Doc 3 names an approving authority per gate. If any holder of `programme.approve` could
-    sign any gate, the 14 named authorities would be decoration. Carol proves they are not:
-    she holds steering_committee (and therefore programme.approve), she is not Gate 1's
-    authority, and she is refused.
+    Rev 4 names an approving authority per gate (rev4_phases.GATE_AUTHORITY). If any holder
+    of `programme.approve` could sign any gate, the five named authorities would be
+    decoration. Carol proves they are not: she holds steering_committee (and therefore
+    programme.approve), she is not Gate 1's authority, and she is refused.
+
+    Carol is a stronger probe under Rev 4 than she was before. The old model gave the
+    steering committee Gate 2 of its own; Rev 4 gives Gate 2 to the sponsor, so carol now
+    holds `programme.approve` and is the authority for NO gate whatsoever. If the
+    permission alone were ever enough, she is exactly who would slip through.
 
     Alice is different, and DELIBERATELY so. She owns the organisation (`tenant.admin`), and
     the owner directive of 2026-07-13 is explicit: "owner must have the authority to issue
@@ -235,117 +281,126 @@ def test_gate_approval_requires_the_named_role_not_merely_the_permission(db, aud
     test_owner_can_issue_all_approvals.py.
     """
     pid = _programme(db, audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request", audit=audit)
 
     # CAROL: holds programme.approve, is NOT the gate's authority, is NOT the owner. Refused.
     assert rbac.has_permission(db, db.org, 3, "programme.approve")
     assert not rbac.has_permission(db, db.org, 3, "tenant.admin")
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, pid, "G01", user_id=3, audit=audit)
+        workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=3, audit=audit)
 
     # BOB: the named sponsor. Signs in his own capacity, and is recorded as such.
-    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)
+    workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2, audit=audit)
     row = db.execute(
         "SELECT status, decided_by_user_id FROM enterprise_stage_gates "
-        " WHERE programme_id=? AND gate_code='G01'", (pid,)
+        " WHERE programme_id=? AND gate_code='R4G1_INITIATION'", (pid,)
     ).fetchone()
     assert row == ("Approved", 2)
     assert db.execute(
         "SELECT decided_by_role FROM enterprise_approvals WHERE programme_id=? "
-        "AND subject_id='G01'", (pid,)).fetchone()[0] == "programme_sponsor"
+        "AND subject_id='R4G1_INITIATION'", (pid,)).fetchone()[0] == "programme_sponsor"
 
 
 def test_the_owner_signing_a_role_she_genuinely_holds_is_not_an_override(db, audit):
     """The owner is not "overriding" when she is simply doing her job.
 
-    Alice holds steering_committee -- ONBOARDING_OWNER_ROLES grants it to her -- and Gate 2's
-    authority has no named post holder. So nothing is bypassed, and the record must say
-    `steering_committee`, not `enterprise_owner`. An override flag that fired on every
-    approval the owner ever made would tell an auditor nothing at all.
+    Alice holds programme_director -- ONBOARDING_OWNER_ROLES grants it to her -- and this
+    programme has not NAMED a director, so Gate 3's post is unfilled. Nothing is bypassed,
+    and the record must say `programme_director`, not `enterprise_owner`. An override flag
+    that fired on every approval the owner ever made would tell an auditor nothing at all.
 
     The genuine override -- a gate whose post is NAMED, and named to somebody else -- is
     covered in test_owner_can_issue_all_approvals.py, where the sponsor is a colleague.
     """
     pid = _programme(db, audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="programme_charter",
-                                title="Charter", audit=audit)
-    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)   # sponsor signs
+    workflows.register_document(db, db.org, 1, pid, doc_type="handover_preparation",
+                                title="Handover Preparation", audit=audit)
 
     assert rbac.has_permission(db, db.org, 1, "tenant.admin")
-    workflows.approve_gate(db, db.org, pid, "G02", user_id=1, audit=audit)   # the owner
+    assert "programme_director" in rbac.roles_for_user(db, db.org, 1), \
+        "the owner genuinely holds Gate 3's authority; this test is about the case where "\
+        "she does not need rescuing"
+    assert db.execute(
+        "SELECT director_user_id FROM enterprise_programme_registry WHERE id=?", (pid,)
+    ).fetchone()[0] is None, "precondition: Gate 3's post is unfilled, so no post is bypassed"
+
+    workflows.approve_gate(db, db.org, pid, "R4G3_EXECUTION", user_id=1, audit=audit)
 
     status, role = db.execute(
         "SELECT g.status, a.decided_by_role FROM enterprise_stage_gates g "
         "  JOIN enterprise_approvals a ON a.programme_id=g.programme_id "
         "   AND a.subject_id=g.gate_code "
-        " WHERE g.programme_id=? AND g.gate_code='G02'", (pid,)).fetchone()
+        " WHERE g.programme_id=? AND g.gate_code='R4G3_EXECUTION'", (pid,)).fetchone()
     assert status == "Approved"
-    assert role == "steering_committee", (
+    assert role == "programme_director", (
         "a role the owner genuinely holds was mislabelled as an owner override"
     )
 
 
-def test_the_sponsor_cannot_also_approve_the_steering_committees_gate(db, audit):
-    """Bob signs Gate 1. Gate 2 belongs to the Steering Committee, and only to them."""
+def test_the_sponsor_cannot_also_approve_the_programme_directors_gate(db, audit):
+    """Bob signs Gate 1. Gate 3 belongs to the Programme Director, and only to them.
+
+    Rev 4 hands the sponsor four of the five gates, which makes this the one test that can
+    still show two gates with two DIFFERENT authorities. If it ever went green with bob
+    signing Gate 3, `GATE_AUTHORITY` would have collapsed into a single role and the
+    per-gate authority would mean nothing.
+    """
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
-                                         user_id=1, audit=audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="programme_charter",
-                                title="Charter", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="handover_preparation",
+                                title="Handover Preparation", audit=audit)
 
+    assert rev4_phases.GATE_AUTHORITY["R4G3_EXECUTION"] == "programme_director"
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, pid, "G02", user_id=2, audit=audit)
+        workflows.approve_gate(db, db.org, pid, "R4G3_EXECUTION", user_id=2, audit=audit)
 
-    workflows.approve_gate(db, db.org, pid, "G02", user_id=3, audit=audit)  # carol
+    workflows.approve_gate(db, db.org, pid, "R4G3_EXECUTION", user_id=6, audit=audit)  # frank
     assert db.execute(
-        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? AND gate_code='G02'",
-        (pid,)
+        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? "
+        " AND gate_code='R4G3_EXECUTION'", (pid,)
     ).fetchone()[0] == "Approved"
 
 
 def test_advancing_requires_the_gate_that_closes_the_current_phase(db, audit):
-    """Gate 2 guards the exit from Initiation, not the entry to it."""
+    """Gate 2 guards the exit from Planning, not the entry to it."""
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                          user_id=1, audit=audit)
 
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P03_NEEDS",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_EXECUTION",
                                              user_id=1, audit=audit)
-    assert e.value.control == "G02"
+    assert e.value.control == "R4G2_PLANNING"
 
 
 def test_rework_backwards_needs_no_gate(db, audit):
     """Gates guard progress, not retreat -- but the retreat is still recorded."""
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                          user_id=1, audit=audit)
 
-    state = workflows.transition_programme_phase(db, db.org, pid, "P01_CONCEPT",
-                                                 user_id=1, note="charter inadequate",
+    state = workflows.transition_programme_phase(db, db.org, pid, "R4_INITIATION",
+                                                 user_id=1, note="approval request inadequate",
                                                  audit=audit)
-    assert state["current_phase_code"] == "P01_CONCEPT"
+    assert state["current_phase_code"] == "R4_INITIATION"
     row = db.execute(
         "SELECT from_phase_code, to_phase_code, note FROM enterprise_workflow_transitions "
         " WHERE programme_id=? ORDER BY id DESC LIMIT 1", (pid,)
     ).fetchone()
-    assert row == ("P02_INITIATION", "P01_CONCEPT", "charter inadequate")
+    assert row == ("R4_PLANNING", "R4_INITIATION", "approval request inadequate")
 
 
 def test_double_approving_a_gate_is_a_no_op_not_a_second_record(db, audit):
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)
+    workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2, audit=audit)
 
     n = db.execute(
         "SELECT COUNT(*) FROM enterprise_approvals "
-        " WHERE programme_id=? AND subject_id='G01'", (pid,)
+        " WHERE programme_id=? AND subject_id='R4G1_INITIATION'", (pid,)
     ).fetchone()[0]
     assert n == 1, "a double-click must not produce a second approval record"
 
@@ -356,30 +411,30 @@ def test_double_approving_a_gate_is_a_no_op_not_a_second_record(db, audit):
 def test_ai_recommendation_cannot_be_the_approver(db, audit):
     """C11. An AI recommendation is evidence. It is never the decision."""
     pid = _programme(db, audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request", audit=audit)
 
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.approve_gate(db, db.org, pid, "G01", user_id=None,
+        workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=None,
                                ai_recommendation_id=42, audit=audit)
     assert e.value.control == "C11"
     assert db.execute(
-        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? AND gate_code='G01'",
-        (pid,)
+        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? "
+        " AND gate_code='R4G1_INITIATION'", (pid,)
     ).fetchone()[0] == "Pending"
 
 
 def test_ai_recommendation_may_be_attached_as_evidence_to_a_human_approval(db, audit):
     """The permitted use: a human signs, and the AI's input is recorded alongside."""
     pid = _programme(db, audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=audit)
-    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, ai_recommendation_id=42,
-                           audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request", audit=audit)
+    workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2,
+                           ai_recommendation_id=42, audit=audit)
 
     row = db.execute(
         "SELECT decided_by_user_id, ai_recommendation_id FROM enterprise_approvals "
-        " WHERE programme_id=? AND subject_id='G01'", (pid,)
+        " WHERE programme_id=? AND subject_id='R4G1_INITIATION'", (pid,)
     ).fetchone()
     assert row == (2, 42), "human decides; AI is attached as supporting evidence"
 
@@ -399,22 +454,22 @@ def test_transition_rolls_back_when_the_audit_write_fails(db, audit):
 
     broken = AuditSpy(ok=False)
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                              user_id=1, audit=broken)
     assert e.value.control == "C12"
 
     state = workflows.get_programme_state(db, db.org, pid)
-    assert state["current_phase_code"] == "P01_CONCEPT", "the phase move must be rolled back"
+    assert state["current_phase_code"] == "R4_INITIATION", "the phase move must be rolled back"
     assert db.execute(
         "SELECT COUNT(*) FROM enterprise_workflow_transitions "
-        " WHERE programme_id=? AND to_phase_code='P02_INITIATION'", (pid,)
+        " WHERE programme_id=? AND to_phase_code='R4_PLANNING'", (pid,)
     ).fetchone()[0] == 0, "no transition row may survive a failed audit"
 
 
 def test_material_actions_are_audited(db, audit):
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                          user_id=1, audit=audit)
     assert audit.actions() == [
         "ENTERPRISE_PROGRAMME_CREATED",
@@ -452,7 +507,7 @@ def test_a_member_without_edit_permission_cannot_transition(db, audit):
     assert not rbac.has_permission(db, db.org, 2, "programme.edit")
 
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                              user_id=2, audit=audit)
 
 
@@ -462,19 +517,19 @@ def test_a_member_without_edit_permission_cannot_transition(db, audit):
 def test_hold_remembers_its_phase_and_resume_returns_exactly_there(db, audit):
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                          user_id=1, audit=audit)
 
     workflows.transition_programme_phase(db, db.org, pid, "ON_HOLD", user_id=1,
                                          note="funding review", audit=audit)
     held = workflows.get_programme_state(db, db.org, pid)
     assert held["status"] == "On Hold"
-    assert held["held_from_phase_code"] == "P02_INITIATION"
+    assert held["held_from_phase_code"] == "R4_PLANNING"
     assert held["allowed_transitions"] == ["RESUME", "CANCELLED"]
 
     resumed = workflows.resume_from_hold(db, db.org, pid, user_id=1, audit=audit)
-    assert resumed["current_phase_code"] == "P02_INITIATION"
-    assert resumed["status"] == "Under Initiation"
+    assert resumed["current_phase_code"] == "R4_PLANNING"
+    assert resumed["status"] == "Planning"
     assert resumed["held_from_phase_code"] is None
 
 
@@ -485,7 +540,7 @@ def test_a_held_programme_cannot_simply_move_on(db, audit):
     workflows.transition_programme_phase(db, db.org, pid, "ON_HOLD", user_id=1, audit=audit)
 
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                              user_id=1, audit=audit)
     assert "must be resumed" in str(e.value)
 
@@ -510,7 +565,7 @@ def test_resume_requires_approve_permission_not_merely_edit(db, audit):
         workflows.resume_from_hold(db, db.org, pid, user_id=5, audit=audit)
 
     workflows.resume_from_hold(db, db.org, pid, user_id=3, audit=audit)  # carol: steering cttee
-    assert workflows.get_programme_state(db, db.org, pid)["status"] == "Concept"
+    assert workflows.get_programme_state(db, db.org, pid)["status"] == "Initiation"
     assert db.execute(
         "SELECT COUNT(*) FROM enterprise_approvals "
         " WHERE programme_id=? AND approval_type='resume_from_hold'", (pid,)
@@ -520,8 +575,8 @@ def test_resume_requires_approve_permission_not_merely_edit(db, audit):
 def test_a_cancelled_programme_can_only_be_archived(db, audit):
     """A terminal programme has exactly one move left: out of the active register.
 
-    Archived is one of doc 3's 20 programme statuses, and this is the only way to reach
-    it -- before, it was declared vocabulary that no programme could ever attain.
+    Archived is one of doc 3's programme statuses, and this is the only way to reach it --
+    before, it was declared vocabulary that no programme could ever attain.
     """
     pid = _programme(db, audit)
     workflows.transition_programme_phase(db, db.org, pid, "CANCELLED", user_id=1,
@@ -531,7 +586,7 @@ def test_a_cancelled_programme_can_only_be_archived(db, audit):
     assert state["allowed_transitions"] == ["ARCHIVED"]
 
     with pytest.raises(EnterpriseGateError, match="only remaining move is ARCHIVED"):
-        workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                              user_id=1, audit=audit)
 
     state = workflows.transition_programme_phase(db, db.org, pid, "ARCHIVED", user_id=1,
@@ -544,19 +599,7 @@ def test_a_cancelled_programme_can_only_be_archived(db, audit):
                                              audit=audit)
 
 
-# --- the Release 1 boundary is honest ---------------------------------------
-
-
-def test_gates_10_to_14_are_blocked_not_silently_passable(db, audit):
-    """Release 1 delivers the lifecycle through Gate 9.
-
-    The later gates are seeded and visible, and they FAIL CLOSED. A gate that quietly
-    passed because its evidence table does not exist yet would be worse than no gate.
-    """
-    pid = _programme(db, audit)
-    for gate_code in sorted(constants.GATES_DEFERRED_BEYOND_RELEASE_1):
-        with pytest.raises(GateBlockedError):
-            gates.evaluate_gate(db, db.org, pid, gate_code)
+# --- the controls are honest about what they enforce -------------------------
 
 
 def test_every_control_in_the_spec_has_a_live_guard(db):
@@ -591,7 +634,7 @@ def test_control_summary_does_not_overstate_what_is_enforced(db):
     assert len(summary) == 15
 
 
-# --- Codex round-4 regressions: routing around a gate ------------------------
+# --- a phase cannot be entered by routing around its gate --------------------
 
 
 def _approve_gates(db, pid, *codes):
@@ -601,72 +644,86 @@ def _approve_gates(db, pid, *codes):
                    " WHERE programme_id=? AND gate_code=?", (pid, code))
 
 
-def test_mobilisation_cannot_be_reached_by_routing_around_funding_and_contract(db, audit):
-    """Codex round-4 HIGH -- the deepest bug in this slice.
+def test_value_cannot_be_entered_from_monitoring_without_the_execution_gate(db, audit):
+    """Codex round-4 HIGH, carried into Rev 4 -- and Rev 4 makes it sharper, not softer.
 
-    Doc 3 permits P06 -> P09 (engineering runs in parallel with funding and tendering) and
-    P09 -> P10. Chain them, and with an exit-only gate rule a programme reached MOBILISATION
-    having approved only G06 and G09: no financial close (G07), no contract award (G08). It
-    would be mobilising contractors it never hired, with money it never raised.
+    MONITORING IS THE PHASE WITH NO GATE. The owner's spec (section 12) has it running
+    continuously alongside planning, execution and operations, so `GATE_CLOSING_PHASE` has
+    no entry for it. An exit-only gate rule therefore checks LITERALLY NOTHING on the
+    R4_MONITORING -> R4_VALUE edge, and a programme sitting in Monitoring would walk into
+    Value Realisation with no Execution gate ever approved -- verifying benefits on work no
+    engineer signed off.
+
+    This is not hypothetical. Migration 032 remaps old P15_EVALUATION programmes onto
+    R4_MONITORING (rev4_phases.OLD_PHASE_TO_NEW), and old G09-G12 collapse into
+    R4G3_EXECUTION -- so a migrated programme can genuinely land in Monitoring with
+    R4G3 still Pending. That is the row this test is about.
 
     The fix is not per-edge patching -- the hole belongs to the DESTINATION, not the route.
-    P10 now declares its entry requirements, and they hold no matter how you arrive.
+    R4_VALUE declares its entry requirements (PHASE_ENTRY_REQUIRED_GATES) and they hold no
+    matter how you arrive.
     """
     pid = _programme(db, audit)
-    _approve_gates(db, pid, "G01", "G06")  # sponsor signed; templates standardised
-    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='P06_TEMPLATES', "
-               "       status='Approved' WHERE id=?", (pid,))
+    _approve_gates(db, pid, "R4G1_INITIATION", "R4G2_PLANNING")  # sponsor signed; plan agreed
+    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='R4_MONITORING', "
+               "       status='Monitoring' WHERE id=?", (pid,))
 
-    # The legitimate parallel-engineering skip still works.
-    workflows.transition_programme_phase(db, db.org, pid, "P09_ENGINEERING",
-                                         user_id=1, audit=audit)
-    _approve_gates(db, pid, "G09")  # design approved
+    assert rev4_phases.GATE_CLOSING_PHASE.get("R4_MONITORING") is None, (
+        "precondition: Monitoring has no closing gate, so an exit-only rule would wave "
+        "this move straight through"
+    )
 
-    # ...but mobilisation is refused: no funding, no contract.
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P10_MOBILISATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_VALUE",
                                              user_id=1, audit=audit)
-    assert e.value.control == "G08", "cannot mobilise without a contract award"
+    assert e.value.control == "R4G3_EXECUTION", \
+        "cannot verify benefits without the Execution gate"
 
-    _approve_gates(db, pid, "G07", "G08")
-    state = workflows.transition_programme_phase(db, db.org, pid, "P10_MOBILISATION",
+    _approve_gates(db, pid, "R4G3_EXECUTION")
+    state = workflows.transition_programme_phase(db, db.org, pid, "R4_VALUE",
                                                  user_id=1, audit=audit)
-    assert state["current_phase_code"] == "P10_MOBILISATION"
+    assert state["current_phase_code"] == "R4_VALUE"
 
 
-def test_rework_backwards_into_procurement_still_needs_funding(db, audit):
-    """The same hole in reverse: P09 -> P08 is a backward edge, so an exit-only rule
-    checked nothing and let a programme enter Procurement without G07 (financial close).
-    Entry requirements apply to backward moves too.
+def test_rework_backwards_into_execution_still_needs_the_planning_gate(db, audit):
+    """The same hole in reverse: R4_VALUE -> R4_EXECUTION is a backward edge, so an
+    exit-only rule checked nothing and would let a programme re-enter Execution without
+    R4G2_PLANNING (the approved plan it is meant to be executing). Entry requirements
+    apply to backward moves too.
     """
     pid = _programme(db, audit)
-    _approve_gates(db, pid, "G01", "G06")
-    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='P09_ENGINEERING', "
-               "       status='Under Design' WHERE id=?", (pid,))
+    _approve_gates(db, pid, "R4G1_INITIATION")
+    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='R4_VALUE', "
+               "       status='Value Realisation' WHERE id=?", (pid,))
 
     with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P08_PROCUREMENT",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_EXECUTION",
                                              user_id=1, audit=audit)
-    assert e.value.control == "G07", "no major procurement before financial close"
+    assert e.value.control == "R4G2_PLANNING", "no execution without an approved plan"
 
 
-def test_a_contract_cannot_be_awarded_before_financial_close(db, audit):
-    """The dependency belongs on the GATE, not on every edge that might reach it.
+def test_the_intentional_skip_past_monitoring_still_works(db, audit):
+    """R4_EXECUTION -> R4_VALUE is Rev 4's one forward skip, and it is deliberate.
 
-    G08 (Contract Award) requires G07 (Financial Close). This is what makes the entry rule
-    above transitively enforce funding: mobilisation needs G08, and G08 needs G07 -- so no
-    path to mobilisation can exist without funding, whatever route is taken.
+    It jumps over Monitoring (sequence 4), which is legitimate precisely because Monitoring
+    is continuous and gates nothing: there is no gate for this skip to route around. It
+    needs R4G3_EXECUTION -- the gate that closes the phase being left -- and nothing more.
+
+    The contrast with the test above is the whole point: skipping a GATELESS phase is free;
+    arriving at a gated destination is not, however you got there.
     """
     pid = _programme(db, audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="signed_contract",
-                                title="EPC Contract", audit=audit)
+    _approve_gates(db, pid, "R4G1_INITIATION", "R4G2_PLANNING", "R4G3_EXECUTION")
+    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='R4_EXECUTION', "
+               "       status='Execution' WHERE id=?", (pid,))
 
-    with pytest.raises(EnterpriseGateError) as e:
-        gates.evaluate_gate(db, db.org, pid, "G08")
-    assert "G07 must be approved before G08" in str(e.value)
+    state = workflows.transition_programme_phase(db, db.org, pid, "R4_VALUE",
+                                                 user_id=1, audit=audit)
+    assert state["current_phase_code"] == "R4_VALUE", \
+        "value realisation may start without a separate monitoring sign-off"
 
-    _approve_gates(db, pid, "G07")
-    gates.evaluate_gate(db, db.org, pid, "G08")  # now permitted
+
+# --- the rebuild's schema is a genuine mirror --------------------------------
 
 
 def test_the_rebuild_does_not_collide_with_the_live_024_tables(db):
@@ -714,7 +771,7 @@ def test_the_database_itself_rejects_a_cross_tenant_child_row(db, audit):
         db.execute(
             "INSERT INTO enterprise_documents "
             "(tenant_id, programme_id, doc_type, title) VALUES (?,?,?,?)",
-            (stranger_tenant, pid, "concept_note", "smuggled in"),
+            (stranger_tenant, pid, "programme_approval_request", "smuggled in"),
         )
     db.rollback()
 
@@ -732,11 +789,13 @@ def test_a_cross_tenant_write_is_404_shaped_even_without_permission(db, audit):
 
     for call in (
         lambda: workflows.transition_programme_phase(db, stranger_tenant, pid,
-                                                     "P02_INITIATION", user_id=4, audit=audit),
+                                                     "R4_PLANNING", user_id=4, audit=audit),
         lambda: workflows.register_document(db, stranger_tenant, 4, pid,
-                                            doc_type="concept_note", title="x", audit=audit),
+                                            doc_type="programme_approval_request",
+                                            title="x", audit=audit),
         lambda: workflows.resume_from_hold(db, stranger_tenant, pid, user_id=4, audit=audit),
-        lambda: workflows.approve_gate(db, stranger_tenant, pid, "G01", user_id=4, audit=audit),
+        lambda: workflows.approve_gate(db, stranger_tenant, pid, "R4G1_INITIATION",
+                                       user_id=4, audit=audit),
         lambda: workflows.approve_expansion(db, stranger_tenant, pid, user_id=4, audit=audit),
     ):
         with pytest.raises(EnterpriseGateError) as e:
@@ -759,43 +818,52 @@ def test_only_the_NAMED_sponsor_may_approve_gate_1(db, audit):
     sponsor_user_id is decoration and control C01 ("no programme proceeds without an
     approved sponsor") is satisfied by an approval the actual sponsor never gave.
     """
-    tenancy.get_or_create_personal_tenant(db, 6, "erin")
-    tenancy.add_member(db, db.org, 6, "programme_sponsor", invited_by_user_id=1)
+    tenancy.get_or_create_personal_tenant(db, 7, "erin")
+    tenancy.add_member(db, db.org, 7, "programme_sponsor", invited_by_user_id=1)
 
     pid = _programme(db, audit, sponsor=2)  # bob is THE sponsor
-    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
-                                title="Concept Note", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_approval_request",
+                                title="Programme Approval Request", audit=audit)
 
-    assert "programme_sponsor" in rbac.roles_for_user(db, db.org, 6), "Erin holds the role"
+    assert "programme_sponsor" in rbac.roles_for_user(db, db.org, 7), "Erin holds the role"
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, pid, "G01", user_id=6, audit=audit)
+        workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=7, audit=audit)
     assert db.execute(
-        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? AND gate_code='G01'",
-        (pid,)
+        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? "
+        " AND gate_code='R4G1_INITIATION'", (pid,)
     ).fetchone()[0] == "Pending"
 
-    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)  # the real sponsor
+    workflows.approve_gate(db, db.org, pid, "R4G1_INITIATION", user_id=2,
+                           audit=audit)  # the real sponsor
     assert db.execute(
-        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? AND gate_code='G01'",
-        (pid,)
+        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? "
+        " AND gate_code='R4G1_INITIATION'", (pid,)
     ).fetchone()[0] == "Approved"
 
 
 def test_an_unfilled_post_falls_back_to_the_role_check(db, audit):
-    """Gate 2's authority (steering_committee) is a body, not a named post, so any holder
-    signs. Only the three named posts (sponsor/director/manager) are identity-checked.
+    """A post nobody has been appointed to must not lock the gate against everybody.
+
+    The identity check in _require_named_post_holder only bites when the programme has
+    actually NAMED a holder. Gate 3's authority is the Programme Director and this
+    programme names none (`director_user_id` is NULL), so any holder of the role may sign
+    -- an organisation that has not appointed a director can still get its Execution gate
+    approved. Contrast test_only_the_NAMED_sponsor_may_approve_gate_1: Gate 1's post IS
+    filled, and there the role alone is not enough.
     """
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
-                                         user_id=1, audit=audit)
-    workflows.register_document(db, db.org, 1, pid, doc_type="programme_charter",
-                                title="Charter", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="handover_preparation",
+                                title="Handover Preparation", audit=audit)
 
-    workflows.approve_gate(db, db.org, pid, "G02", user_id=3, audit=audit)  # carol
     assert db.execute(
-        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? AND gate_code='G02'",
-        (pid,)
+        "SELECT director_user_id FROM enterprise_programme_registry WHERE id=?", (pid,)
+    ).fetchone()[0] is None, "precondition: the post is unfilled"
+
+    workflows.approve_gate(db, db.org, pid, "R4G3_EXECUTION", user_id=6, audit=audit)  # frank
+    assert db.execute(
+        "SELECT status FROM enterprise_stage_gates WHERE programme_id=? "
+        " AND gate_code='R4G3_EXECUTION'", (pid,)
     ).fetchone()[0] == "Approved"
 
 
@@ -827,39 +895,15 @@ def test_control_summary_tracks_the_guards_not_a_hand_kept_list(db):
 # --- Codex slice-2 review regressions ---------------------------------------
 
 
-def test_expansion_exits_require_an_expansion_approval(db, audit):
-    """Codex MEDIUM. P16's legal exits both point BACKWARD (clone to Concept, or re-plan
-    from Structuring), so the sequence comparison classes them as rework and would have
-    let a Programme Manager spend the next tranche on `programme.edit` alone.
+def test_expansion_cannot_be_approved_by_an_ai_recommendation(db, audit):
+    """C11 on the most expensive decision the module can record.
 
-    Doc 3 gates P16's exit on an expansion approval record. This is that record.
+    approve_expansion checks C11 FIRST -- before it resolves the programme, before the
+    permission check, before it looks at the phase. That ordering is what this asserts: an
+    AI recommendation is turned away at the door of the expansion approval, not somewhere
+    deeper where a later refactor might route around it.
     """
     pid = _programme(db, audit)
-    db.execute(
-        "UPDATE enterprise_programme_registry SET current_phase_code='P16_EXPANSION', "
-        "       status='Approved' WHERE id=?", (pid,)
-    )
-
-    with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P01_CONCEPT",
-                                             user_id=1, audit=audit)
-    assert e.value.control == "P16"
-
-    # dave (programme_manager) may edit, but expansion needs programme.approve.
-    with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_expansion(db, db.org, pid, user_id=5, audit=audit)
-
-    workflows.approve_expansion(db, db.org, pid, user_id=3, audit=audit)  # steering cttee
-    state = workflows.transition_programme_phase(db, db.org, pid, "P01_CONCEPT",
-                                                 user_id=1, audit=audit)
-    assert state["current_phase_code"] == "P01_CONCEPT"
-
-
-def test_expansion_cannot_be_approved_by_an_ai_recommendation(db, audit):
-    """C11 again, on the most expensive decision in the lifecycle."""
-    pid = _programme(db, audit)
-    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='P16_EXPANSION' "
-               " WHERE id=?", (pid,))
     with pytest.raises(EnterpriseGateError) as e:
         workflows.approve_expansion(db, db.org, pid, user_id=None,
                                     ai_recommendation_id=7, audit=audit)
@@ -897,18 +941,18 @@ def test_failed_audit_inside_a_caller_transaction_rolls_back_only_our_work(db, a
 
     broken = AuditSpy(ok=False)
     with pytest.raises(EnterpriseGateError):
-        workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                              user_id=1, audit=broken)
 
     assert workflows.get_programme_state(db, db.org, pid)["current_phase_code"] \
-        == "P01_CONCEPT", "C12: our transition must be undone"
+        == "R4_INITIATION", "C12: our transition must be undone"
     assert db.execute("SELECT COUNT(*) FROM projects WHERE id=888").fetchone()[0] == 1, \
         "the caller's unrelated work must survive our rollback"
 
 
 def test_inserted_id_never_guesses(db, audit):
     """Codex HIGH. The old MAX(id) fallback read a GLOBAL maximum, not this session's
-    insert: two concurrent creates would race and seed one programme's 16 phase rows onto
+    insert: two concurrent creates would race and seed one programme's 6 phase rows onto
     the other programme -- in the other tenant. There is now no guessing path at all.
     """
     class _NoLastRowId:
@@ -929,10 +973,10 @@ def test_two_programmes_get_their_own_phase_and_gate_rows(db, audit):
     for pid in (p1, p2):
         assert db.execute(
             "SELECT COUNT(*) FROM enterprise_programme_phase_states WHERE programme_id=?", (pid,)
-        ).fetchone()[0] == 16
+        ).fetchone()[0] == 6
         assert db.execute(
             "SELECT COUNT(*) FROM enterprise_stage_gates WHERE programme_id=?", (pid,)
-        ).fetchone()[0] == 14
+        ).fetchone()[0] == 5
 
 
 def test_sqlite_fallback_mirrors_the_postgres_migration(db):
@@ -981,62 +1025,15 @@ def test_autocommit_connection_is_refused_rather_than_silently_voiding_c12(db, a
         db.isolation_level = ""
 
 
-def test_a_forward_skip_cannot_route_around_a_gate(db, audit):
-    """Codex round-3 HIGH -- the worst bug found in this slice.
-
-    P08 -> P10 is a legal forward SKIP over Detailed Engineering (P09). Checking only
-    "the gate that closes the phase we are leaving" meant a programme could award a
-    contract (G08), jump straight to Mobilisation, and go on to build with NO design ever
-    approved -- control C04 defeated not by a missing check but by a routing choice. The
-    skip edge must satisfy G09 too.
-    """
-    pid = _programme(db, audit)
-    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='P08_PROCUREMENT', "
-               "       status='Procurement Planning' WHERE id=?", (pid,))
-    # Sponsor signed G01 (C01), and the contract gate G08 is approved.
-    for gate in ("G01", "G08"):
-        db.execute("UPDATE enterprise_stage_gates SET status='Approved' "
-                   " WHERE programme_id=? AND gate_code=?", (pid, gate))
-
-    with pytest.raises(EnterpriseGateError) as e:
-        workflows.transition_programme_phase(db, db.org, pid, "P10_MOBILISATION",
-                                             user_id=1, audit=audit)
-    assert e.value.control == "G09", "mobilisation must not skip Design Approval"
-
-    # With the design approved, the same skip is legitimate.
-    db.execute("UPDATE enterprise_stage_gates SET status='Approved' "
-               " WHERE programme_id=? AND gate_code='G09'", (pid,))
-    state = workflows.transition_programme_phase(db, db.org, pid, "P10_MOBILISATION",
-                                                 user_id=1, audit=audit)
-    assert state["current_phase_code"] == "P10_MOBILISATION"
-
-
-def test_the_intentional_skip_past_funding_still_works(db, audit):
-    """The other skip edge, P06 -> P09, is deliberate: detailed engineering routinely runs
-    in parallel with funding close and tendering. It needs G06 and nothing more.
-    """
-    pid = _programme(db, audit)
-    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='P06_TEMPLATES', "
-               "       status='Approved' WHERE id=?", (pid,))
-    for gate in ("G01", "G06"):
-        db.execute("UPDATE enterprise_stage_gates SET status='Approved' "
-                   " WHERE programme_id=? AND gate_code=?", (pid, gate))
-
-    state = workflows.transition_programme_phase(db, db.org, pid, "P09_ENGINEERING",
-                                                 user_id=1, audit=audit)
-    assert state["current_phase_code"] == "P09_ENGINEERING", \
-        "engineering may start before funding closes (G07/G08 gate their own exits)"
-
-
 def test_a_held_programme_can_still_be_cancelled(db, audit):
     """Codex round-3 MEDIUM. allowed_transitions() advertised CANCELLED for a held
-    programme, but the service refused every move -- so a programme held from Needs
-    Assessment (whose phase has no CANCELLED edge of its own) could never be cancelled at
-    all. The dropdown and the server now agree.
+    programme, but the service refused every move -- so a programme held from a phase whose
+    own edges do not include CANCELLED (R4_EXECUTION, R4_MONITORING and R4_VALUE all lack
+    one) could never be cancelled at all. The dropdown and the server now agree.
     """
     pid = _programme(db, audit)
     _pass_gate_1(db, audit, pid)
-    workflows.transition_programme_phase(db, db.org, pid, "P02_INITIATION",
+    workflows.transition_programme_phase(db, db.org, pid, "R4_PLANNING",
                                          user_id=1, audit=audit)
     workflows.transition_programme_phase(db, db.org, pid, "ON_HOLD", user_id=1,
                                          note="budget freeze", audit=audit)
@@ -1053,33 +1050,5 @@ def test_a_held_programme_can_still_be_cancelled(db, audit):
     _pass_gate_1(db, audit, pid2)
     workflows.transition_programme_phase(db, db.org, pid2, "ON_HOLD", user_id=1, audit=audit)
     with pytest.raises(EnterpriseGateError, match="must be resumed"):
-        workflows.transition_programme_phase(db, db.org, pid2, "P02_INITIATION",
+        workflows.transition_programme_phase(db, db.org, pid2, "R4_PLANNING",
                                              user_id=1, audit=audit)
-
-
-def test_closing_from_expansion_does_not_need_an_expansion_approval(db, audit):
-    """A reviewer flagged P16 -> CLOSED as an approval bypass. It is not, and this test
-    is here to stop that "fix" being applied later.
-
-    The expansion approval authorises spending the NEXT tranche -- cloning the programme
-    to a fresh Concept, or re-planning from Structuring. Closing is the opposite decision:
-    the choice NOT to expand. Requiring an approval-to-expand before you may stop
-    expanding would make winding a programme down harder than continuing it.
-
-    Contrast with test_expansion_exits_require_an_expansion_approval, which proves the two
-    exits that DO spend money are gated.
-    """
-    pid = _programme(db, audit)
-    db.execute("UPDATE enterprise_programme_registry SET current_phase_code='P16_EXPANSION', "
-               "       status='Approved' WHERE id=?", (pid,))
-
-    assert db.execute(
-        "SELECT COUNT(*) FROM enterprise_approvals "
-        " WHERE programme_id=? AND approval_type='expansion'", (pid,)
-    ).fetchone()[0] == 0, "precondition: no expansion has been approved"
-
-    state = workflows.transition_programme_phase(db, db.org, pid, "CLOSED", user_id=1,
-                                                 note="benefits realised; not replicating",
-                                                 audit=audit)
-    assert state["status"] == "Closed"
-    assert state["allowed_transitions"] == ["ARCHIVED"]

@@ -135,10 +135,10 @@ def test_the_first_programme_still_exists_after_the_duplicate_is_refused(db):
         "SELECT COUNT(*) FROM enterprise_programme_phase_states WHERE programme_id=?",
         (first,),
     ).fetchone()
-    assert phases[0] == 16, "the original programme's 16 phases must survive intact"
+    assert phases[0] == 6, "the original programme's 6 phases must survive intact"
 
     gates_n = db.execute(
         "SELECT COUNT(*) FROM enterprise_stage_gates WHERE programme_id=?",
         (first,),
     ).fetchone()
-    assert gates_n[0] == 14, "the original programme's 14 gates must survive intact"
+    assert gates_n[0] == 5, "the original programme's 5 gates must survive intact"
