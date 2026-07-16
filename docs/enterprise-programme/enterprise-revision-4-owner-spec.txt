@@ -1,0 +1,1915 @@
+REVISED ENTERPRISE SOLAR PROGRAMME INTERFACE AND WORKFLOW PLAN
+1. Module Purpose
+
+The Enterprise Solar Programme Module must enable a programme developer, sponsor, programme administrator and beneficiary organisations to create, plan and implement large-scale solar programmes across multiple beneficiaries.
+
+The programme may cover:
+
+Residential homes
+Residential estates
+Secondary schools
+Hospitals and health facilities
+Ministries
+Regional offices
+District assemblies
+Farms
+Irrigation facilities
+Cold-storage facilities
+Universities
+Factories
+Communities
+Mini-grids
+Utility-scale generation stations
+
+The module must be part of the existing SolarPro application. It must not be built as a separate application.
+
+The interface must be simple, guided and largely automated. Users should complete activities through:
+
+Dropdown lists
+Searchable selection lists
+Checkboxes
+Radio buttons
+Toggle controls
+Date pickers
+Map selection
+File uploads
+Electricity-bill uploads
+Site photographs
+Voice notes
+Review buttons
+Approval buttons
+
+Long text entry must be avoided wherever possible.
+
+AI agents must automatically analyse information, create tasks, perform calculations and generate programme reports and deliverables.
+
+2. Main Enterprise Entry Workflow
+
+The user signs into SolarPro and selects Enterprise from the main application navigation.
+
+The system checks whether the user belongs to an approved enterprise organisation.
+
+Case 1: Organisation Not Registered
+
+The user is redirected to:
+
+Register Your Organisation
+
+The organisation must be registered and approved before the user can create a programme.
+
+Case 2: Organisation Already Registered
+
+The user is redirected to:
+
+Enterprise Programme Home
+
+The Enterprise Programme Home displays the history of all programmes created by the user’s organisation.
+
+Main Flow
+
+SolarPro Login
+→ Click Enterprise
+→ Organisation validation
+→ Organisation registration where required
+→ Organisation approval
+→ Enterprise Programme Home
+→ Programme history
+→ Create Programme or Open Existing Programme
+
+3. Programme Developer Organisation Registration
+
+The programme developer must register their own organisation before creating a programme.
+
+Organisation registration should use existing business-registration data, dropdowns and document extraction.
+
+Organisation Registration Fields
+Organisation Type
+
+Dropdown:
+
+Government ministry
+Government agency
+Regional coordinating council
+Municipal assembly
+District assembly
+Utility
+Development bank
+Commercial bank
+Engineering consultant
+EPC contractor
+Independent power producer
+Hospital group
+Education authority
+University
+Agricultural organisation
+Industrial organisation
+Real-estate developer
+NGO
+Donor organisation
+Community organisation
+Corporate enterprise
+Other approved institution
+Country
+
+Searchable dropdown.
+
+Region
+
+Dropdown filtered by country.
+
+District
+
+Dropdown filtered by region.
+
+Main Sector
+
+Multi-select:
+
+Residential
+Healthcare
+Education
+Agriculture
+Government
+Commercial
+Industrial
+Community energy
+Mini-grid
+Utility-scale generation
+Battery storage
+Energy efficiency
+Organisation Experience
+
+Dropdown:
+
+No previous solar programme
+One completed programme
+Two to five programmes
+More than five programmes
+National programme experience
+International programme experience
+Required Uploads
+Organisation registration certificate
+Tax registration document
+Organisation logo
+Authorisation letter
+Organisation profile
+Relevant licence where applicable
+
+The system should extract available information from the uploaded documents.
+
+The user should mainly:
+
+Confirm extracted values
+Correct a selected value
+Upload a replacement document
+Submit registration
+Organisation Registration Status
+Draft
+Submitted
+Under Review
+Approved
+Rejected
+Suspended
+
+Only approved programme developer organisations may create programmes.
+
+4. Enterprise Programme Home
+
+After organisation approval, clicking Enterprise opens the Enterprise Programme Home.
+
+Header
+
+The header should display:
+
+Organisation logo
+Organisation name
+Current user
+User role
+Subscription or enterprise entitlement
+Notifications
+Organisation switcher where authorised
+Create Programme button
+Summary Cards
+Total programmes
+Active programmes
+Programmes under initiation
+Programmes under planning
+Programmes under execution
+Programmes under monitoring
+Programmes under transition
+Completed programmes
+Total beneficiary organisations
+Total beneficiary sites
+Total projects
+Planned solar capacity
+Installed solar capacity
+Planned battery capacity
+Installed battery capacity
+Estimated programme value
+Programme History
+
+The home page must show all programmes created by the organisation.
+
+Each programme record should display:
+
+Programme name
+Programme code
+Programme category
+Programme sponsor
+Programme developer
+Date created
+Current lifecycle phase
+Current status
+Number of beneficiary organisations
+Number of beneficiary sites
+Number of generated projects
+Planned solar capacity
+Installed solar capacity
+Completion percentage
+Funding status
+Next required action
+Programme Filters
+
+Dropdown filters:
+
+Programme status
+Programme category
+Current phase
+Sponsor
+Region
+Design strategy
+Funding status
+Creation year
+Programme Actions
+Open Programme
+Continue Setup
+View Dashboard
+View Tasks
+View Beneficiaries
+View Designs
+View Reports
+View Approvals
+Duplicate Programme
+Archive Programme
+5. Low-Typing Programme Creation
+
+The Create Programme function must use a guided wizard.
+
+The user should not start with a blank form.
+
+Step 1: Select Programme Category
+
+Dropdown:
+
+Home Energy Independence Programme
+Residential Estate Solar Programme
+Secondary School Solar Programme
+Hospital Solar Resilience Programme
+Government Office Solar Programme
+Agricultural Solar Programme
+Irrigation Solar Programme
+Community Solar Programme
+Mini-Grid Programme
+Commercial Solar Programme
+Industrial Solar Programme
+Generation Station Programme
+Mixed Solar Programme
+Step 2: Select Programme Scale
+
+Dropdown:
+
+Community
+District
+Municipal
+Regional
+Multi-regional
+National
+Multi-country
+Step 3: Select Beneficiary Types
+
+Multi-select:
+
+Individual homeowners
+Residential estates
+Secondary schools
+Hospitals
+Clinics
+Universities
+Ministries
+Regional offices
+District assemblies
+Farms
+Irrigation facilities
+Cold stores
+Factories
+Communities
+Commercial properties
+Generation stations
+Step 4: Select Design Strategy
+
+Radio buttons:
+
+Standard Design
+Generation Station Design
+Mixed Design
+Step 5: Select Programme Objectives
+
+Multi-select:
+
+Reduce electricity bills
+Achieve energy independence
+Improve power reliability
+Reduce grid dependency
+Reduce generator use
+Protect critical loads
+Provide electricity access
+Support irrigation
+Support cold storage
+Support institutional services
+Generate and sell electricity
+Reduce carbon emissions
+Achieve ESG targets
+Step 6: Select Funding Model
+
+Multi-select:
+
+Government funded
+Grant funded
+Development-bank loan
+Commercial loan
+PPP
+IPP
+Green bond
+Climate fund
+Beneficiary contribution
+Blended finance
+Undecided
+Step 7: Select Delivery Model
+
+Dropdown:
+
+EPC
+EPCM
+Turnkey
+Design-Build
+Framework contract
+Regional packages
+Multiple contractors
+Undecided
+Step 8: Select Geographic Coverage
+
+Searchable and cascading selection:
+
+Country
+Region
+District
+Community
+
+Multiple areas may be selected.
+
+Step 9: Select Programme Size
+
+Fields should be numeric selectors or ranges:
+
+Estimated number of beneficiary organisations
+Estimated number of sites
+Target capacity range
+Target implementation duration
+
+Capacity ranges:
+
+Below 100 kW
+100–500 kW
+500 kW–1 MW
+1–5 MW
+5–20 MW
+20–50 MW
+50–100 MW
+Above 100 MW
+Not yet determined
+Step 10: Assign Governance Roles
+
+Search and select:
+
+Programme sponsor
+Programme director
+Programme administrator
+Technical lead
+Finance lead
+Procurement lead
+Monitoring lead
+Approval authority
+Step 11: Automatic Programme Generation
+
+The Programme Initiation Agent generates:
+
+Programme name
+Programme code
+Programme description
+Problem statement
+Objectives
+Scope
+Beneficiary definition
+Initial implementation strategy
+Preliminary schedule
+Initial risk register
+Programme concept note
+
+The user selects:
+
+Accept
+Regenerate
+Edit selected section
+Save Draft
+Submit for Review
+
+The programme is created with the status:
+
+Initiation – Draft
+
+6. Programme Workspace
+
+The Programme Workspace is the central interface for the programme.
+
+At the top of the page, display the lifecycle as large clickable buttons:
+
+Initiation
+Planning
+Execution
+Monitoring
+Value Realisation and Transition
+Closure
+
+Each phase button must show:
+
+Phase status
+Completion percentage
+Number of deliverables
+Completed deliverables
+Deliverables awaiting input
+Deliverables awaiting approval
+Overdue tasks
+Phase Status
+Not Started
+In Progress
+Under Review
+Approved
+Completed
+Returned for Revision
+On Hold
+
+The current phase must be visually highlighted.
+
+The next phase remains locked until the required phase-gate conditions are met, except where an authorised programme administrator permits controlled overlap.
+
+7. Programme Workspace Screen Layout
+
+The Programme Workspace should contain:
+
+Programme title
+Programme code
+Programme category
+Programme sponsor
+Programme developer organisation
+Current lifecycle phase
+Programme status
+Programme health
+Programme completion percentage
+Planned capacity
+Approved capacity
+Installed capacity
+Beneficiary count
+Project count
+Budget status
+Funding status
+Lifecycle phase buttons
+My tasks
+Pending approvals
+Programme alerts
+Recent reports
+Recent agent activities
+8. Phase Pages and Deliverable Buttons
+
+Clicking a lifecycle phase opens a dedicated phase page.
+
+Each phase page must contain:
+
+Phase overview
+Phase status
+Deliverable buttons
+Current phase tasks
+Phase risks
+Required approvals
+Generated documents
+Completion criteria
+Phase-gate approval
+9. Initiation Phase
+Initiation Deliverable Buttons
+Programme Concept Note
+Problem Statement
+Programme Objectives
+Preliminary Beneficiary Definition
+Preliminary Geographic Scope
+Stakeholder Register
+Initial Risk Register
+Programme Governance Structure
+Programme Charter
+Preliminary Budget
+Preliminary Schedule
+Programme Approval Request
+
+Clicking a deliverable must open a guided Deliverable Workspace rather than a blank document.
+
+10. Planning Phase
+
+The Planning Phase must produce the technical and implementation foundations of the programme.
+
+Planning Deliverable Buttons
+Beneficiary Registration Plan
+Beneficiary Register
+Site Assessment Plan
+Site Qualification Report
+Electricity Bill Analysis
+Energy Demand Assessment
+Programme Feasibility Study
+Standard Design Strategy
+Generation Station Design Strategy
+Programme Technical Standards
+Standard Design Catalogue
+Generation Station Design Package
+Programme Capacity Plan
+Programme Battery Plan
+Programme BOQ
+Programme Cost Plan
+Funding Strategy
+Procurement Strategy
+EPC Packaging Plan
+Programme Master Schedule
+Risk Management Plan
+Quality Management Plan
+Environmental and Social Plan
+Monitoring and Evaluation Plan
+Programme Implementation Plan
+Executive Planning Report
+Planning Approval Request
+
+The Planning Phase must integrate with:
+
+Existing SolarPro Standard Design
+Existing SolarPro Generation Station Design
+Existing Check My Bill function
+Existing BOQ engine
+Existing financial engine
+Existing equipment catalogue
+Existing reporting engine
+Existing project-generation services
+11. Execution Phase
+Execution Deliverable Buttons
+Beneficiary Onboarding
+Site Survey Execution
+Detailed Project Generation
+Detailed Engineering
+Design Approval
+Procurement Packages
+Tendering
+Contractor Appointment
+Site Mobilisation
+Material Delivery
+Construction
+Installation
+Quality Inspections
+Safety Inspections
+Progress Reports
+Payment Certification
+Variations
+Claims
+Testing
+Commissioning
+Handover Preparation
+12. Monitoring Phase
+
+Monitoring must run during planning, execution and operations.
+
+Monitoring Deliverable Buttons
+Programme Dashboard
+Regional Performance Report
+Beneficiary Progress Report
+Project Progress Report
+Schedule Performance
+Cost Performance
+Risk Monitoring
+Issue Monitoring
+Contractor Performance
+Supplier Performance
+Procurement Tracking
+Installation Tracking
+Quality Monitoring
+Safety Monitoring
+Energy Generation Monitoring
+Battery Monitoring
+Fault Monitoring
+Carbon Reduction Monitoring
+Executive Status Report
+13. Value Realisation and Transition Phase
+Deliverable Buttons
+Benefits Realisation Plan
+Installed Capacity Verification
+Energy Generation Verification
+Grid Savings Verification
+Diesel Savings Verification
+Carbon Reduction Verification
+Beneficiary Acceptance
+User Training
+Operations Training
+Maintenance Handover
+Asset Register
+Warranty Register
+Spare Parts Register
+Operations Transition Plan
+O&M Contract
+Performance Baseline
+Post-Implementation Review
+14. Closure Phase
+Closure Deliverable Buttons
+Final Completion Report
+Programme Financial Closeout
+Contract Closeout
+Final Account
+Final Beneficiary Register
+Final Asset Register
+Final Performance Report
+Lessons Learned
+Outstanding Defects Register
+Claims Closure
+Document Archive
+Programme Evaluation
+Sponsor Acceptance
+Programme Closure Certificate
+Expansion Recommendation
+Replication Plan
+15. Deliverable Workspace
+
+Each deliverable button must open a consistent Deliverable Workspace.
+
+The workspace should display:
+
+Deliverable title
+Lifecycle phase
+Purpose
+Required inputs
+Existing programme data
+Missing information
+Responsible role
+Supporting roles
+Required approver
+Due date
+Dependencies
+Agent actions
+Human actions
+Generated draft
+Supporting files
+Comments
+Version history
+Approval history
+Audit trail
+
+The user must not be presented with a blank report-writing page.
+
+16. Automatic Deliverable Generation Workflow
+
+User clicks deliverable
+→ System loads deliverable template
+→ Agent reads programme data
+→ Agent reads beneficiary information
+→ Agent reads uploaded evidence
+→ Agent identifies missing information
+→ System displays dropdown questions
+→ Users make selections
+→ Users upload required evidence
+→ Agent performs calculations and analysis
+→ Agent generates the deliverable document
+→ Responsible user reviews
+→ User accepts, regenerates or requests revision
+→ Deliverable is submitted for approval
+→ Approver approves or returns
+→ Approved version is locked
+→ Phase completion is recalculated
+→ Taskboards are updated
+
+17. Low-Typing Deliverable Inputs
+
+The system should use predefined selectors for deliverable preparation.
+
+Example: Programme Concept Note
+Main Energy Problem
+
+Dropdown:
+
+High electricity bills
+Unreliable grid supply
+Frequent outages
+High generator fuel costs
+Lack of electricity access
+Insufficient power capacity
+Poor power quality
+Need for energy independence
+Need for renewable generation
+Need to protect critical services
+Primary Beneficiary Group
+
+Dropdown:
+
+Homes
+Schools
+Hospitals
+Farms
+Government offices
+Communities
+Commercial facilities
+Industrial facilities
+Mixed beneficiaries
+Desired Programme Outcomes
+
+Multi-select:
+
+Reduced electricity cost
+Full or partial energy independence
+Backup power resilience
+Increased generation capacity
+Improved institutional service delivery
+Reduced diesel consumption
+Increased electricity access
+Reduced carbon emissions
+Revenue from electricity generation
+
+The agent uses the selected information to generate the complete concept note.
+
+18. Agent Architecture
+
+The system should use a Programme Orchestrator Agent that coordinates specialised agents.
+
+Programme Orchestrator Agent
+
+Responsibilities:
+
+Read programme lifecycle status
+Identify required deliverables
+Create tasks
+Assign agent and human actions
+Track dependencies
+Monitor overdue tasks
+Combine agent outputs
+Check deliverable completeness
+Update phase completion
+Update taskboards
+Prevent phase approval where mandatory outputs are missing
+Programme Initiation Agent
+
+Generates:
+
+Concept note
+Problem statement
+Programme objectives
+Scope
+Governance structure
+Stakeholder register
+Programme charter
+Beneficiary Management Agent
+
+Performs:
+
+Beneficiary validation
+Duplicate detection
+Organisation classification
+Eligibility checks
+Registration completeness checks
+Beneficiary register preparation
+Bill Analysis Agent
+
+Performs:
+
+Bill extraction
+Bill validation
+Consumption analysis
+Cost analysis
+Tariff analysis
+Consumption trend analysis
+Abnormality detection
+Preliminary energy assessment
+Technical Planning Agent
+
+Generates:
+
+Programme technical strategy
+Capacity forecast
+Battery forecast
+Design assumptions
+Technical standards
+Standard design allocation
+Generation station allocation
+Site Qualification Agent
+
+Generates:
+
+Site qualification criteria
+Site scores
+Site priority rankings
+Readiness recommendations
+Missing data actions
+Standard Design Agent
+
+Uses the existing SolarPro Standard Design engine to produce:
+
+Load assessment
+PV sizing
+Battery sizing
+Inverter sizing
+Equipment selection
+Preliminary BOQ
+Preliminary cost
+Estimated savings
+Standard design report
+Generation Station Design Agent
+
+Uses the existing Generation Station Design engine to produce:
+
+Site concept
+Capacity recommendation
+Array configuration
+Inverter configuration
+MV collection concept
+Transformer requirement
+Substation concept
+SCADA concept
+Battery storage option
+Grid interconnection requirements
+Civil works requirements
+Preliminary BOQ
+Preliminary cost
+Preliminary schedule
+Risk register
+Funding Agent
+
+Generates:
+
+Funding requirements
+Funding options
+Allocation plan
+Disbursement plan
+Financial risk analysis
+Procurement Agent
+
+Generates:
+
+BOQ consolidation
+Procurement packages
+Supplier categories
+Tender requirements
+Delivery schedule
+Schedule Agent
+
+Generates:
+
+Programme master schedule
+Phase schedules
+Regional rollout
+Project sequencing
+Dependencies
+Critical-path alerts
+Risk Agent
+
+Generates:
+
+Risk register
+Risk scoring
+Mitigation actions
+Escalation actions
+Monitoring Agent
+
+Generates:
+
+Programme progress
+Schedule performance
+Cost performance
+Contractor performance
+Risk alerts
+KPI summaries
+Document Agent
+
+Combines approved programme data and validated agent outputs into complete reports.
+
+The Document Agent must not invent missing information.
+
+Missing information must be shown as:
+
+Required user action
+Open issue
+Assumption requiring approval
+Missing evidence
+19. Programme Taskboard
+
+The taskboard is the main work-management interface.
+
+Taskboard Sections
+My Tasks
+Organisation Tasks
+Agent Tasks
+Waiting for My Input
+Waiting for Approval
+Returned for Revision
+Overdue
+Completed
+Programme Deliverables
+Beneficiary Tasks
+Bill Analysis Tasks
+Design Tasks
+Procurement Tasks
+Monitoring Tasks
+Task Fields
+Task name
+Programme
+Lifecycle phase
+Deliverable
+Beneficiary organisation
+Site
+Assigned organisation
+Assigned user
+Assigned agent
+Priority
+Due date
+Status
+Dependency
+Required action
+Supporting documents
+Approval status
+20. User Roles and Use Cases
+20.1 Programme Developer
+
+The programme developer initiates and develops the programme.
+
+Programme Developer Functions
+Register programme developer organisation
+Create a programme
+Select programme category
+Select programme objectives
+Select beneficiaries
+Select Standard Design, Generation Station Design or Mixed Design
+Define geographic coverage
+Nominate sponsor
+Nominate programme administrator
+Review agent-generated initiation documents
+Manage planning activities
+Register or import beneficiary organisations
+Review programme-level bill analysis
+Review programme-level designs
+Review consolidated BOQs
+Review cost and capacity summaries
+Submit deliverables for approval
+View programme history
+Monitor the complete programme lifecycle
+Programme Developer Flow
+
+Login
+→ Click Enterprise
+→ Organisation validation
+→ Enterprise Programme Home
+→ Create Programme
+→ Complete guided selections
+→ Agent generates programme concept
+→ Review programme concept
+→ Open Initiation
+→ Complete initiation deliverables
+→ Submit to sponsor
+→ Sponsor approves
+→ Planning phase opens
+→ Beneficiaries registered
+→ Bills collected and analysed
+→ Standard or Generation Station designs prepared
+→ Planning reports generated
+→ Planning package approved
+→ Execution begins
+→ Programme monitored
+→ Benefits verified
+→ Programme transitioned and closed
+
+20.2 Programme Sponsor
+
+The sponsor provides strategic authority and phase-gate approvals.
+
+Sponsor Functions
+Accept programme invitation
+Review programme concept
+Review programme charter
+Review programme objectives
+Review beneficiary targets
+Review capacity target
+Review budget
+Review Standard Design strategy
+Review Generation Station strategy
+Review funding strategy
+Review procurement strategy
+Review risks
+Approve or reject phase gates
+Monitor programme KPIs
+Approve benefits realisation
+Approve programme closure
+Sponsor Actions
+
+The sponsor primarily selects:
+
+Approve
+Return for Revision
+Request Clarification
+Defer Decision
+
+The sponsor should not be required to edit detailed engineering data.
+
+20.3 Programme Administrator
+
+The programme administrator manages configuration, user registration, access, workflow and task coordination.
+
+Programme Administrator Functions
+Configure programme settings
+Create programme departments
+Configure geographic structure
+Register beneficiary organisations
+Invite beneficiary administrators
+Approve beneficiary organisations
+Create and assign programme users
+Assign roles
+Configure deliverables
+Configure approval workflows
+Assign tasks
+Reassign overdue tasks
+Run Check My Bill
+Assign Standard Designs
+Refer sites for Generation Station assessment
+Manage documents
+Publish reports
+Monitor incomplete registrations
+Manage deadlines
+Maintain audit records
+20.4 Beneficiary Organisation
+
+The beneficiary organisation is an institution or group receiving a solar installation.
+
+Examples:
+
+Hospital
+Secondary school
+Ministry office
+Regional office
+Farm
+University
+Factory
+Community
+Residential group
+
+The beneficiary organisation must be created by the Programme Administrator before its users can register.
+
+There should be no unrestricted public sign-up into a programme unless the programme explicitly supports public applications.
+
+20.5 Beneficiary Organisation Administrator
+
+The Beneficiary Organisation Administrator manages the beneficiary organisation’s participation.
+
+Beneficiary Administrator Functions
+Complete organisation profile
+Register organisation sites
+Register buildings
+Confirm meter information
+Confirm electricity provider
+Upload or review electricity bills
+Invite beneficiary organisation users
+Assign internal roles
+Review extracted bill information
+Submit bills to the Programme Administrator
+Respond to site qualification requests
+Review preliminary designs
+Confirm installation information
+Confirm training and handover
+
+The Beneficiary Administrator must not access other beneficiary organisations.
+
+20.6 Beneficiary Organisation User
+
+The Beneficiary Organisation User is invited by the approved Beneficiary Organisation Administrator.
+
+User Types
+Organisation executive
+Facility manager
+Electrical engineer
+Maintenance officer
+Finance officer
+Energy officer
+Site representative
+Viewer
+Beneficiary User Functions
+
+Depending on permissions:
+
+Upload electricity bills
+Upload meter photographs
+Upload generator photographs
+Upload roof and site photographs
+Confirm operating hours
+Select critical-load categories
+Confirm site address
+Upload existing drawings
+Respond to technical questions
+Review bill analysis
+Review design summary
+View implementation schedule
+Report site issues
+View commissioning records
+View operating performance
+View maintenance records
+
+The Beneficiary User should mainly see simple actions, not programme-wide management controls.
+
+21. Registration Hierarchy
+
+The system must enforce this hierarchy:
+
+Platform Administrator
+→ Programme Developer Organisation
+→ Programme
+→ Programme Administrator
+→ Beneficiary Organisation
+→ Beneficiary Organisation Administrator
+→ Beneficiary Organisation User
+
+Registration Rules
+The programme developer registers an organisation.
+The programme developer organisation is approved.
+The approved organisation creates a programme.
+A Programme Administrator is assigned.
+The Programme Administrator registers beneficiary organisations.
+A Beneficiary Organisation Administrator is nominated or invited.
+The Beneficiary Administrator completes the organisation profile.
+The Programme Administrator approves the beneficiary organisation.
+The Beneficiary Administrator invites beneficiary organisation users.
+Users can only access the programmes, sites and tasks assigned to their organisation and role.
+22. Beneficiary Organisation Registration Flow
+
+Programme Administrator selects Add Beneficiary Organisation
+→ Select organisation category
+→ Select country, region and district
+→ Select beneficiary type
+→ Select or enter organisation name
+→ Select Beneficiary Administrator
+→ Send invitation
+→ Beneficiary Administrator verifies account
+→ Guided organisation profile opens
+→ Documents and site data uploaded
+→ Programme Administrator reviews
+→ Organisation approved
+→ Beneficiary Administrator invites organisation users
+
+23. Beneficiary Organisation Profile
+
+Use dropdowns and uploads.
+
+Dropdown Fields
+Organisation category
+Site type
+Building type
+Number of buildings
+Operating days
+Operating hours
+Grid connection type
+Meter type
+Electricity provider
+Generator availability
+Existing solar availability
+Critical-load category
+Preferred solar objective
+Uploads
+Electricity bills
+Meter photographs
+Site photographs
+Roof photographs
+Generator nameplate
+Transformer nameplate where applicable
+Existing electrical drawings
+Load schedules
+Site plans
+Location information
+24. Electricity Bill Submission Requirement
+
+Each beneficiary organisation must submit:
+
+Minimum: 3 consecutive months of electricity bills
+Preferred: 6 consecutive months
+Recommended for seasonal facilities: up to 12 months where available
+
+Bills may be uploaded by:
+
+Beneficiary Organisation User
+Beneficiary Organisation Administrator
+Programme field officer
+Authorised Programme Administrator
+
+The normal workflow should be:
+
+Beneficiary User uploads bills
+→ Beneficiary Administrator checks completeness
+→ Beneficiary Administrator confirms extracted values
+→ Beneficiary Administrator submits bills
+→ Programme Administrator runs Check My Bill
+
+25. Bill Upload Interface
+
+The Bill Upload screen should require minimal input.
+
+Upload Steps
+Select organisation site.
+Select electricity provider.
+Select meter type.
+Select billing month.
+Upload bill image or PDF.
+Repeat for remaining months.
+Select Submit Bills to Administrator.
+Electricity Provider Dropdown
+ECG
+NEDCo
+Enclave Power
+Private utility
+Embedded generation provider
+Other approved provider
+Meter Type Dropdown
+Prepaid
+Postpaid
+Maximum demand meter
+Smart meter
+Three-phase meter
+Single-phase meter
+Unknown
+Bill Status
+Uploaded
+Reading
+Data Extracted
+Validation Required
+Accepted
+Rejected
+Duplicate
+Replacement Required
+26. Automatic Bill Extraction
+
+The Bill Analysis Agent should extract:
+
+Customer name
+Account number
+Meter number
+Billing month
+Previous reading
+Current reading
+Energy consumed
+Maximum demand
+Tariff category
+Energy charge
+Service charge
+Levies
+Taxes
+Arrears
+Total amount
+Payment due date
+
+The Beneficiary Administrator should mainly select:
+
+Confirm All Values
+Correct Selected Value
+Reject Bill
+Upload Replacement
+27. Bill Validation
+
+The system should detect:
+
+Fewer than three bills
+Missing months
+Duplicate bills
+Unreadable bills
+Different meter numbers
+Different customer names
+Bills from different sites
+Estimated readings
+Abnormal consumption
+Large unexplained changes
+Missing consumption values
+Inconsistent tariff categories
+
+The system must not run the final Check My Bill analysis where the minimum required bill data is incomplete unless an authorised administrator approves an exception.
+
+28. Check My Bill Workflow
+
+Beneficiary User uploads 3–6 months of bills
+→ Beneficiary Administrator reviews completeness
+→ Beneficiary Administrator confirms extracted data
+→ Beneficiary Administrator submits bills
+→ Programme Administrator receives task
+→ Programme Administrator selects Run Check My Bill
+→ Bill Analysis Agent validates bills
+→ Consumption Agent analyses energy use
+→ Tariff Agent analyses charges
+→ Load Agent estimates load profile
+→ Solar Sizing Agent estimates PV requirement
+→ Battery Agent estimates storage requirement
+→ Financial Agent estimates savings
+→ Document Agent generates Bill Analysis Report
+→ Programme Administrator reviews
+→ Design route is selected
+→ Report is published to authorised taskboards
+
+29. Check My Bill Analysis
+
+The analysis should calculate:
+
+Monthly electricity consumption
+Average monthly consumption
+Lowest monthly consumption
+Highest monthly consumption
+Estimated daily consumption
+Estimated peak demand
+Estimated base load
+Estimated operating load
+Monthly electricity cost
+Average monthly electricity cost
+Tariff category
+Fixed charges
+Variable charges
+Levies and taxes
+Arrears
+Consumption trend
+Seasonal change
+Abnormal bill changes
+Estimated annual consumption
+Estimated annual electricity cost
+
+The preliminary solar assessment should estimate:
+
+Recommended PV capacity
+Recommended battery capacity
+Recommended inverter capacity
+Estimated solar generation
+Estimated grid reduction
+Estimated bill reduction
+Estimated diesel reduction
+Estimated annual savings
+Estimated payback period
+Estimated carbon reduction
+
+All outputs must be labelled as preliminary until site assessment and detailed engineering are completed.
+
+30. Bill Analysis Route Recommendation
+
+After analysis, the Programme Administrator selects or confirms one route:
+
+Suitable for Standard Design
+Suitable for Standard Design with Adjustment
+Detailed Load Survey Required
+Site Survey Required
+Generation Station Assessment Required
+Insufficient Bill Data
+Bills Require Verification
+Not Currently Eligible
+Refer for Engineering Review
+
+The selected route determines the next actions.
+
+31. Automatic Bill Analysis Report
+
+The agent should automatically generate:
+
+Beneficiary organisation
+Beneficiary site
+Billing period
+Meter details
+Consumption summary
+Cost summary
+Tariff analysis
+Consumption trend
+Detected abnormalities
+Estimated load profile
+Preliminary PV requirement
+Preliminary battery requirement
+Preliminary inverter requirement
+Estimated energy savings
+Estimated financial savings
+Recommended design route
+Missing information
+Required next actions
+Assumptions
+Engineering-validation disclaimer
+
+The report must be stored in the programme document register.
+
+32. Standard Design Route
+
+Where the Check My Bill analysis recommends Standard Design, the system should:
+
+Match the beneficiary to a standard design package.
+Create or populate a preliminary SolarPro project.
+Transfer bill-analysis results.
+Populate average energy consumption.
+Populate recommended PV capacity.
+Populate recommended battery capacity.
+Populate recommended inverter capacity.
+Select approved equipment.
+Generate preliminary BOQ.
+Generate preliminary cost.
+Generate estimated savings.
+Generate a Standard Design Report.
+Create engineering review tasks.
+Publish the output to authorised taskboards.
+Standard Design Package Dropdown
+Residential 5 kW
+Residential 10 kW
+Residential 15 kW
+School 50 kW
+School 100 kW
+Hospital 500 kW
+Hospital 1 MW
+Office 100 kW
+Farm Irrigation 200 kW
+Custom Standard Package
+Engineer Actions
+Accept Recommended Package
+Select Alternative Package
+Request Detailed Load Survey
+Request Site Survey
+Request Engineering Adjustment
+33. Generation Station Route
+
+For a Generation Station programme or a site requiring generation-station assessment, the system opens a structured configuration page.
+
+The user selects:
+
+Generation station type
+Target capacity range
+Grid connection level
+Battery requirement
+Land availability
+Mounting type
+Tracker type
+Inverter type
+Substation requirement
+SCADA requirement
+Transmission requirement
+Construction phase
+
+The Generation Station Agent generates:
+
+Preliminary generation concept
+Capacity recommendation
+Land requirement
+Site-data requirements
+Grid-study requirements
+Array concept
+Inverter concept
+MV collection concept
+Transformer requirement
+Substation requirement
+SCADA requirement
+Battery option
+Civil works requirement
+Preliminary equipment schedule
+Preliminary BOQ
+Preliminary cost
+Preliminary programme
+Preliminary risk register
+Required surveys
+Required approvals
+34. Planning Phase Design Workflow
+Standard Design Planning Workflow
+
+Open Planning Phase
+→ Select Standard Design Strategy
+→ Select beneficiary categories
+→ Define standard capacity packages
+→ Define technical assumptions
+→ Select approved equipment
+→ Select battery options
+→ Select generator integration requirements
+→ Generate standard drawings
+→ Generate standard BOQ
+→ Define site adjustment rules
+→ Submit design standard
+→ Technical review
+→ Approval
+→ Assign template to beneficiaries
+→ Generate beneficiary projects
+→ Publish approved outputs
+
+Generation Station Planning Workflow
+
+Open Planning Phase
+→ Select Generation Station Strategy
+→ Register generation sites
+→ Select target capacities
+→ Enter or upload land data
+→ Enter or upload grid data
+→ Perform site assessment
+→ Generate array configuration
+→ Generate inverter configuration
+→ Generate MV collection concept
+→ Generate transformer and substation concept
+→ Generate SCADA and communication concept
+→ Generate battery option
+→ Generate grid interconnection strategy
+→ Generate civil works scope
+→ Generate BOQ
+→ Generate cost plan
+→ Generate schedule
+→ Technical review
+→ Approval
+→ Publish approved outputs
+
+35. Planning Report Generation
+
+The Planning Phase agents should automatically generate reports from:
+
+Programme setup selections
+Programme organisation data
+Beneficiary profiles
+Electricity bills
+Bill analysis
+Site qualification results
+Standard Design results
+Generation Station results
+BOQ data
+Financial data
+Schedule data
+Risk data
+Required Planning Reports
+Programme Needs Assessment
+Beneficiary Energy Baseline
+Electricity Bill Analysis Summary
+Programme Load Assessment
+Standard Design Strategy
+Generation Station Strategy
+Programme Capacity Plan
+Programme Battery Plan
+Programme Technical Standards
+Standard Design Catalogue
+Programme BOQ
+Programme Cost Plan
+Funding Strategy
+Procurement Strategy
+EPC Packaging Plan
+Programme Master Schedule
+Risk Management Plan
+Quality Management Plan
+Monitoring and Evaluation Plan
+Programme Implementation Plan
+Executive Planning Report
+
+Users should review and approve these documents rather than manually write them.
+
+36. Planning Output Publication
+
+Approved planning outputs must be published to role-based taskboards.
+
+Programme Developer Taskboard
+
+Displays:
+
+Planning deliverable status
+Programme capacity
+Programme battery requirement
+Standard Design distribution
+Generation Station requirements
+Design approvals
+Outstanding assumptions
+Programme BOQ
+Programme cost plan
+Programme schedule
+Programme risks
+Programme Administrator Taskboard
+
+Displays:
+
+Beneficiary registrations
+Missing organisation profiles
+Missing bills
+Bill analyses awaiting action
+Sites requiring surveys
+Standard Design assignments
+Generation Station assessments
+Approval routing
+Overdue tasks
+User registration status
+Sponsor Taskboard
+
+Displays:
+
+Planning summary
+Programme technical strategy
+Programme capacity
+Programme cost
+Funding requirement
+Implementation schedule
+Major risks
+Required approvals
+Beneficiary Administrator Taskboard
+
+Displays only organisation-specific information:
+
+Organisation registration status
+Site registration status
+Bills required
+Bill validation status
+Bill analysis report
+Site qualification
+Standard Design recommendation
+Generation Station recommendation
+Estimated capacity
+Implementation schedule
+Required confirmation
+Beneficiary User Taskboard
+
+Displays:
+
+Bills to upload
+Bills requiring replacement
+Meter confirmation
+Site photographs required
+Operating-hour confirmation
+Critical-load selection
+Design summary
+Site visit schedule
+Installation schedule
+Site issues
+Operational information
+37. Programme Administrator Bulk Actions
+
+The Programme Administrator should be able to perform bulk operations.
+
+Bulk Actions
+Approve beneficiary organisations
+Send beneficiary administrator invitations
+Send missing-bill reminders
+Submit multiple sites for bill analysis
+Run multiple bill checks
+Assign sites to analysts
+Assign Standard Design packages
+Refer sites for detailed survey
+Refer sites for Generation Station assessment
+Publish approved reports
+Reassign overdue tasks
+Export beneficiary summaries
+
+Bulk actions must be processed through background jobs for large programmes.
+
+38. Phase-Gate Rules
+Initiation to Planning
+
+Required:
+
+Programme concept approved
+Programme sponsor confirmed
+Programme charter approved
+Governance approved
+Preliminary scope approved
+Preliminary budget approved
+Planning to Execution
+
+Required:
+
+Beneficiary strategy approved
+Bill-analysis process completed for required beneficiaries
+Site-assessment method approved
+Standard Design or Generation Station strategy approved
+Programme technical standards approved
+Programme BOQ approved
+Cost plan approved
+Funding strategy approved
+Procurement strategy approved
+Master schedule approved
+Programme Implementation Plan approved
+Execution to Value Realisation and Transition
+
+Required:
+
+Required projects completed
+Testing completed
+Commissioning completed
+Defects registered
+Handover documentation prepared
+Value Realisation and Transition to Closure
+
+Required:
+
+Assets transferred
+Beneficiaries trained
+Operations activated
+Maintenance responsibilities transferred
+Performance baseline established
+Benefits verification completed
+Closure
+
+Required:
+
+Sponsor acceptance
+Financial closeout
+Contract closeout
+Lessons learned
+Document archive
+Final programme evaluation
+39. Main End-to-End Workflow
+
+Programme Developer registers organisation
+→ Organisation approved
+→ Developer clicks Enterprise
+→ Enterprise Programme Home opens
+→ Programme history displayed
+→ Developer creates programme
+→ Programme Administrator assigned
+→ Lifecycle buttons displayed
+→ Initiation deliverables generated
+→ Agents create tasks
+→ Users provide selections and evidence
+→ Initiation documents generated
+→ Sponsor approves Initiation
+→ Planning phase opens
+→ Beneficiary organisations registered
+→ Beneficiary Administrators invited
+→ Beneficiary organisations approved
+→ Beneficiary users invited
+→ Users upload 3–6 months of electricity bills
+→ Bill values automatically extracted
+→ Beneficiary Administrator confirms values
+→ Bills submitted to Programme Administrator
+→ Programme Administrator runs Check My Bill
+→ Bill Analysis Report generated
+→ Standard Design or Generation Station route selected
+→ Preliminary designs generated
+→ Programme BOQ and cost plan generated
+→ Planning reports generated
+→ Planning package approved
+→ Execution phase opens
+→ Projects generated
+→ Procurement and EPC activities begin
+→ Installation completed
+→ Monitoring continues
+→ Benefits verified
+→ Assets transferred to operations
+→ Programme closed
+
+40. First Vertical Workflow for Claude Code
+
+Claude Code must first implement one fully working vertical workflow:
+
+Programme Developer organisation registration
+→ Enterprise Programme Home
+→ Programme creation
+→ Programme Workspace
+→ Initiation lifecycle page
+→ Programme Charter deliverable
+→ Agent-generated actions
+→ Agent-generated charter
+→ Programme Developer review
+→ Sponsor approval
+→ Planning phase unlock
+
+This workflow must be fully functional before additional lifecycle functions are expanded.
+
+41. Second Vertical Workflow for Claude Code
+
+After the first workflow passes testing, implement:
+
+Programme Administrator registers beneficiary organisation
+→ Beneficiary Administrator invited
+→ Beneficiary organisation profile completed
+→ Programme Administrator approves organisation
+→ Beneficiary Administrator invites organisation user
+→ Organisation user uploads 3–6 months of electricity bills
+→ Bill information automatically extracted
+→ Beneficiary Administrator confirms bill data
+→ Bills submitted to Programme Administrator
+→ Programme Administrator runs Check My Bill
+→ Bill Analysis Report generated
+→ Standard Design route recommended
+→ Preliminary Standard Design generated
+→ Results published to taskboards
+
+42. Third Vertical Workflow for Claude Code
+
+After the Standard Design workflow passes testing, implement:
+
+Generation site registered
+→ Land and grid information selected or uploaded
+→ Generation Station Design Strategy selected
+→ Target capacity selected
+→ Agent generates preliminary station design
+→ Preliminary BOQ generated
+→ Preliminary cost and schedule generated
+→ Technical review performed
+→ Sponsor or approval authority approves
+→ Output published to programme taskboards
+
+43. Direct Claude Code Implementation Order
+
+Claude Code must implement in this order:
+
+Enterprise organisation registration
+Organisation approval
+Enterprise Programme Home
+Programme history
+Programme creation wizard
+Programme Workspace
+Lifecycle phase buttons
+Initiation Phase page
+Deliverable Workspace
+Agent-action generation
+Human-task generation
+Programme Charter workflow
+Sponsor approval
+Phase-gate controls
+Programme taskboard
+Role-based taskboards
+Programme Administrator controls
+Beneficiary organisation registration
+Beneficiary Administrator invitation
+Beneficiary organisation approval
+Beneficiary User invitation
+Bill upload
+Bill extraction
+Bill validation
+Check My Bill
+Bill Analysis Report
+Standard Design integration
+Standard Design output publication
+Generation Station integration
+Generation Station output publication
+Planning report generation
+Planning approval
+Notifications
+Audit trail
+Bulk actions
+End-to-end testing
+Security testing
+Tenant-isolation testing
+Deployment
+44. Low-Typing Interface Rules
+
+Claude Code must apply these interface rules:
+
+Replace long text fields with dropdowns where possible.
+Use multi-select lists for programme objectives and beneficiary categories.
+Use cascading country, region and district dropdowns.
+Use saved organisation data to avoid repeated entry.
+Use document extraction for organisation registration.
+Use bill extraction for electricity-bill data.
+Use templates for programme types and reports.
+Use default values based on programme category.
+Use search and filters for beneficiaries, organisations and sites.
+Use file uploads for supporting evidence.
+Use voice notes where written explanations would otherwise be required.
+Use confirmation screens rather than repeated data entry.
+Generate report narrative automatically.
+Ask users only for missing or conflicting information.
+Support bulk beneficiary registration.
+Support bulk bill upload.
+Support bulk bill analysis.
+Support bulk Standard Design assignment.
+Publish approved outputs automatically.
+Keep advanced calculations in expandable sections.
+Provide plain-language summaries for non-technical users.
+Do not expose complex programme controls to beneficiary users.
+Do not require users to manually write programme reports.
+45. Core Acceptance Criteria
+
+The revised module is acceptable only when:
+
+A programme developer can register an organisation.
+The approved programme developer can open Enterprise.
+Programme history is displayed.
+A programme can be created through dropdowns and guided selections.
+The lifecycle phases appear at the top of the Programme Workspace.
+Each phase opens a phase page.
+Each phase displays deliverable buttons.
+Clicking a deliverable generates agent and human actions.
+Agents generate draft programme documents.
+Users can review, approve or return documents.
+Sponsor approval can unlock the next phase.
+A Programme Administrator can register beneficiary organisations.
+A Beneficiary Administrator can complete an invited registration.
+A Beneficiary Administrator can invite organisation users.
+A Beneficiary User can upload at least three bills.
+The system supports six or more bill uploads.
+Bill values are automatically extracted.
+Bill values can be confirmed or corrected.
+The Programme Administrator can run Check My Bill.
+Monthly and average consumption are calculated.
+Preliminary PV, battery and inverter capacity are estimated.
+A Bill Analysis Report is generated.
+The system recommends Standard Design or Generation Station routing.
+A Standard Design output can be generated.
+A Generation Station output can be generated.
+Planning reports are generated automatically.
+Outputs appear on the correct role-based taskboards.
+The programme remains tenant-scoped.
+Beneficiary organisations cannot view each other’s information.
+All approvals and changes are auditable.
+The workflow is tested from programme creation through planning approval.
+The feature is integrated into the existing SolarPro application.
