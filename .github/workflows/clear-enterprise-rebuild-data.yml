@@ -12,7 +12,7 @@
 #
 # WHAT IT TOUCHES -- the 20 rebuild PROGRAMME/BENEFICIARY/APPLICATION tables, and only
 # these (children first, parents last):
-#   enterprise_activity_answers        (028)
+#   (enterprise_activity_answers was DROPPED by migration 032 -- the Q&A engine is gone)
 #   enterprise_applications            (031)
 #   enterprise_sponsor_users           (031)
 #   enterprise_reference_designs       (029)
@@ -155,7 +155,6 @@ jobs:
             UNION ALL SELECT 'enterprise_workflow_transitions',   count(*) FROM enterprise_workflow_transitions
             UNION ALL SELECT 'enterprise_approvals',              count(*) FROM enterprise_approvals
             UNION ALL SELECT 'enterprise_documents',              count(*) FROM enterprise_documents
-            UNION ALL SELECT 'enterprise_activity_answers',       count(*) FROM enterprise_activity_answers
             UNION ALL SELECT 'enterprise_geographic_areas',       count(*) FROM enterprise_geographic_areas
             UNION ALL SELECT 'enterprise_sites',                  count(*) FROM enterprise_sites
             UNION ALL SELECT 'enterprise_programme_templates',    count(*) FROM enterprise_programme_templates
@@ -208,7 +207,7 @@ jobs:
         run: |
           set -e
           mkdir -p /tmp/backup
-          TABLES="-t enterprise_activity_answers -t enterprise_applications \
+          TABLES="-t enterprise_applications \
             -t enterprise_sponsor_users -t enterprise_reference_designs \
             -t enterprise_project_links -t enterprise_jobs \
             -t enterprise_site_qualifications -t enterprise_import_rows \
@@ -257,7 +256,6 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v also_orgs="$ALSO_ORGS" <<'SQL'
           BEGIN;
 
-          DELETE FROM enterprise_activity_answers;
           DELETE FROM enterprise_applications;
           DELETE FROM enterprise_sponsor_users;
           DELETE FROM enterprise_reference_designs;
