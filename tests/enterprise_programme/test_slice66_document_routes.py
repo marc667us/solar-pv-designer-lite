@@ -1,9 +1,9 @@
 """Slice 6.6 over HTTP -- the pages the owner actually uses.
 
 The services are tested in test_slice66_lifecycle_documents.py. This drives the real routes:
-the five lifecycle stages render with their activities, ticking activities and pressing
-Generate produces a PDF, uploading a source document works, and the questions the app raises
-come back as an answerable form.
+each phase renders its reports as buttons (OWNER, 2026-07-15 -- no activity checkboxes),
+clicking a report has the agent write it and open it, uploading a source document works, and
+the gaps the app cannot ground come back as an answerable form on the answers page.
 """
 
 from __future__ import annotations
@@ -102,29 +102,32 @@ def programme(ent):
     return pid
 
 
-def test_the_page_renders_the_five_lifecycle_stages(ent, programme):
-    """Initiation / Planning / Implementation / Monitoring / Closure -- the owner's model."""
+def test_the_page_renders_reports_as_buttons_grouped_by_phase(ent, programme):
+    """OWNER, 2026-07-15: no activity checkboxes. Each phase lists its reports as buttons;
+    clicking one has the agent write that report."""
     client, _wa, uid = ent
     _login(client, uid)
     r = client.get(f"/enterprise/programmes/{programme}/lifecycle-documents")
     assert r.status_code == 200
     body = r.data.decode()
-    for stage in ("Initiation", "Planning", "Implementation", "Monitoring", "Closure"):
-        assert stage in body
+    # A phase heading and one of its report buttons, straight from the deliverable list.
+    assert "Programme Concept and Opportunity Identification" in body
+    assert 'name="deliverable_code" value="P01_D01"' in body
+    assert "Programme concept note" in body
 
 
-def test_the_activities_are_checkboxes_grouped_under_their_stage(ent, programme):
+def test_reports_are_buttons_not_activity_checkboxes(ent, programme):
+    """The old checkbox picker is gone entirely -- there are no `activities` checkboxes."""
     client, _wa, uid = ent
     _login(client, uid)
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
 
-    # An activity from Initiation and one from Planning, each a real checkbox.
-    assert 'name="activities" value="P01_A01"' in body
-    assert 'name="activities" value="P03_A01"' in body
-    # And the stage select-all is wired to the stage class the boxes carry.
-    assert 'data-scope="sS2_PLANNING"' in body
-    assert "sS2_PLANNING" in body
+    # Every report is a submit button carrying its own deliverable_code.
+    assert 'name="deliverable_code" value="P01_D01"' in body
+    assert 'name="deliverable_code" value="P03_D01"' in body
+    # And nothing on the page is an activity checkbox any more.
+    assert 'name="activities"' not in body
 
 
 def test_ticking_activities_and_generating_OPENS_the_report(ent, programme):
@@ -150,15 +153,32 @@ def test_ticking_activities_and_generating_OPENS_the_report(ent, programme):
     assert "Download PDF" in body        # the PDF is still one click away
 
 
-def test_generating_with_nothing_ticked_is_refused(ent, programme):
+def test_generating_with_no_report_chosen_is_refused(ent, programme):
     client, _wa, uid = ent
     _login(client, uid)
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "activities": []}, follow_redirects=True,
+        data={"_csrf": "testtoken"}, follow_redirects=True,
     )
     assert r.status_code == 200
-    assert b"Tick at least one" in r.data
+    assert b"Choose a report to generate" in r.data
+
+
+def test_engine_written_report_bypasses_the_choose_a_report_refusal(ent, programme):
+    """An engine-written report (e.g. the technical feasibility report) takes NO activities --
+    the design engine IS its content. Clicking it must NOT be refused with "Choose a report";
+    it proceeds to the engine, which (with no approved reference design yet) asks for one
+    rather than 500ing or falling back to prose."""
+    client, _wa, uid = ent
+    _login(client, uid)
+    r = client.post(
+        f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
+        data={"_csrf": "testtoken", "deliverable_code": "P04_D01"},  # engine: technical
+        follow_redirects=True,
+    )
+    assert r.status_code == 200
+    # The no-activities refusal did NOT fire -- is_engine_written short-circuits it.
+    assert b"Choose a report to generate" not in r.data
 
 
 def test_uploading_a_source_document_then_using_it(ent, programme):
@@ -179,24 +199,30 @@ def test_uploading_a_source_document_then_using_it(ent, programme):
     assert b"Ministry Brief" in r.data
 
 
-def test_the_questions_the_app_raises_come_back_as_an_answerable_form(ent, programme):
-    """generate -> the app asks -> the page shows the question -> answering fills it in."""
+def test_clicking_a_report_writes_it_and_the_gap_is_answerable(ent, programme):
+    """OWNER, 2026-07-15: click a report button -> the agent writes it (covering the whole
+    phase) -> anything it cannot ground is answerable on the answers page -> answering it
+    fills the section in."""
     client, wa, uid = ent
     _login(client, uid)
 
-    # Generate something the app holds NO fact for, so a question is raised under the
-    # section it wrote. (P02_A09 "define approval authorities" no longer qualifies: the app
-    # now writes it from the organisation's own type and country. P01_A01, "register the
-    # programme idea", is a genuine gap.)
-    client.post(
+    # Click the "Programme concept note" report button. The agent covers the whole Concept
+    # phase; P01_A01 ("register the programme idea") is a genuine gap it holds no fact for.
+    r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "activities": ["P01_A01"]},
+        data={"_csrf": "testtoken", "deliverable_code": "P01_D01"},
         follow_redirects=True,
     )
+    assert r.status_code == 200
+    # It OPENS as a report, it does not push a PDF at the browser -- and it opened as THIS
+    # report: the deliverable's own title, with the report actions (PDF) beside it.
+    assert not r.data.startswith(b"%PDF-")
+    assert b"Programme concept note" in r.data
+    assert b"Download PDF" in r.data
 
+    # Every lifecycle question is editable on the answers page, the agent's answer in the box.
     body = client.get(
-        f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
-    assert "need your answer" in body
+        f"/enterprise/programmes/{programme}/answers").data.decode()
     assert 'name="answer[P01_A01]"' in body
 
     # Answer it.

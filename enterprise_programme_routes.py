@@ -1637,11 +1637,18 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                                 deliverable=deliverable_code or None))
 
         picked = request.form.getlist("activities")
+        # OWNER 2026-07-15: reports are BUTTONS now -- "each phase will have types [of] report
+        # to be produced as buttons and once clicked the agent writes the report". There are no
+        # activity checkboxes any more. When a report (deliverable) is chosen and nothing was
+        # ticked, the agent covers that report's WHOLE phase automatically -- every phase holds
+        # at most ~38 activities, comfortably under generate_document's per-document ceiling.
+        if deliverable_code and not picked and not reports.is_engine_written(deliverable_code):
+            phase = constants.DELIVERABLE_INDEX.get(deliverable_code, (None, None))[0]
+            picked = [ac for ac, _txt in constants.PHASE_ACTIVITIES.get(phase, [])]
         # An engine-written deliverable takes NO activities: it is written from the
-        # programme's approved reference design, not from ticked prose. Demanding a tick
-        # would be demanding an input the document does not use.
+        # programme's approved reference design, not from prose.
         if not picked and not reports.is_engine_written(deliverable_code or ""):
-            flash("Tick at least one lifecycle activity.", "error")
+            flash("Choose a report to generate.", "error")
             return back
 
         source_id = (request.form.get("source_document_id") or "").strip()
@@ -1696,11 +1703,11 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                   f"names the one fact that would strengthen it; answer those below and "
                   f"regenerate before the gate is signed.", "warning")
         elif gate:
-            flash(f"{name} generated from {len(set(picked))} activities. It is now on file "
-                  f"as the evidence stage gate {gate} requires — review it before the gate "
-                  f"is signed.", "success")
+            flash(f"{name} written by the agent. It is now on file as the evidence stage "
+                  f"gate {gate} requires — review and edit it before the gate is signed.",
+                  "success")
         else:
-            flash(f"{name} generated from {len(set(picked))} activities.", "success")
+            flash(f"{name} written by the agent — review and edit it, then save.", "success")
 
         # IT OPENS, IT DOES NOT DOWNLOAD (owner, 2026-07-13: "it must create the concept note
         # report and open it in html page with pdf and email, just like the project design

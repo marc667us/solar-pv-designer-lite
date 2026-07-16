@@ -156,12 +156,11 @@ def test_the_page_offers_every_one_of_the_144_deliverables(ent, programme):
 
 
 def test_the_page_names_the_gate_each_of_the_nine_opens(ent, programme):
-    """The operator must know, BEFORE generating, that this is the gate's evidence.
+    """The operator must know, BEFORE clicking, which report is a gate's evidence.
 
-    The gate must be announced ON THE DELIVERABLE'S OWN OPTION. Merely asserting that the
-    nine gate codes appear somewhere on the page (as an earlier version of this test did --
-    Codex caught it) would pass even if every one of them were attached to the wrong
-    deliverable, which is the only way this label can actually be wrong.
+    OWNER 2026-07-15: reports are BUTTONS now, not <option>s. The gate must still be
+    announced ON THE REPORT'S OWN BUTTON -- not merely somewhere on the page, which would
+    pass even if the gate badge sat on the wrong report.
     """
     client, _wa, uid = ent
     _login(client, uid)
@@ -170,23 +169,30 @@ def test_the_page_names_the_gate_each_of_the_nine_opens(ent, programme):
 
     for code, doc_type in constants.DELIVERABLE_GATE_DOC_TYPE.items():
         gate = gates.GATE_OF_DOC_TYPE[doc_type]
-        # the <option> for THIS deliverable, up to the closing bracket of the open tag
-        m = re.search(rf'<option value="{code}"[^>]*>', body)
-        assert m, f"{code} is not on the page"
-        assert f'data-gate="{gate}"' in m.group(0), (
-            f"{code}'s own option does not announce that it opens {gate}: {m.group(0)}"
+        # the <button> for THIS deliverable, from its value to the closing tag
+        m = re.search(rf'<button[^>]*value="{code}"[^>]*>(.*?)</button>', body, re.S)
+        assert m, f"{code} is not a report button on the page"
+        assert gate in m.group(1), (
+            f"{code}'s own button does not announce that it opens {gate}: {m.group(0)[:200]}"
         )
     assert "opens stage gate G01" in body
 
 
-def test_free_form_remains_offered_and_is_labelled_as_opening_nothing(ent, programme):
-    """Not every document is one of the 144 -- but a free-form one must not look like one."""
+def test_free_form_is_no_longer_offered_reports_are_buttons(ent, programme):
+    """OWNER 2026-07-15: reports are buttons; the free-form picker option is gone.
+
+    The old page offered a "free-form document" option that satisfied no gate. The owner
+    replaced the whole picker with report buttons, so free-form is no longer offered on the
+    page (the route still accepts an empty deliverable_code for back-compat -- that is
+    covered by test_omitting_the_deliverable_still_generates_a_free_form_document).
+    """
     client, _wa, uid = ent
     _login(client, uid)
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
-    assert "free-form document" in body
-    assert "does not satisfy any stage gate" in body
+    assert "free-form document" not in body
+    assert 'name="deliverable_code"' in body           # the report buttons are present
+    assert 'type="checkbox" name="activities"' not in body   # no activity checkboxes
 
 
 # ------------------------------------------------- choosing one in the form opens the gate
@@ -268,8 +274,10 @@ def test_the_register_says_what_each_document_counts_as(ent, programme):
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
     # The charter generated above (G02), and the free-form document that opens nothing.
+    # OWNER 2026-07-15: a document that is not one of the 144 is now simply labelled a
+    # "Report"; the old "Free-form -- satisfies no gate" wording went with the picker option.
     assert "Gate G02 evidence" in body
-    assert "Free-form — satisfies no gate" in body
+    assert "Free-form — satisfies no gate" not in body
 
 
 # -------------------------------------------------- producing evidence is an EDIT, not a report
