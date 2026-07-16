@@ -136,7 +136,7 @@ jobs:
           echo ""
           echo "--- is the programme they belong to still alive? ---"
           psql "$DATABASE_URL" -c "
-            SELECT r.id, r.code, r.name, r.status, r.phase_code
+            SELECT r.id, r.code, r.name, r.status, r.current_phase_code
               FROM enterprise_programme_registry r
              WHERE r.id IN (SELECT DISTINCT programme_id FROM enterprise_activity_answers);"
 
