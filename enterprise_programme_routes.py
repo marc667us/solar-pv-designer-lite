@@ -1665,7 +1665,10 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                     title=(request.form.get("title") or "").strip(),
                     deliverable_code=deliverable_code,
                     source_document_id=source_document_id,
-                    use_ai=bool(request.form.get("use_ai")),
+                    # OWNER, 2026-07-15: the AI-drafting checkbox is gone -- the agent always
+                    # drafts. If no free provider is reachable the writer degrades to the
+                    # deterministic path on its own, so this is safe to pass unconditionally.
+                    use_ai=True,
                 )
             except EnterprisePermissionError:
                 abort(403)

@@ -129,14 +129,16 @@
 
   {# The document says which sections are thin; say it once more here, where the operator is
      actually reading it, rather than only in a flash they have already dismissed. #}
+  {# OWNER, 2026-07-15: no questions. Thin sections are marked in the body as a plain
+     "[To be completed]" note; the operator completes them by pressing Edit above and
+     typing the detail into the report itself. #}
   {% if thin %}
   <div class="alert alert-warning no-print">
     <i class="bi bi-pencil-square me-1"></i>
-    <strong>{{ thin }} section{{ '' if thin == 1 else 's' }} rest{{ 's' if thin == 1 else '' }}
-    on the programme's description alone.</strong>
-    Each one names, in italics, the single fact that would strengthen it. Answer those on the
-    <a href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme_id) }}">Lifecycle
-    Documents page</a> and regenerate — your answer becomes the section.
+    <strong>{{ thin }} section{{ '' if thin == 1 else 's' }} still need{{ '' if thin == 1 else 's' }}
+    a detail this programme has not recorded yet.</strong>
+    Each is marked <em>[To be completed]</em> in the report below. Press <strong>Edit</strong>
+    above to fill them in and save.
   </div>
   {% endif %}
 

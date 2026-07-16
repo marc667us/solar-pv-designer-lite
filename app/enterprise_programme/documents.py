@@ -1320,21 +1320,14 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
 
                         if thin:
                             gaps += 1
-                            # An already-asked question is REUSED rather than re-phrased --
-                            # both because re-asking the same thing in different words is
-                            # confusing, and because phrasing it costs another LLM call.
-                            question = (answered or {}).get("question")
-                            if not question:
-                                if may_use_ai:
-                                    ai_calls += 1
-                                    question = _question_for(text, facts)
-                                else:
-                                    question = (f"{text.rstrip('.')} — what should this "
-                                                f"programme record?")
-                            questions.append((code, question))
-                            md.append(f"*To strengthen this section: {question} "
-                                      f"Answer it on the Lifecycle Documents page and "
-                                      f"regenerate — your answer becomes this section.*")
+                            # OWNER, 2026-07-15: "remove ... questions". The app no longer puts
+                            # a question to the operator. The section is written from what IS
+                            # known; where a specific fact is missing the report says so as a
+                            # plain note, and the operator completes it by EDITING the report
+                            # (the report page has an Edit panel). The gap is still counted so
+                            # the footer can report it -- it is simply no longer a question.
+                            md.append("*[To be completed — edit this report to add this "
+                                      "detail.]*")
                             md.append("")
 
             md.append("")
@@ -1343,9 +1336,8 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
     md.append("")
     if gaps:
         md.append(f"*Written by SolarPro from {len(set(activity_codes))} selected lifecycle "
-                  f"activities. {gaps} section(s) would be stronger with one more fact from "
-                  f"you — each names what it needs. Answer them on the Lifecycle Documents "
-                  f"page and regenerate.*")
+                  f"activities. {gaps} section(s) need a fact this programme has not recorded "
+                  f"yet — each is marked above; edit this report to complete them.*")
     else:
         md.append(f"*Written by SolarPro from {len(set(activity_codes))} selected lifecycle "
                   f"activities, grounded throughout in the programme's own record.*")
@@ -1629,7 +1621,10 @@ def answer_sheet(c, tenant_id: str, programme_id: int) -> list[dict]:
     return out
 
 
-THIN_SECTION_MARKER = "*To strengthen this section:"
+# OWNER, 2026-07-15: a thin section is now marked with a plain completion note, not a
+# question. thin_sections() counts these so the footer and the route can still report how
+# much of a document rests on the programme's description alone.
+THIN_SECTION_MARKER = "*[To be completed"
 
 
 def thin_sections(markdown: str) -> int:

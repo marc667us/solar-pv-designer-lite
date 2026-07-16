@@ -95,8 +95,10 @@
       </div>
       <div class="card-body">
 
+        {# OWNER, 2026-07-15: no checkboxes. The agent always drafts (the route passes
+           use_ai unconditionally); the only choice here is an optional source document. #}
         <div class="row g-2 mb-3 align-items-end">
-          <div class="col-md-8">
+          <div class="col-12">
             <label class="form-label small">Build from source document (optional)</label>
             <select name="source_document_id" class="form-select form-select-sm">
               <option value="">— programme records only —</option>
@@ -104,15 +106,6 @@
               <option value="{{ d.id }}">{{ d.title }}</option>
               {% endfor %}
             </select>
-          </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="use_ai" id="entUseAi" checked/>
-              <label class="form-check-label small" for="entUseAi">
-                AI drafting
-                <i class="bi bi-info-circle" title="If a free AI provider is reachable the agent drafts each section. Drafts are labelled and never approve anything."></i>
-              </label>
-            </div>
           </div>
         </div>
 

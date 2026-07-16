@@ -216,13 +216,14 @@ def test_an_activity_the_app_KNOWS_is_written_not_asked(db):
     )
 
 
-def test_an_activity_the_app_CANNOT_ground_is_still_written_and_asks_underneath(db):
+def test_an_activity_the_app_CANNOT_ground_is_still_written_and_marked_to_complete(db):
     """The honest half, preserved: never invent -- but never hand back a blank either.
 
-    "Register the programme idea" is not a fact this app holds. The old code made that
-    section BE a question. Now the section is written from the programme's own description
-    and the question is asked UNDERNEATH it, and still recorded, so the answers form still
-    works and an answer still outranks everything.
+    "Register the programme idea" is not a fact this app holds. The old code made that section
+    BE a question; the interim code wrote the section and asked a question underneath it.
+    OWNER, 2026-07-15: "remove ... questions". Now the section is written from the programme's
+    own description and, where a specific fact is missing, marked with a plain [To be completed]
+    note the operator fills in by EDITING the report -- no question is ever put to them.
     """
     c, org, _o, pid, _op = db
 
@@ -231,18 +232,18 @@ def test_an_activity_the_app_CANNOT_ground_is_still_written_and_asks_underneath(
         use_ai=False, audit=_audit(c),
     ))["markdown"]
 
-    # WRITTEN: the section has prose, and it is not a bare question.
+    # WRITTEN: the section has prose, and it is neither a bare question nor a question line.
     assert "**QUESTION" not in md
+    assert "*To strengthen" not in md          # the old question line is gone for good
     body = md.split("### ", 1)[1]
-    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
-    assert len(lines) >= 2 and not lines[1].startswith("*To strengthen"), (
-        "the section is a question with no prose above it"
-    )
+    prose = [ln.strip() for ln in body.splitlines()
+             if ln.strip() and not ln.strip().startswith("*")]
+    assert prose, "the section is a marker with no prose above it"
 
-    # ...and it ASKS, underneath, for the one thing that would strengthen it.
+    # ...and where it lacks a fact it says so as a plain completion note, NOT a question:
+    # nothing is put on a questions list.
     assert documents.THIN_SECTION_MARKER in md
-    open_qs = documents.outstanding_questions(c, org, pid)
-    assert [q["activity_code"] for q in open_qs] == ["P01_A01"]
+    assert documents.outstanding_questions(c, org, pid) == []
 
 
 def test_an_unrelated_passage_is_never_quoted_under_an_activity(db):
@@ -369,32 +370,35 @@ def test_a_generated_document_renders_to_a_real_pdf(db):
 # --- the app asks, the operator answers, the answer becomes the content ------
 
 
-def test_answering_a_question_makes_the_answer_the_section(db):
-    """The whole loop: generate -> app asks -> operator answers -> regenerate -> written.
+def test_a_completed_answer_becomes_the_section_on_regenerate(db):
+    """The loop, minus the question: generate -> section marked [To be completed] ->
+    operator completes it -> regenerate -> written.
 
-    Driven with P01_A01 ("register the programme idea"), which is a genuine gap -- the app
-    holds no fact for it. P01_A02 is no longer a gap: the app knows the sponsor and writes
-    it. The loop under test is what happens where the app truly does NOT know.
+    OWNER, 2026-07-15: "remove ... questions". Generate no longer raises a question; where the
+    app holds no fact it marks the section for completion. The operator completes it (the same
+    save the report's Edit panel uses), and their words become the section, outranking
+    everything the app inferred -- they wrote it precisely because the app did not know.
+
+    Driven with P01_A01 ("register the programme idea"), a genuine gap the app holds no fact
+    for. P01_A02 is not a gap: the app knows the sponsor and writes it.
     """
     c, org, _o, pid, _op = db
 
-    # 1. Generate. The app writes the section from the description -- and, because it has no
-    #    specific fact for it, asks underneath for the one thing that would strengthen it.
-    documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A01"],
-                                use_ai=False, audit=_audit(c))
-    open_qs = documents.outstanding_questions(c, org, pid)
-    assert len(open_qs) == 1
+    # 1. Generate. The section is written from the description and, lacking a specific fact,
+    #    marked [To be completed] -- but NO question is put to the operator.
+    md = documents.get_document(c, org, documents.generate_document(
+        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
+    ))["markdown"]
+    assert documents.THIN_SECTION_MARKER in md
+    assert documents.outstanding_questions(c, org, pid) == []   # no question raised
 
-    # 2. Answer it.
+    # 2. The operator completes it -- the same save the report's Edit panel performs.
     n = documents.save_answers(c, org, OWNER, pid,
                                {"P01_A01": "The idea was tabled by the Ministry in 2026."},
                                audit=_audit(c))
     assert n == 1
-    assert documents.outstanding_questions(c, org, pid) == []
 
-    # 3. Regenerate -- the answer IS the section now, and nothing is outstanding. The
-    #    operator's own words outrank everything the app inferred, which is the point: they
-    #    were asked precisely because the app did not know.
+    # 3. Regenerate -- the completed answer IS the section now, and nothing is left to finish.
     md = documents.get_document(c, org, documents.generate_document(
         c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
     ))["markdown"]
