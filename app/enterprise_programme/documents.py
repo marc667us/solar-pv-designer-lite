@@ -69,16 +69,15 @@ MAX_EXTRACTED_CHARS = 2 * 1024 * 1024       # the text we keep; ~500 pages of pr
 # HOW MANY ACTIVITIES ONE DOCUMENT MAY COVER, and how many of them may cost an LLM call
 # (Supervisor slice-6.6, HIGH -- an ordinary click could have taken the site down).
 #
-# The picker has a one-click "select the whole stage" button, and Planning alone holds 183
-# activities. With AI drafting on (it is on by default) each unanswered activity costs one
-# _ai_write call, plus a _question_for call when the model says INSUFFICIENT -- so one click
-# was up to 366 SEQUENTIAL LLM round trips inside a single HTTP request, on a free-tier
-# provider, holding a database connection open the whole time. Gunicorn's timeout is 120s and
-# the app runs two workers: two such clicks is an outage.
+# A report covers a whole phase, and Planning alone holds many activities. With AI drafting on
+# (it always is now) each ungrounded activity costs one _ai_write call -- so one click could be
+# dozens of SEQUENTIAL LLM round trips inside a single HTTP request, on a free-tier provider,
+# holding a database connection open the whole time. Gunicorn's timeout is 120s and the app
+# runs two workers: enough such clicks is an outage.
 #
 # So: a hard ceiling on the document, and a separate, smaller budget on how many of its
 # sections may go to the model. Beyond the AI budget the document still generates -- it falls
-# back to the deterministic path (quote the source passage, else ask a question), which is
+# back to the deterministic path (quote the source passage, else write from facts), which is
 # exactly the behaviour when no LLM is reachable at all. A long document degrades; it never
 # hangs.
 MAX_ACTIVITIES_PER_DOCUMENT = 60
@@ -127,22 +126,11 @@ _NEW_COLUMNS = [
 ]
 
 
-_ANSWERS_SQLITE = """
-    CREATE TABLE IF NOT EXISTS enterprise_activity_answers (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-        tenant_id           TEXT NOT NULL,
-        programme_id        INTEGER NOT NULL,
-        activity_code       TEXT NOT NULL,
-        question            TEXT NOT NULL,
-        answer              TEXT,
-        answered_by_user_id INTEGER,
-        answered_at         TEXT,
-        created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (tenant_id, programme_id)
-            REFERENCES enterprise_programme_registry (tenant_id, id) ON DELETE CASCADE
-    )
-"""
+# OWNER, 2026-07-15: "we not need the Q and A engine -- rip it off." The per-activity
+# question/answer store (enterprise_activity_answers) and every function that read or wrote it
+# are gone. A report is written by the agent and completed by the operator EDITING the report
+# itself (enterprise_document_edit) -- there is no separate answer store any more. The live
+# Postgres table (migration 028) is left in place, unused; a later migration can drop it.
 
 
 def ensure_schema(c) -> None:
@@ -168,10 +156,6 @@ def ensure_schema(c) -> None:
     for name, decl in _NEW_COLUMNS:
         if name not in have:
             c.execute(f"ALTER TABLE enterprise_documents ADD COLUMN {name} {decl}")
-
-    c.execute(_ANSWERS_SQLITE)
-    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_activity_answer "
-              "ON enterprise_activity_answers (tenant_id, programme_id, activity_code)")
 
 
 # --- reading words out of an upload -----------------------------------------
@@ -577,6 +561,14 @@ _TOPICS: tuple[tuple[tuple[str, ...], str], ...] = (
     # answered it with the programme's geography, which is a confident non-answer. Better it
     # falls through and is written from the description, honestly, with a question under it.
     (("site", "survey", "location", "geograph", "region", "area", "scope"), "sites"),
+    # DESIGN PHRASES BEAT THE CAPACITY NEEDLES, and must be matched before them (Codex, rec A
+    # on the Rev 4 rip-out). "Determine whether the programme will use: Standard distributed
+    # designs; Generation-station designs; ..." is a question about the DESIGN STRATEGY, but
+    # `generation` matched it for `capacity` first and answered it with a capacity fact. Only
+    # whole phrases here -- a bare "generation-station" needle would also swallow "Assess
+    # possible generation-station LOCATIONS", which is a siting question and belongs to `sites`.
+    (("distributed design", "mini-grid", "hybrid design", "design template",
+      "design strategy"), "design"),
     (("capacity", "kwp", "demand", "load", "energy", "generation", "size", "sizing"), "capacity"),
     (("cost", "budget", "capex", "opex", "financ", "fund", "tariff", "invest", "price"), "money"),
     (("risk", "mitigat", "issue", "assumption", "constraint"), "risk"),
@@ -679,7 +671,15 @@ def _facts_for_topic(topic: str, facts: dict) -> list[str]:
         if kwp:
             out.append(f"{name} targets {_num(kwp)} kWp of installed capacity"
                        + (f" across {_num(ben)} beneficiaries" if ben else "") + ".")
-        if strategy:
+        # THE DESIGN STRATEGY IS SUPPORTING CONTEXT HERE, NOT A CAPACITY FACT (Codex, rec A
+        # on the Rev 4 rip-out). Unguarded, it was the ONLY sentence this topic could offer a
+        # programme with no capacity recorded yet -- and since _topic_of resolves `energy` and
+        # `generation` to `capacity` before `design`, unrelated activities ("Identify the
+        # energy-access problem", "Determine whether the programme will use ...
+        # Generation-station designs") each printed it, which is the owner's 2026-07-14 "same
+        # statement" bug. It now rides along with a real capacity fact or not at all; the
+        # `design` topic states it in its own right.
+        if strategy and (kwp or tf.get("kwp")):
             out.append(f"Its recorded design strategy is {strategy}.")
         # The DESIGNED capacity, not merely the targeted one. A target is an intention; the
         # reference design is what the programme actually engineered, and a feasibility or
@@ -749,17 +749,44 @@ def _facts_for_topic(topic: str, facts: dict) -> list[str]:
     return out
 
 
+def _first_time_said(prose: str, stated: set[str]) -> bool:
+    """Is this the first section to make this statement? Records it if so.
+
+    Input:  the prose a section is about to assert, the set of statements already made
+            (mutated -- the caller passes one set per document).
+    Output: True if the document has not said this yet; False if it has.
+
+    THE OWNER'S BUG, 2026-07-14: "the agent just answered every question with the same
+    statement". A fact is stated ONCE, under the activity that reaches it first; a section
+    that would only repeat it is left as a gap the operator can complete instead.
+
+    Compared on normalised whitespace and case, because "Its recorded design strategy is
+    standard." and "Its recorded design strategy is standard" are the same sentence to a
+    reader and only differ to a set.
+
+    Applied to prose the app ASSERTS IN ITS OWN VOICE -- the model's writing and the facts
+    writer. NOT to a source-document quote: a quote is attributed to the document it came
+    from, so the same passage appearing under two activities reads as a citation rather than
+    as the app repeating itself, and blanking it would throw away material the operator
+    uploaded on purpose.
+    """
+    key = " ".join(prose.split()).strip().lower()
+    if not key or key in stated:
+        return False
+    stated.add(key)
+    return True
+
+
 def _write_from_facts(activity_text: str, facts: dict) -> tuple[str, bool]:
     """Write an activity's section from what the app already knows. No LLM, no invention.
 
     Input:  the activity sentence, the programme facts.
     Output: (the section's prose, whether it is THIN).
 
-    "Thin" means the app had no specific fact for what this activity asks about, so the
-    section is grounded in the programme's description instead. The section is still WRITTEN
-    -- the caller adds the question underneath so the operator can strengthen it. That is the
-    whole correction the owner asked for: a written section with a question under it, never a
-    question where a section should be.
+    "Thin" means the app had no specific fact for what this activity asks about. The caller
+    marks such a section [To be completed] and the operator fills it in by EDITING the report
+    (OWNER, 2026-07-15: "remove them checkboxes and questions"). What the app must never do is
+    write a section that LOOKS answered when it is not.
 
     THERE IS NO BOILERPLATE LEAD SENTENCE. An earlier draft opened every section with "For X,
     this is addressed as follows: <the activity, restated>" -- which is not writing, it is
@@ -779,7 +806,7 @@ def _write_from_facts(activity_text: str, facts: dict) -> tuple[str, bool]:
          blank, because a blank is honest and asks to be filled.
 
     So when the app holds no fact bearing on this activity, it now says NOTHING and returns
-    thin. The caller writes the question instead. Silence is the honest failure.
+    thin. The caller marks the section [To be completed]. Silence is the honest failure.
     """
     body = _facts_for_topic(_topic_of(activity_text), facts)
     if body:
@@ -912,8 +939,9 @@ def _ai_write(activity_text: str, facts: dict, passage_body: str = "") -> str | 
     of a ministry paper, things nobody ever said. A programme document that invents its
     sponsor is not a draft with a small error in it; it is a liability.
 
-    When it replies INSUFFICIENT we do not paper over the gap either: the caller turns it
-    into a QUESTION for the operator (see _question_for).
+    When it replies INSUFFICIENT we do not paper over the gap either: the caller writes the
+    section from what IS known and marks the remainder "[To be completed]" for the operator
+    to finish by editing the report.
 
     Routed through api_manager._AIClient.chat(), the app's ONLY sanctioned LLM gateway
     (free-tier chain: OpenRouter free -> Ollama -> GitHub Models -> rule-based).
@@ -965,178 +993,20 @@ def _ai_write(activity_text: str, facts: dict, passage_body: str = "") -> str | 
     return reply
 
 
-def _question_for(activity_text: str, facts: dict) -> str:
-    """The question to put to the operator when the app cannot write an activity.
-
-    Input:  the activity, the programme facts.
-    Output: a question, phrased for a human.
-
-    WHY THIS EXISTS (owner, 2026-07-13: "so when program use must ask more questions").
-    The app's previous behaviour was to print TO BE COMPLETED and move on. That is honest
-    but it is not useful: it tells the operator a hole exists without telling them what
-    would fill it. An activity the app cannot write is precisely an activity where it needs
-    something from the human -- so it should ASK.
-
-    Doc 3's activities are already imperatives ("Identify the sponsoring institution."), so
-    the deterministic phrasing is a faithful question with no model needed. The model
-    sharpens it into something programme-specific when it is reachable; if it is not, the
-    operator still gets a real question rather than a shrug.
-    """
-    stem = activity_text.rstrip(".").strip()
-    fallback = f"{stem} — what should this programme record?"
-
-    try:
-        from api_manager import api as _api
-        reply, provider = _api.ai.chat(
-            [{"role": "user", "content":
-                f"{_brief(facts)}\n\n"
-                f"The programme's description does not contain enough information to write "
-                f"this lifecycle activity:\n{activity_text}\n\n"
-                f"Write ONE short, specific question to ask the programme owner so that "
-                f"this activity can be written. Ask only for what is missing. Output the "
-                f"question and nothing else."}],
-            system="You ask precise clarifying questions. One question. No preamble.",
-            max_tokens=90,
-            endpoint="enterprise_document_questions",
-        )
-    except Exception:
-        return fallback
-
-    if not reply or provider in ("rule_based", "capped"):
-        return fallback
-    reply = reply.strip().splitlines()[0].strip()
-    # A "question" with no question mark is usually the model narrating instead of asking.
-    return reply if reply.endswith("?") and len(reply) > 10 else fallback
-
-
-# --- the questions the app has asked, and the answers it has been given -------
-
-def get_answers(c, tenant_id: str, programme_id: int) -> dict[str, dict]:
-    """Every question raised for this programme, and its answer if it has one.
-
-    Input:  connection, tenant, programme.
-    Output: {activity_code: {"question", "answer", "answered": bool}}
-
-    ONE query, not one per activity: a 40-activity document must not mean 40 round trips.
-    """
-    rows = c.execute(
-        "SELECT activity_code, question, answer, answered_at "
-        "  FROM enterprise_activity_answers WHERE tenant_id=? AND programme_id=?",
-        (tenant_id, programme_id),
-    ).fetchall()
-    return {
-        r[0]: {"question": r[1], "answer": r[2],
-               "answered": bool(r[3] and (r[2] or "").strip())}
-        for r in rows
-    }
-
-
-def outstanding_questions(c, tenant_id: str, programme_id: int) -> list[dict]:
-    """The questions this programme still owes an answer to.
-
-    Input:  connection, tenant, programme.
-    Output: list of {activity_code, activity, question}, in lifecycle order.
-    """
-    answers = get_answers(c, tenant_id, programme_id)
-    out = []
-    for phase_code, _no, _name in PHASES:
-        for acode, atext in PHASE_ACTIVITIES[phase_code]:
-            a = answers.get(acode)
-            if a and not a["answered"]:
-                out.append({"activity_code": acode, "activity": atext,
-                            "question": a["question"]})
-    return out
-
-
-def save_answers(c, tenant_id: str, user_id: int, programme_id: int,
-                 answers: dict[str, str], audit=None) -> int:
-    """Record the operator's answers. They become the content of those activities.
-
-    Input:  connection, tenant, acting user, programme, {activity_code: answer text}.
-    Output: how many answers were actually stored.
-    Raises: EnterprisePermissionError (403), DocumentError (409 / C13).
-
-    An answer is the operator's own words and OUTRANKS everything the app could infer -- the
-    model's draft, the source document's passage, all of it. They were asked precisely
-    because the app did not know; having answered, they are the authority.
-
-    Blank answers are skipped rather than stored, so clearing a box does not silently erase
-    an answer that was already given and already used in a document.
-    """
-    from . import workflows
-    workflows._load_programme(c, tenant_id, programme_id)           # C13 FIRST
-    rbac.require_permission(c, tenant_id, user_id, "programme.edit",
-                            programme_id=programme_id)
-
-    clean = {k: v.strip() for k, v in (answers or {}).items()
-             if k in ACTIVITY_INDEX and (v or "").strip()}
-    if not clean:
-        return 0
-
-    audit = audit or txn.audit_on(c)
-    with txn.atomic(c):
-        for acode, text in clean.items():
-            # ONE ATOMIC UPSERT, not UPDATE-then-INSERT-if-rowcount-0 (Codex slice-6.6, MED).
-            # The read-modify-write let two operators answering the same question at the same
-            # moment BOTH see rowcount == 0, and then one of the two INSERTs died on the
-            # unique index -- a 500 for a user who did nothing wrong. The upsert makes the
-            # database settle it.
-            #
-            # LAST WRITE WINS, DELIBERATELY. Two people answering the same question is not a
-            # conflict to escalate: an answer is editable prose, the audit row records who
-            # wrote it and when, and refusing the second writer would mean an operator could
-            # never CORRECT an answer they had already given. What must never happen is a
-            # silent loss with no trace -- and the audit row is the trace.
-            c.execute(
-                "INSERT INTO enterprise_activity_answers "
-                "(tenant_id, programme_id, activity_code, question, answer, "
-                " answered_by_user_id, answered_at) "
-                "VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP) "
-                "ON CONFLICT (tenant_id, programme_id, activity_code) DO UPDATE SET "
-                "  answer = excluded.answer, "
-                "  answered_by_user_id = excluded.answered_by_user_id, "
-                "  answered_at = CURRENT_TIMESTAMP, "
-                "  updated_at = CURRENT_TIMESTAMP",
-                (tenant_id, programme_id, acode,
-                 ACTIVITY_INDEX[acode][1], text, user_id),
-            )
-
-        _require_audit(
-            audit("ENTERPRISE_ACTIVITY_ANSWERED", user_id=user_id, tenant_id=tenant_id,
-                  details={"programme_id": programme_id,
-                           "activity_codes": sorted(clean),
-                           "count": len(clean)}),
-            "answers",
-        )
-    return len(clean)
-
-
-def _raise_question(c, tenant_id: str, programme_id: int, activity_code: str,
-                    question: str) -> None:
-    """Record that the app needs the operator to answer this, if it has not asked already.
-
-    ON CONFLICT DO NOTHING is the whole point: regenerating a document must not re-ask a
-    question that is already outstanding, and must never overwrite an answer that has
-    already been given.
-    """
-    c.execute(
-        "INSERT INTO enterprise_activity_answers "
-        "(tenant_id, programme_id, activity_code, question) VALUES (?,?,?,?) "
-        "ON CONFLICT (tenant_id, programme_id, activity_code) DO NOTHING",
-        (tenant_id, programme_id, activity_code, question),
-    )
-
-
 def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[str], *,
                    title: str, source_text: str = "",
-                   use_ai: bool = True) -> tuple[str, list[tuple[str, str]]]:
+                   use_ai: bool = True) -> str:
     """Assemble the document. Pure: reads, does not write.
 
-    Input:  connection, tenant, programme, the ticked activity codes, the document title,
-            the source document's text (may be ""), whether to try the LLM.
-    Output: (markdown, [(activity_code, question)]) -- the document, and the questions the
-            app needs answered before it can finish the sections it could not write.
+    Input:  connection, tenant, programme, the activity codes the report covers, the document
+            title, the source document's text (may be ""), whether to try the LLM.
+    Output: the document's markdown.
     Raises: DocumentError on an unknown activity code or an empty selection.
+
+    This used to also return the questions the app wanted answered. OWNER, 2026-07-15:
+    "remove them checkboxes and questions" -- a section the app cannot ground is marked
+    [To be completed] and the operator fills it in by EDITING the report, so there is no
+    question list to hand back any more.
 
     Activities are emitted GROUPED BY LIFECYCLE STAGE, then by phase, in lifecycle order --
     never in the order they were ticked. A document that interleaves Planning and Closure
@@ -1163,7 +1033,6 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
     # trust the tool again after.
     facts["tech_fin"] = technical_financial_background(c, tenant_id, programme_id)
     passages = _passages(source_text)
-    answers = get_answers(c, tenant_id, programme_id)
 
     # Group by phase, preserving doc-3 order within each phase.
     by_phase: dict[str, list[str]] = {}
@@ -1173,7 +1042,6 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
     stages_used = {STAGE_OF_PHASE[p] for p in by_phase}
 
     md: list[str] = []
-    questions: list[tuple[str, str]] = []
 
     md.append(f"# {title}")
     md.append("")
@@ -1206,16 +1074,34 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
     # by any test asserting on it.
     md.append("Every section below is written from the programme's own description, its "
               "records, and any uploaded source document. Nothing here is invented. Where "
-              "the app held no specific fact for an activity, the section is still written "
-              "from what is known and asks underneath for the one thing that would "
-              "strengthen it — answer it and regenerate, and your answer becomes the "
-              "section.")
+              "the app held no specific fact for a section, the section is marked "
+              "[To be completed] — press Edit on this report to fill it in and save.")
     md.append("")
     md.append("---")
     md.append("")
 
     gaps = 0
     ai_calls = 0
+    # EVERY STATEMENT THIS DOCUMENT HAS ALREADY MADE. A fact is stated ONCE, under the
+    # activity that reaches it first; an activity that would only repeat it is left as a gap
+    # for the operator to complete.
+    #
+    # THE OWNER'S BUG, 2026-07-14: "the agent just answered every question with the same
+    # statement". It was fixed then in the per-activity answer engine -- which the Rev 4
+    # rebuild has since deleted -- leaving THIS path, the only one the operator now uses,
+    # with the defect still in it.
+    #
+    # It is structural, not cosmetic. _topic_of matches needles against the activity
+    # sentence, first match wins, so unrelated activities land on one topic: "Identify the
+    # energy-access problem" hits `energy` -> capacity, and "Determine whether the programme
+    # will use ... Generation-station designs" hits `generation` -> capacity too. For a young
+    # programme that topic can offer exactly one sentence, so both sections print it. The
+    # narrower the programme's record, the more sections collapse onto the same line.
+    #
+    # Deduplicating here (rather than widening the needle table) keeps the honest failure the
+    # rest of this module is built on: a repeat becomes [To be completed], which the operator
+    # can see and fix, instead of a confident sentence answering a question nobody asked.
+    stated: set[str] = set()
     for stage_code, stage_name, stage_phases in LIFECYCLE_STAGES:
         if stage_code not in stages_used:
             continue
@@ -1239,15 +1125,11 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
 
                 # THE PRECEDENCE, and every step of it is deliberate:
                 #
-                #   1. THE OPERATOR'S OWN ANSWER. They were asked precisely because the app did
-                #      not know; having answered, they are the authority and nothing the model
-                #      infers may overrule them.
-                #   2. THE SOURCE DOCUMENT. Written for this programme by its own people.
-                #   3. THE PROGRAMME DESCRIPTION, written up by the app. This is the owner's
+                #   1. THE SOURCE DOCUMENT. Written for this programme by its own people.
+                #   2. THE PROGRAMME DESCRIPTION, written up by the app. This is the owner's
                 #      requirement -- the app writes the activity, it does not merely quote.
-                #   4. ASK. Not "TO BE COMPLETED" -- a question the operator can actually answer,
-                #      which then becomes (1) on the next generate.
-                answered = answers.get(code)
+                #   3. MARK [To be completed]. OWNER 2026-07-15: no questions -- the operator
+                #      completes it by EDITING the report itself.
                 hit = find_relevant_passage(text, passages)
 
                 # THE AI BUDGET. Every call is a sequential round trip to a free-tier
@@ -1258,16 +1140,17 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
                 # availability.
                 may_use_ai = use_ai and ai_calls < MAX_AI_ACTIVITIES
 
-                if answered and answered["answered"]:
-                    md.append(answered["answer"])
-                    md.append("")
-
-                elif hit:
+                if hit:
                     heading, body = hit
                     written = None
                     if may_use_ai:
                         ai_calls += 1
                         written = _ai_write(text, facts, body)
+                    if written and not _first_time_said(written, stated):
+                        # Already said under an earlier activity. Fall through to the quote,
+                        # which is attributed to the source and so is not the app repeating
+                        # itself.
+                        written = None
                     if written:
                         md.append(written)
                         md.append("")
@@ -1286,6 +1169,10 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
                     if may_use_ai:
                         ai_calls += 1
                         written = _ai_write(text, facts)
+                    if written and not _first_time_said(written, stated):
+                        # Already said. Fall through to the facts writer, which will find the
+                        # same fact already stated and leave this section as an honest gap.
+                        written = None
 
                     if written:
                         md.append(written)
@@ -1302,17 +1189,19 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
                         # opened their first concept note and found fourteen of them.
                         #
                         # Now the app writes the section from the programme's own facts, and
-                        # where it lacks a specific fact it says so UNDER a real section and
-                        # asks for it. The question survives (it is still recorded, still
-                        # answerable, and an answer still outranks everything) -- but it
-                        # supplements the document instead of replacing it.
+                        # where it lacks a specific fact it marks the section [To be
+                        # completed] for the operator to finish by EDITING the report.
                         prose, thin = _write_from_facts(text, facts)
+                        if prose and not _first_time_said(prose, stated):
+                            # Already said, under an earlier activity. Saying it again is the
+                            # owner's bug, so this section becomes an honest gap instead.
+                            prose, thin = "", True
                         if prose:
                             md.append(prose)
                             md.append("")
                         else:
                             # The app holds no fact bearing on this activity. It says so, in
-                            # one line, and then asks. What it must NOT do is pad the section
+                            # one line. What it must NOT do is pad the section
                             # with the programme's description -- a non-empty section that
                             # answers nothing reads as done, and the gap never surfaces.
                             md.append("*Not yet recorded.*")
@@ -1342,288 +1231,11 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
         md.append(f"*Written by SolarPro from {len(set(activity_codes))} selected lifecycle "
                   f"activities, grounded throughout in the programme's own record.*")
     md.append("")
-    return "\n".join(md), questions
+    return "\n".join(md)
 
 
 # The marker build_markdown writes under a section it wrote but could not ground in a
 # specific programme fact. The section IS written; this flags that it could be stronger.
-# --- THE AGENT ANSWERS THE QUESTIONS -----------------------------------------
-#
-# OWNER, 2026-07-14: "the benefit of using the app is that an agent will answer the
-# questions", and "take all the questions across each phase and provide default answers and
-# give the user access to edit your answer if needed and save".
-#
-# So the operator must never meet a blank box. Every activity in a phase arrives with an
-# answer ALREADY DRAFTED by the app; the operator's job is to correct what is wrong, not to
-# compose from nothing.
-#
-# A DRAFT IS NOT AN ANSWER, AND THE DATABASE KNOWS THE DIFFERENCE. A drafted answer is stored
-# with `answer` set and `answered_at` still NULL. `get_answers` reports answered=False for
-# it, so:
-#   * the document writer does not treat it as the operator's own words (an operator answer
-#     OUTRANKS the model, and a machine draft must never inherit that authority);
-#   * it still counts as an outstanding question, because a human has not confirmed it.
-# The moment the operator presses Save, `save_answers` stamps `answered_at` and the same text
-# becomes theirs. Nothing is lost, and nothing is claimed on their behalf.
-#
-# WHY BATCHED. There are 453 activities across the 16 phases, up to 38 in a single phase. One
-# model call each would be twenty minutes of wall clock and would blow the request timeout
-# long before it finished. One call answers a batch, so a whole phase costs a handful.
-
-_DRAFT_BATCH = 8            # activities per model call
-_DRAFT_AI_BUDGET_SECONDS = 55.0   # then fall back to facts-only, well inside gunicorn's 120s
-
-
-def _draft_batch_ai(activities: list[tuple[str, str]], facts: dict,
-                    deadline: float | None = None) -> dict[str, str]:
-    """Ask the model to answer several activities in ONE call.
-
-    Input:  [(activity_code, activity_text), ...] and the programme facts.
-    Output: {activity_code: answer}. Codes it could not ground are simply ABSENT -- the
-            caller writes those from facts instead. Never raises.
-
-    The model is told to omit what it cannot ground rather than to fill the gap. A governance
-    document that invents its sponsor is not a draft with a small error in it; the omission
-    is the feature.
-    """
-    listing = "\n".join(f"{code}: {text}" for code, text in activities)
-    try:
-        from api_manager import api as _api
-        reply, provider = _api.ai.chat(
-            [{"role": "user", "content":
-                f"{_brief(facts)}\n\n"
-                f"Lifecycle activities to answer:\n{listing}\n\n"
-                f"For EACH activity above, write 2-3 sentences answering it FOR THIS "
-                f"PROGRAMME, using ONLY the programme information above. Do not invent "
-                f"institutions, figures, dates or commitments. OMIT any activity the "
-                f"information above does not let you answer -- omitting is correct and "
-                f"expected. Reply with a JSON object only: "
-                f'{{"ACTIVITY_CODE": "the answer", ...}}'}],
-            system=("You draft sections of solar programme governance documents. Be "
-                    "concrete, factual and brief. Never invent facts that are not given to "
-                    "you; omit the activity instead. Reply with a JSON object and nothing "
-                    "else -- no prose, no code fence."),
-            max_tokens=1400,
-            endpoint="enterprise_answer_drafting",
-            # THE HARD CEILING. Without it one batch could try five fallback models at 30s
-            # each -- 150s, past gunicorn's 120s timeout, hanging the single free-tier
-            # instance for everybody (Codex, HIGH). The budget is now enforced INSIDE the
-            # HTTP call, not merely checked between batches.
-            deadline=deadline,
-        )
-    except Exception:
-        return {}
-
-    if not reply or provider in ("rule_based", "capped"):
-        return {}
-
-    # Models fence their JSON even when told not to. Take the outermost object.
-    m = re.search(r"\{.*\}", reply, re.S)
-    if not m:
-        return {}
-    try:
-        data = json.loads(m.group(0))
-    except ValueError:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-
-    valid = {code for code, _t in activities}
-    return {
-        k: v.strip()
-        for k, v in data.items()
-        # A code we did not ask about is the model hallucinating an activity. Drop it: it
-        # would otherwise be stored against a real activity_code somewhere else in the phase.
-        if k in valid and isinstance(v, str) and v.strip()
-        and "INSUFFICIENT" not in v.upper()
-    }
-
-
-def draft_answers(c, tenant_id: str, user_id: int, programme_id: int, *,
-                  phase_code: str = "", use_ai: bool = True, audit=None) -> dict:
-    """Have the agent answer every unanswered activity, so the operator edits, never composes.
-
-    Input:  connection, tenant, acting user, programme; a phase code ("" = every phase);
-            use_ai (False writes from stored facts alone -- deterministic, used by tests).
-    Output: {"drafted": int, "ai": int, "from_facts": int, "skipped_answered": int}.
-    Raises: EnterprisePermissionError (403), DocumentError (C13 -> 404).
-
-    NEVER OVERWRITES A HUMAN ANSWER. The upsert's WHERE clause refuses any row whose
-    `answered_at` is set. Re-running this must be safe -- an operator who has spent an hour
-    answering the Feasibility phase by hand must be able to press "draft the rest" without
-    losing a word of it.
-    """
-    from . import workflows
-    workflows._load_programme(c, tenant_id, programme_id)            # C13 FIRST
-    rbac.require_permission(c, tenant_id, user_id, "programme.edit",
-                            programme_id=programme_id)
-
-    if phase_code and phase_code not in PHASE_ACTIVITIES:
-        raise DocumentError("C00", f"no such lifecycle phase: {phase_code}")
-
-    facts = programme_facts(c, tenant_id, programme_id)
-    # Read ONCE for the whole run, not once per activity: this reaches the design engine, and
-    # a 453-activity draft must not mean 453 trips to it.
-    facts["tech_fin"] = technical_financial_background(c, tenant_id, programme_id)
-    existing = get_answers(c, tenant_id, programme_id)
-
-    phases = [phase_code] if phase_code else [p for p, _n, _nm in PHASES]
-    todo: list[tuple[str, str]] = []
-    skipped = 0
-    for pcode in phases:
-        for acode, atext in PHASE_ACTIVITIES[pcode]:
-            if existing.get(acode, {}).get("answered"):
-                skipped += 1                 # the operator has spoken; leave it alone
-                continue
-            todo.append((acode, atext))
-
-    drafted: dict[str, str] = {}
-    from_ai: set[str] = set()
-
-    if use_ai and todo:
-        import time as _time
-        deadline = _time.time() + _DRAFT_AI_BUDGET_SECONDS
-        for i in range(0, len(todo), _DRAFT_BATCH):
-            if _time.time() >= deadline:
-                # Out of time, not out of answers: everything left is written from facts
-                # below. A slow model must degrade the PROSE, never leave a box empty.
-                break
-            batch = todo[i:i + _DRAFT_BATCH]
-            # A SERVICE MUST NOT TRUST ITS CALLER, and a model is the least trustworthy
-            # caller there is. _draft_batch_ai already drops codes it was not asked about,
-            # but this loop is what WRITES to the database: an unknown code reaching the
-            # upsert would blow up on ACTIVITY_INDEX, and a code from ANOTHER phase would be
-            # stored against a real activity the operator never had drafted. Filter here too.
-            got = {k: v for k, v in _draft_batch_ai(batch, facts, deadline).items()
-                   if k in {code for code, _t in batch}}
-            drafted.update(got)
-            from_ai.update(got)
-
-    # Whatever the model did not ground, the app writes from what it actually knows. This is
-    # the same writer the document itself uses, so a drafted answer and a generated section
-    # never disagree about the facts.
-    #
-    # AN ACTIVITY THE APP HAS NO FACT FOR IS LEFT ALONE -- not filled. _write_from_facts now
-    # returns "" there rather than echoing the programme description, and writing "" would be
-    # the same lie in a shorter form: a row exists, the page counts it as drafted, and the
-    # operator scrolls past an empty box believing the agent had its say. It stays UNANSWERED,
-    # its question stays visible, and the count below reports it honestly.
-    #
-    # NO SENTENCE IS EVER WRITTEN TWICE. This is the owner's bug of 2026-07-14 -- "the agent
-    # just answered every question with the same statement" -- and its cause is structural:
-    # _facts_for_topic keys on the TOPIC, not on the activity, so every activity that mentions
-    # a site got the same paragraph about the site register, and every activity that mentions
-    # money got the same paragraph about the budget. Across 453 activities and twelve topics
-    # that is a dozen paragraphs, pasted hundreds of times.
-    #
-    # The deterministic writer cannot answer 453 distinct questions from ten stored fields, and
-    # pretending otherwise is what produced the wall of duplicates. So a fact is stated ONCE,
-    # under the activity that reaches it first, and any later activity that would receive the
-    # very same words is left unanswered with its question showing. A repeated paragraph is not
-    # a second answer; it is the first answer, in the wrong place, hiding a question.
-    #
-    # Deduped against what is ALREADY STORED as well as against this run, so pressing the
-    # button twice cannot slowly fill the phase with copies of paragraph one.
-    seen_bodies = {(a.get("answer") or "").strip()
-                   for a in existing.values() if (a.get("answer") or "").strip()}
-    seen_bodies.update(t.strip() for t in drafted.values())
-
-    unanswered = 0
-    for acode, atext in todo:
-        if acode in drafted:
-            continue
-        body, _thin = _write_from_facts(atext, facts)
-        body = body.strip()
-
-        # AN ACTIVITY IS NEVER A DUPLICATE OF ITSELF. Its own previous draft is in
-        # `seen_bodies` -- it was read out of the table above -- so a bare `body in
-        # seen_bodies` test would refuse to re-draft anything on the second press of the
-        # button, and the operator would watch the agent do nothing and report nothing.
-        own = (existing.get(acode) or {}).get("answer") or ""
-        if body and (body == own.strip() or body not in seen_bodies):
-            drafted[acode] = body
-            seen_bodies.add(body)
-        else:
-            unanswered += 1
-
-    if not drafted:
-        return {"drafted": 0, "ai": 0, "from_facts": 0, "skipped_answered": skipped,
-                "unanswered": unanswered}
-
-    audit = audit or txn.audit_on(c)
-    written: set[str] = set()
-    with txn.atomic(c):
-        for acode, text in drafted.items():
-            cur = c.execute(
-                "INSERT INTO enterprise_activity_answers "
-                "(tenant_id, programme_id, activity_code, question, answer) "
-                "VALUES (?,?,?,?,?) "
-                "ON CONFLICT (tenant_id, programme_id, activity_code) DO UPDATE SET "
-                "  answer = excluded.answer, "
-                "  updated_at = CURRENT_TIMESTAMP "
-                # THE GUARD. Without it, re-drafting would silently overwrite the operator's
-                # own answers with the machine's -- destroying exactly the work the feature
-                # exists to save them. Codex confirmed the WHERE binds to the EXISTING row on
-                # both Postgres and SQLite (`excluded` is only the proposed row).
-                " WHERE enterprise_activity_answers.answered_at IS NULL",
-                (tenant_id, programme_id, acode,
-                 ACTIVITY_INDEX[acode][1], text),
-            )
-            # COUNT WHAT ACTUALLY LANDED, not what we tried (Codex, LOW). The guard above
-            # turns the upsert into a NO-OP when somebody answered this activity between our
-            # read and our write. Reporting the attempt would tell the operator the agent had
-            # answered an activity it had -- correctly -- refused to touch, and would put that
-            # same false number in the audit trail.
-            if getattr(cur, "rowcount", -1) != 0:
-                written.add(acode)
-
-        _require_audit(
-            audit("ENTERPRISE_ANSWERS_DRAFTED", user_id=user_id, tenant_id=tenant_id,
-                  details={"programme_id": programme_id, "phase": phase_code or "ALL",
-                           "drafted": len(written), "ai": len(from_ai & written),
-                           "from_facts": len(written - from_ai),
-                           "unanswered": unanswered}),
-            "drafted answers",
-        )
-
-    return {"drafted": len(written), "ai": len(from_ai & written),
-            "from_facts": len(written - from_ai),
-            "skipped_answered": skipped + (len(drafted) - len(written)),
-            "unanswered": unanswered}
-
-
-def answer_sheet(c, tenant_id: str, programme_id: int) -> list[dict]:
-    """Every activity in the lifecycle, with its question and its current answer.
-
-    Input:  connection, tenant, programme.
-    Output: [{phase_code, phase_name, activities: [{code, activity, question, answer,
-              answered, drafted}]}], in lifecycle order.
-
-    `drafted` means the app wrote it and no human has confirmed it -- the screen says so, and
-    a Save turns it into the operator's own answer.
-    """
-    answers = get_answers(c, tenant_id, programme_id)
-    out = []
-    for pcode, _no, pname in PHASES:
-        rows = []
-        for acode, atext in PHASE_ACTIVITIES[pcode]:
-            a = answers.get(acode) or {}
-            text = (a.get("answer") or "").strip()
-            rows.append({
-                "code": acode,
-                "activity": atext,
-                "question": a.get("question") or "",
-                "answer": text,
-                "answered": bool(a.get("answered")),
-                "drafted": bool(text) and not a.get("answered"),
-            })
-        out.append({"phase_code": pcode, "phase_name": pname, "activities": rows})
-    return out
-
-
-# OWNER, 2026-07-15: a thin section is now marked with a plain completion note, not a
-# question. thin_sections() counts these so the footer and the route can still report how
-# much of a document rests on the programme's description alone.
 THIN_SECTION_MARKER = "*[To be completed"
 
 
@@ -1762,21 +1374,12 @@ def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
         # none are recorded against it -- claiming it "answers" activities it never read
         # would be a lie told by a JSON column.
         activity_codes = []
-        questions = []
     else:
-        markdown, questions = build_markdown(c, tenant_id, programme_id, activity_codes,
-                                             title=title, source_text=source_text,
-                                             use_ai=use_ai)
+        markdown = build_markdown(c, tenant_id, programme_id, activity_codes,
+                                  title=title, source_text=source_text, use_ai=use_ai)
 
     audit = audit or txn.audit_on(c)
     with txn.atomic(c):
-        # The questions the app could not answer are RECORDED, not merely printed in the
-        # document. That is what makes them answerable: the Lifecycle Documents page reads
-        # them back as a form, and answering one makes it the content of that section on the
-        # next generate. _raise_question never overwrites an answer that already exists.
-        for acode, question in questions:
-            _raise_question(c, tenant_id, programme_id, acode, question)
-
         cur = c.execute(
             "INSERT INTO enterprise_documents "
             "(tenant_id, programme_id, doc_type, title, uploaded_by_user_id, doc_kind, "

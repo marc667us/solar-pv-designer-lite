@@ -211,9 +211,6 @@ def test_an_activity_the_app_KNOWS_is_written_not_asked(db):
 
     assert "**QUESTION" not in md, "the app asked for a fact it already holds"
     assert "sponsored by owen" in md, "it did not write the sponsor it has on record"
-    assert not documents.outstanding_questions(c, org, pid), (
-        "a question was raised for something the app could answer itself"
-    )
 
 
 def test_an_activity_the_app_CANNOT_ground_is_still_written_and_marked_to_complete(db):
@@ -240,10 +237,8 @@ def test_an_activity_the_app_CANNOT_ground_is_still_written_and_marked_to_comple
              if ln.strip() and not ln.strip().startswith("*")]
     assert prose, "the section is a marker with no prose above it"
 
-    # ...and where it lacks a fact it says so as a plain completion note, NOT a question:
-    # nothing is put on a questions list.
+    # ...and where it lacks a fact it says so as a plain completion note, NOT a question.
     assert documents.THIN_SECTION_MARKER in md
-    assert documents.outstanding_questions(c, org, pid) == []
 
 
 def test_an_unrelated_passage_is_never_quoted_under_an_activity(db):
@@ -370,91 +365,6 @@ def test_a_generated_document_renders_to_a_real_pdf(db):
 # --- the app asks, the operator answers, the answer becomes the content ------
 
 
-def test_a_completed_answer_becomes_the_section_on_regenerate(db):
-    """The loop, minus the question: generate -> section marked [To be completed] ->
-    operator completes it -> regenerate -> written.
-
-    OWNER, 2026-07-15: "remove ... questions". Generate no longer raises a question; where the
-    app holds no fact it marks the section for completion. The operator completes it (the same
-    save the report's Edit panel uses), and their words become the section, outranking
-    everything the app inferred -- they wrote it precisely because the app did not know.
-
-    Driven with P01_A01 ("register the programme idea"), a genuine gap the app holds no fact
-    for. P01_A02 is not a gap: the app knows the sponsor and writes it.
-    """
-    c, org, _o, pid, _op = db
-
-    # 1. Generate. The section is written from the description and, lacking a specific fact,
-    #    marked [To be completed] -- but NO question is put to the operator.
-    md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
-    ))["markdown"]
-    assert documents.THIN_SECTION_MARKER in md
-    assert documents.outstanding_questions(c, org, pid) == []   # no question raised
-
-    # 2. The operator completes it -- the same save the report's Edit panel performs.
-    n = documents.save_answers(c, org, OWNER, pid,
-                               {"P01_A01": "The idea was tabled by the Ministry in 2026."},
-                               audit=_audit(c))
-    assert n == 1
-
-    # 3. Regenerate -- the completed answer IS the section now, and nothing is left to finish.
-    md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
-    ))["markdown"]
-    assert "The idea was tabled by the Ministry in 2026." in md
-    assert documents.THIN_SECTION_MARKER not in md
-    assert "grounded throughout in the programme's own record" in md
-
-
-def test_an_answer_outranks_the_source_document(db):
-    """The operator was asked because the app did not know. Their answer is the authority."""
-    c, org, _o, pid, _op = db
-    src = _upload(c, org, pid)
-    documents.save_answers(c, org, OWNER, pid,
-                           {"P01_A08": "Funding is now fully domestic."}, audit=_audit(c))
-
-    md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A08"], source_document_id=src,
-        use_ai=False, audit=_audit(c),
-    ))["markdown"]
-    assert "Funding is now fully domestic." in md
-    assert "sovereign concessional loan" not in md      # the source did NOT win
-
-
-def test_regenerating_does_not_re_ask_an_answered_question(db):
-    """ON CONFLICT DO NOTHING: a second generate must not resurrect an answered question."""
-    c, org, _o, pid, _op = db
-    documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A02"],
-                                use_ai=False, audit=_audit(c))
-    documents.save_answers(c, org, OWNER, pid, {"P01_A02": "Ministry of Energy."},
-                           audit=_audit(c))
-    documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A02"],
-                                use_ai=False, audit=_audit(c))
-
-    assert documents.outstanding_questions(c, org, pid) == []
-    stored = documents.get_answers(c, org, pid)["P01_A02"]
-    assert stored["answer"] == "Ministry of Energy."      # not overwritten
-
-
-def test_an_answer_to_an_activity_that_was_never_asked_is_still_stored(db):
-    """An operator may fill a section in ahead of being asked. That must not be lost."""
-    c, org, _o, pid, _op = db
-    n = documents.save_answers(c, org, OWNER, pid, {"P01_A01": "Registered in March."},
-                               audit=_audit(c))
-    assert n == 1
-    md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
-    ))["markdown"]
-    assert "Registered in March." in md
-
-
-def test_a_member_without_programme_edit_cannot_answer(db):
-    c, org, _o, pid, _op = db
-    with pytest.raises(EnterprisePermissionError):
-        documents.save_answers(c, org, READER, pid, {"P01_A01": "x"}, audit=_audit(c))
-
-
 # --- the five lifecycle stages ----------------------------------------------
 
 
@@ -554,21 +464,61 @@ def test_a_source_document_cannot_break_out_of_its_fence(db):
     assert "<<<SOURCE_EXTRACT" not in safe
 
 
-def test_answering_the_same_question_twice_updates_it_and_does_not_500(db):
-    """MED -- UPDATE-then-INSERT-if-rowcount-0 raced: two writers both saw rowcount 0 and one
-    died on the unique index. It is one atomic upsert now, and a correction is allowed."""
-    c, org, _o, pid, _op = db
-    documents.save_answers(c, org, OWNER, pid, {"P01_A02": "First answer."}, audit=_audit(c))
-    documents.save_answers(c, org, OWNER, pid, {"P01_A02": "Corrected answer."},
-                           audit=_audit(c))
 
-    stored = documents.get_answers(c, org, pid)["P01_A02"]
-    assert stored["answer"] == "Corrected answer."
-    assert stored["answered"] is True
 
-    rows = c.execute(
-        "SELECT COUNT(*) FROM enterprise_activity_answers "
-        " WHERE tenant_id=? AND programme_id=? AND activity_code='P01_A02'",
-        (org, pid),
-    ).fetchone()[0]
-    assert rows == 1            # upserted, not duplicated
+# --- the owner's "same statement" bug, on the report path --------------------
+
+def test_no_two_sections_of_a_report_make_the_SAME_STATEMENT(db):
+    """THE OWNER'S BUG, 2026-07-14: "the agent just answered every question with the same
+    statement -- fix it, and don't use my information".
+
+    It was fixed then in the per-activity answer engine. The Rev 4 rebuild DELETED that
+    engine, so this -- a report covering a whole phase -- is the only path the operator has
+    left, and the defect lived on in it: _topic_of matches needles against the activity
+    sentence and takes the first hit, so "Identify the energy-access problem" (`energy`) and
+    "Determine whether the programme will use ... Generation-station designs" (`generation`)
+    both resolve to the capacity topic, which for a young programme can offer exactly one
+    sentence. Both sections printed it.
+
+    Driven with use_ai=False on purpose: that is the live reality, where the free-tier chain
+    falls through to rule_based and every section takes the deterministic path.
+    """
+    c, org, _o, _pid, _op = db
+    desc = "Rooftop solar for 100 rural schools in the Volta Region."
+    pid = workflows.create_programme(
+        c, org, OWNER, code="GH-SAME", name="Same Statement Check",
+        sponsor_user_id=OWNER, design_strategy="standard", description=desc,
+        audit=_audit(c))
+    c.commit()
+
+    codes = [a for a, _t in PHASE_ACTIVITIES["P01_CONCEPT"]]
+    md = documents.get_document(c, org, documents.generate_document(
+        c, org, OWNER, pid, activity_codes=codes, use_ai=False, audit=_audit(c),
+    ))["markdown"]
+
+    # Collect each activity section's prose, ignoring the markers and the italic notes.
+    sections, cur = {}, None
+    for line in md.splitlines():
+        if line.startswith("### "):
+            cur = line[4:].strip()
+            sections[cur] = []
+        elif cur and line.strip() and not line.startswith("#"):
+            sections[cur].append(line.strip())
+    bodies = {}
+    for head, lines in sections.items():
+        # Skip the italic notes (*Written by...*, *[To be completed...*) and the `---` rule
+        # that closes the document -- neither is a section's prose, and the rule would
+        # otherwise be collected as the last section's body.
+        prose = " ".join(l for l in lines
+                         if not l.startswith("*") and set(l.strip()) != {"-"})
+        if prose.strip():
+            bodies[head] = prose.strip()
+
+    assert bodies, "the report wrote no prose at all"
+    assert len(bodies) == len(set(bodies.values())), (
+        "the same statement was written under more than one section -- exactly what the "
+        "owner reported"
+    )
+    assert not [h for h, p in bodies.items() if desc in p], (
+        "the operator's own programme description was echoed back at them as a section"
+    )

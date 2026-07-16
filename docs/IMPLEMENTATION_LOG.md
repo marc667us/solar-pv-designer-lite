@@ -2264,3 +2264,87 @@ Next Recommended Step:
 Codex gate 1 verdict → fix any blocking findings → Supervisor gate → commit + push → apply migration
 024 via the gated workflow (dry-run first) → deploy → live smoke with the flag still DARK → then flip
 the flag for the owner's own account only and walk the acceptance test.
+
+---
+
+# Implementation Log Entry
+**Date:** 2026-07-16
+**Task:** Enterprise Rev 4 — delete the Q&A engine; fix the "same statement" bug on the report path
+**Status:** Complete — Codex + Supervisor gates passed, 458/458 enterprise tests green
+
+**Objective:** Finish the owner's Rev 4 direction ("remove the old version, implement the new"
+from `enterprise revision 4.txt`): the per-activity Question & Answer engine is old-version
+machinery and was to be **deleted, not parked** ("we not need the Q and A engine -- rip it off";
+"item marked to be removed must be removed and delected"). Covers three slices: `9396b8d`
+(reports as per-phase BUTTONS), `0b7baf8` (AI checkbox + questions removed), and this one.
+
+**Files Changed:**
+- `app/enterprise_programme/documents.py` — deleted `_question_for`, `get_answers`,
+  `outstanding_questions`, `save_answers`, `_raise_question` and the
+  `enterprise_activity_answers` DDL from `ensure_schema`. `build_markdown` now returns a plain
+  `str` (was `(str, questions)` — the list was always empty). Added `_first_time_said()`
+  dedupe. Fixed `_facts_for_topic`/`_TOPICS` (see Known Risks).
+- `enterprise_programme_routes.py` — deleted the 3 `/answers` routes; fixed a thin-gate flash
+  that still told operators to "answer those below and regenerate" (Codex, MEDIUM).
+- `templates/enterprise_programme/answers.html` — DELETED.
+- `tests/enterprise_programme/test_agent_answers_the_questions.py` — DELETED (whole file, 15
+  tests: it tested only the deleted engine).
+- `tests/enterprise_programme/test_slice66_lifecycle_documents.py` — 6 answer-engine tests
+  removed; 2 kept with their `outstanding_questions` asserts dropped; **1 test added** —
+  `test_no_two_sections_of_a_report_make_the_SAME_STATEMENT`.
+- `tests/enterprise_programme/test_slice66_document_routes.py` — 1 answers-flow test removed.
+
+**Database Changes:** `ensure_schema` no longer creates `enterprise_activity_answers`. The LIVE
+Postgres table (migration 028) still exists, unused. **A dry-run-gated drop migration is still
+owed** — see What Remains. Codex: not a correctness defect, but the owner's instruction is that
+removed items are deleted.
+
+**API Changes:** `GET /enterprise/programmes/<id>/answers`,
+`POST .../answers/draft`, `POST .../lifecycle-documents/answers` — all REMOVED. No template
+linked to them (the page was already unreachable).
+
+**Security Changes:** None weakened. Verified by both gates: `generate_document` still does C13
+`_load_programme` BEFORE authz, requires `report.generate`, and additionally requires
+`programme.edit` for gate-evidence deliverables (the privilege-escalation guard). CSRF and audit
+intact. Deleting `save_answers` dropped a permission test, but the equivalent on the surviving
+edit path is covered (`test_document_is_editable.py` — a reader cannot edit).
+
+**Tests Added:** `test_no_two_sections_of_a_report_make_the_SAME_STATEMENT` — verified it FAILS
+without the fix and PASSES with it (a regression test that passes either way is worthless).
+
+**What Was Completed:** The rip-out, plus **the owner's 2026-07-14 "same statement" bug, which
+was still live**. It was fixed in 2026-07-14 inside `draft_answers` — the engine this slice
+deletes — leaving `build_markdown`, now the ONLY path the operator has, with the defect intact.
+Reproduced on a real generate: `_topic_of` takes the FIRST needle match, so "Identify the
+energy-access problem" (`energy`) and "Determine whether the programme will use ...
+Generation-station designs" (`generation`) both resolved to `capacity`, whose only ungrounded
+sentence was "Its recorded design strategy is standard." — printed under both.
+
+Fixed at two depths rather than one:
+1. `_first_time_said()` — a fact is stated ONCE, under the activity that reaches it first; a
+   repeat becomes an honest `[To be completed]`. Applied to prose the app asserts in its own
+   voice (facts writer AND `_ai_write` — Codex confirmed the first cut missed the AI path).
+   NOT to source quotes, which are attributed and so are citations, not repetition.
+2. Root cause (Codex rec A): the design strategy was `capacity`'s unguarded fallback, so it was
+   the only thing that topic could say about a young programme. It now rides with a real
+   capacity fact or not at all, and design PHRASES ("distributed design", "mini-grid",
+   "design template", ...) are matched BEFORE the capacity needles. Whole phrases only — a bare
+   "generation-station" needle would swallow "Assess possible generation-station LOCATIONS",
+   which is a siting question. Net: 3 of 453 activities re-topiced, all correctly.
+
+**What Remains:**
+- **Drop migration for `enterprise_activity_answers` on live Postgres** — dry-run gated per
+  `feedback_workflow_dry_run_gate`. Destructive live DDL: needs owner confirmation.
+- **Slice 0b-ii** — repoint the module from 16 phases to the 6-phase `rev4_phases.py`. This is
+  the substantive Rev 4 work and needs its own session with fresh context.
+
+**Known Risks:**
+- Dedupe is first-come-wins, so an earlier activity can still claim a fact a later one wants.
+  The topic fix above removes the case we could actually reproduce; the general property is
+  guarded by the new regression test.
+- `_ai_write` repetition is now caught, but only for byte-identical prose (normalised for
+  whitespace/case). Two *paraphrases* of the same fact would still both print. Live falls
+  through to `rule_based` today, so the deterministic path — which is fully deduped — is what
+  operators actually get.
+
+**Next Recommended Step:** Slice 0b-ii (16 → 6 phase repoint), fresh context.

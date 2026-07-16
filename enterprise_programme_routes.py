@@ -1309,113 +1309,11 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
 
     # ---- lifecycle documents (slice 6.6) ---------------------------------
     #
-    # The owner's requirement, in their words: "in the life cycle activities must have
-    # check box, one use select one or even multiple of the activities the app must
-    # generate document" and "where user must load a document that document can be used to
-    # develop life cycle document". So: tick activities -> get a document; upload a source
-    # document -> it becomes the material the generated document is drawn from.
-
-    @app.route("/enterprise/programmes/<int:programme_id>/answers")
-    @login_required
-    def enterprise_answers(programme_id: int):
-        """Every lifecycle question, with the agent's answer already in the box.
-
-        OWNER, 2026-07-14: "the benefit of using the app is that an agent will answer the
-        questions" -- so this screen exists to be EDITED, not filled in from nothing.
-        """
-        _require_module()
-        uid = _uid()
-        with get_db() as c:
-            _ensure_schema_once(c)
-            tenancy.apply_enterprise_guc(c, uid)
-            active = _tenant(c, uid)
-
-            try:
-                prog = documents.programme_facts(c, active, programme_id)
-            except (DocumentError, EnterpriseGateError):
-                abort(404)                      # C13: not-yours and not-there are the same
-
-            sheet = documents.answer_sheet(c, active, programme_id)
-            can_edit = rbac.has_permission(c, active, uid, "programme.edit",
-                                           programme_id=programme_id)
-
-        drafted = sum(1 for ph in sheet for a in ph["activities"] if a["drafted"])
-        answered = sum(1 for ph in sheet for a in ph["activities"] if a["answered"])
-        blank = sum(1 for ph in sheet for a in ph["activities"]
-                    if not a["answer"])
-
-        return render_template(
-            "enterprise_programme/answers.html",
-            programme_id=programme_id,
-            programme=prog,
-            sheet=sheet,
-            can_edit=can_edit,
-            n_drafted=drafted,
-            n_answered=answered,
-            n_blank=blank,
-            n_total=sum(len(ph["activities"]) for ph in sheet),
-            open_phase=request.args.get("phase", prog.get("phase_code") or ""),
-        )
-
-    @app.route("/enterprise/programmes/<int:programme_id>/answers/draft", methods=["POST"])
-    @login_required
-    def enterprise_answers_draft(programme_id: int):
-        """Turn the agent loose on the questions. Never overwrites a human answer."""
-        _require_module()
-        csrf_protect()
-        uid = _uid()
-        phase = (request.form.get("phase_code") or "").strip()
-        back = redirect(url_for("enterprise_answers", programme_id=programme_id,
-                                phase=phase or None))
-
-        with get_db() as c:
-            _ensure_schema_once(c)
-            tenancy.apply_enterprise_guc(c, uid)
-            active = _tenant(c, uid)
-            try:
-                r = documents.draft_answers(c, active, uid, programme_id,
-                                            phase_code=phase, use_ai=True)
-            except EnterprisePermissionError:
-                abort(403)
-            # EnterpriseGateError, not DocumentError. DocumentError is a SUBCLASS of it, and
-            # the C13 check that guards this call raises the PARENT -- so catching only the
-            # subclass would turn a cross-tenant probe into a 500 instead of the 404 that C13
-            # requires, and leak the existence of another organisation's programme through
-            # the error page.
-            except EnterpriseGateError as e:
-                if e.control == "C13":
-                    abort(404)
-                flash(str(e), "error")
-                return back
-
-        # WHAT THE AGENT COULD NOT ANSWER IS STATED, NOT PAPERED OVER (owner, 2026-07-14: the
-        # agent "answered every question with the same statement"). It used to fill an activity
-        # it had no fact for with the programme's own description -- so a run that had actually
-        # answered nothing still reported a triumphant count. An activity with nothing behind
-        # it is now left blank with its question showing, and said out loud here.
-        gap = r.get("unanswered") or 0
-        gap_msg = (f" {gap} activit{'y' if gap == 1 else 'ies'} could not be answered from what "
-                   f"this programme has recorded — those are left blank with their question, "
-                   f"for you to answer or to fill in by approving a design." if gap else "")
-
-        if not r["drafted"] and not gap:
-            flash("Nothing to draft — every activity here already has your answer.", "info")
-        elif not r["drafted"]:
-            flash("The agent could not answer anything here yet." + gap_msg, "warning")
-        else:
-            # The counts are stated plainly. An answer the model wrote and an answer built
-            # from the programme's own record are not the same kind of thing, and the
-            # operator deciding what to check first deserves to know which is which.
-            flash(
-                f"The agent answered {r['drafted']} activit"
-                f"{'y' if r['drafted'] == 1 else 'ies'} "
-                f"({r['ai']} written by the AI, {r['from_facts']} from the programme's own "
-                f"records). Review, edit anything that is wrong, and Save."
-                + (f" {r['skipped_answered']} of your own answers were left untouched."
-                   if r["skipped_answered"] else "")
-                + gap_msg,
-                "success")
-        return back
+    # OWNER, 2026-07-15: each phase lists its reports as BUTTONS. Click one -> the agent
+    # writes that report -> it opens for the operator to review, EDIT and save. Uploading a
+    # source document makes it material the report is drawn from. There are no activity
+    # checkboxes and no per-activity question/answer screen any more -- both were removed
+    # ("remove them checkboxes and questions"; "we not need the Q and A engine -- rip it off").
 
     @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents")
     @login_required
@@ -1491,7 +1389,6 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 sources=[d for d in docs if d["doc_kind"] == "uploaded"],
                 supported=sorted(documents.SUPPORTED_UPLOADS),
                 max_mb=documents.MAX_UPLOAD_BYTES // (1024 * 1024),
-                questions=documents.outstanding_questions(c, active, programme_id),
                 can_generate=rbac.has_permission(c, active, uid, "report.generate",
                                                  programme_id=programme_id),
                 can_upload=rbac.has_permission(c, active, uid, "programme.edit",
@@ -1502,57 +1399,6 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 can_register_evidence=rbac.has_permission(
                     c, active, uid, "programme.edit", programme_id=programme_id),
             )
-
-    @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents/answers",
-               methods=["POST"])
-    @login_required
-    def enterprise_lifecycle_document_answers(programme_id: int):
-        """Answer the questions the app raised. The answers become the document's content."""
-        _require_module()
-        csrf_protect()
-        uid = _uid()
-
-        # Answers are now editable on TWO screens, and landing the operator back on the one
-        # they were not using would lose their place in a 453-row sheet. The phase is echoed
-        # back so the accordion reopens where they left it.
-        if (request.form.get("from") or "") == "answers":
-            back = redirect(url_for("enterprise_answers", programme_id=programme_id,
-                                    phase=(request.form.get("phase_code") or "") or None))
-        else:
-            back = redirect(url_for("enterprise_lifecycle_documents",
-                                    programme_id=programme_id))
-
-        # Form fields arrive as answer[P01_A02]. Only known activity codes are accepted --
-        # save_answers filters again, because a service must not trust its caller.
-        answers = {
-            k[len("answer["):-1]: v
-            for k, v in request.form.items()
-            if k.startswith("answer[") and k.endswith("]")
-        }
-
-        with get_db() as c:
-            _ensure_schema_once(c)
-            tenancy.apply_enterprise_guc(c, uid)
-            active = _tenant(c, uid)
-            try:
-                n = documents.save_answers(c, active, uid, programme_id, answers)
-            except EnterprisePermissionError:
-                abort(403)
-            # EnterpriseGateError, not DocumentError -- DocumentError is a subclass, and the
-            # C13 guard inside save_answers raises the PARENT. Catching only the subclass let
-            # a cross-tenant POST escape as a 500 instead of the 404 that C13 demands.
-            except EnterpriseGateError as e:
-                if e.control == "C13":
-                    abort(404)
-                flash(str(e), "error")
-                return back
-
-        if n:
-            flash(f"{n} answer(s) saved. Regenerate the document to fold them in.",
-                  "success")
-        else:
-            flash("No answers were provided.", "error")
-        return back
 
     @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents/upload",
                methods=["POST"])
@@ -1702,9 +1548,8 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
             # document from them would not help them. But they are told, in the same breath,
             # which parts of it the app could not ground in a specific fact.
             flash(f"{name} written and on file as the evidence stage gate {gate} requires — "
-                  f"but {thin} section(s) rest on the programme's description alone. Each "
-                  f"names the one fact that would strengthen it; answer those below and "
-                  f"regenerate before the gate is signed.", "warning")
+                  f"but {thin} section(s) are marked [To be completed]. Press Edit on the "
+                  f"report to fill them in before the gate is signed.", "warning")
         elif gate:
             flash(f"{name} written by the agent. It is now on file as the evidence stage "
                   f"gate {gate} requires — review and edit it before the gate is signed.",
@@ -2640,7 +2485,6 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                     drained.append({"job_id": int(row[0]), "status": "error",
                                     "error": str(e)[:200]})
         return {"drained": drained}, 200
-
 
 
 # The document types the gate predicates actually look for. A form that offered anything

@@ -3,7 +3,8 @@
 The services are tested in test_slice66_lifecycle_documents.py. This drives the real routes:
 each phase renders its reports as buttons (OWNER, 2026-07-15 -- no activity checkboxes),
 clicking a report has the agent write it and open it, uploading a source document works, and
-the gaps the app cannot ground come back as an answerable form on the answers page.
+the gaps the app cannot ground are marked [To be completed] for the operator to fill in by
+editing the report (OWNER, 2026-07-15 -- "remove them checkboxes and questions").
 """
 
 from __future__ import annotations
@@ -197,60 +198,3 @@ def test_uploading_a_source_document_then_using_it(ent, programme):
     )
     assert r.status_code == 200
     assert b"Ministry Brief" in r.data
-
-
-def test_clicking_a_report_writes_it_and_the_gap_is_answerable(ent, programme):
-    """OWNER, 2026-07-15: click a report button -> the agent writes it (covering the whole
-    phase) -> anything it cannot ground is answerable on the answers page -> answering it
-    fills the section in."""
-    client, wa, uid = ent
-    _login(client, uid)
-
-    # Click the "Programme concept note" report button. The agent covers the whole Concept
-    # phase; P01_A01 ("register the programme idea") is a genuine gap it holds no fact for.
-    r = client.post(
-        f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "deliverable_code": "P01_D01"},
-        follow_redirects=True,
-    )
-    assert r.status_code == 200
-    # It OPENS as a report, it does not push a PDF at the browser -- and it opened as THIS
-    # report: the deliverable's own title, with the report actions (PDF) beside it.
-    assert not r.data.startswith(b"%PDF-")
-    assert b"Programme concept note" in r.data
-    assert b"Download PDF" in r.data
-
-    # Every lifecycle question is editable on the answers page, the agent's answer in the box.
-    body = client.get(
-        f"/enterprise/programmes/{programme}/answers").data.decode()
-    assert 'name="answer[P01_A01]"' in body
-
-    # Answer it.
-    r = client.post(
-        f"/enterprise/programmes/{programme}/lifecycle-documents/answers",
-        data={"_csrf": "testtoken",
-              "answer[P01_A01]": "The idea was tabled by the Ministry in 2026."},
-        follow_redirects=True,
-    )
-    assert r.status_code == 200
-    assert b"answer(s) saved" in r.data
-
-    # THIS question is gone -- not "no questions exist". The fixture is module-scoped, so
-    # earlier tests in this file have raised their own questions against the same programme,
-    # and they are legitimately still open. Asserting an empty list would be asserting that
-    # answering one question silently closed three others.
-    with wa.get_db() as c:
-        tid = c.execute("SELECT id FROM enterprise_tenants "
-                        "WHERE legal_name='Ministry of Energy'").fetchone()[0]
-        still_open = {q["activity_code"]
-                      for q in documents.outstanding_questions(c, tid, programme)}
-        assert "P01_A01" not in still_open
-
-        doc_id = documents.generate_document(
-            c, tid, uid, programme, activity_codes=["P01_A01"], use_ai=False,
-        )
-        md = documents.get_document(c, tid, doc_id)["markdown"]
-
-    # The answer IS the section now, and the section no longer asks anything.
-    assert "The idea was tabled by the Ministry in 2026." in md
-    assert documents.THIN_SECTION_MARKER not in md
