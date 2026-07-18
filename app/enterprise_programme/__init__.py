@@ -10,7 +10,7 @@ docs/enterprise-programme/rebuild/09-supervisor-adjudication.md.
 
 from __future__ import annotations
 
-from . import constants
+from . import constants, report_responses
 from .gates import (
     CONTROL_GUARDS,
     EnterpriseGateError,
@@ -49,6 +49,11 @@ from .workflows import (
 
 __all__ = [
     "constants",
+    # report versions + per-recipient responses (xx201 s42-s43). Exported as the MODULE, not
+    # as loose names: its vocabulary (ACCEPTED / MODIFICATION_REQUESTED / ...) would collide
+    # with the gate and approval vocabularies already flattened into this namespace, and a
+    # silently shadowed constant in an acceptance rule is not a defect anyone finds quickly.
+    "report_responses",
     # tenancy
     "personal_tenant_id",
     "apply_enterprise_guc",

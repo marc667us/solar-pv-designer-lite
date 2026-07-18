@@ -1,0 +1,228 @@
+# Apply migration 034 -- report versions + per-recipient responses.
+#
+# Revision xx201 s42-s43: a report gets VERSIONS, and the beneficiary organisation and sponsor
+# institution answer SEPARATELY, with the report accepted only when BOTH accept.
+#
+# This migration is ADDITIVE: two new tables, their indexes, their RLS policies, and one
+# UNIQUE constraint on the existing enterprise_documents. It drops nothing and rewrites no
+# data. The dry-run therefore reports what WOULD be created and, more importantly, checks the
+# preconditions that would make the apply fail -- the failure this gate exists to catch is a
+# migration that dies halfway, not one that destroys data.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=APPLY_034.
+#
+# THE PRECONDITION THAT MATTERS (Codex, CRITICAL, 2026-07-18): the new composite foreign keys
+# reference enterprise_documents (tenant_id, id), and a composite FK needs a UNIQUE on exactly
+# those columns. enterprise_documents was created in 026 with `id bigserial PRIMARY KEY` and
+# nothing else, so that UNIQUE does not exist yet -- 034 adds it in a guarded DO block before
+# the FKs. The dry-run below verifies that guard would fire, because if it silently did not,
+# every FK in this migration is rejected and the whole thing fails on the live database.
+
+name: Apply Migration 034 (report versions + per-recipient responses)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type APPLY_034 to actually create the tables."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4.
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLY_034" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- 034 WILL BE APPLIED ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be created ==="
+            echo "Re-run with -f confirm=APPLY_034 to commit."
+          fi
+
+      - name: Verify the migration file exists
+        run: test -f migrations/034_enterprise_report_versions_responses.sql && echo "OK"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # Everything that would make the apply fail, checked BEFORE it can fail halfway.
+      - name: Check the preconditions
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- the parent table must exist (migration 026) ---"
+          PARENT=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM information_schema.tables
+             WHERE table_schema='public' AND table_name='enterprise_documents';")
+          echo "  enterprise_documents present: $PARENT  (must be 1)"
+          if [ "$PARENT" != "1" ]; then
+            echo "::error::enterprise_documents is missing -- migration 026 has not run"; exit 1
+          fi
+
+          echo ""
+          echo "--- the RLS helper must exist (migration 025) ---"
+          HELPER=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM pg_proc WHERE proname='current_enterprise_tenant_ids';")
+          echo "  current_enterprise_tenant_ids present: $HELPER  (must be >= 1)"
+          if [ "$HELPER" = "0" ]; then
+            echo "::error::the RLS helper is missing -- migration 025 has not run"; exit 1
+          fi
+
+          # THE CODEX CRITICAL. If this UNIQUE is absent AND the guard does not create it,
+          # every composite FK in 034 is rejected.
+          echo ""
+          echo "--- does enterprise_documents already have UNIQUE (tenant_id, id)? ---"
+          psql "$DATABASE_URL" -c "
+            SELECT conname, pg_get_constraintdef(oid) AS definition
+              FROM pg_constraint
+             WHERE conrelid='enterprise_documents'::regclass AND contype IN ('u','p')
+             ORDER BY conname;"
+          echo "  (0 rows naming (tenant_id, id) is EXPECTED -- 034 adds it)"
+
+          echo ""
+          echo "--- is a constraint with the target name already taken on ANOTHER table? ---"
+          echo "  (the guard is scoped by conrelid, so this is informational only)"
+          psql "$DATABASE_URL" -c "
+            SELECT conrelid::regclass AS on_table, conname
+              FROM pg_constraint WHERE conname='uq_ent_document_tenant_id';"
+
+          echo ""
+          echo "--- how big is the table being ALTERed? (lock window) ---"
+          psql "$DATABASE_URL" -c "SELECT count(*) AS documents FROM enterprise_documents;"
+
+          echo ""
+          echo "--- do the new tables already exist? (rerun is a no-op) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT table_name FROM information_schema.tables
+             WHERE table_schema='public'
+               AND table_name IN ('enterprise_document_versions','enterprise_report_responses')
+             ORDER BY table_name;"
+
+      - name: Dry-run -- nothing created
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. 034 WOULD create two tables, their indexes and RLS"
+          echo "  policies, and add UNIQUE (tenant_id, id) to enterprise_documents."
+          echo "  Nothing was changed."
+          echo "  Re-run with -f confirm=APPLY_034 to commit."
+          echo "================================================================"
+
+      - name: Apply 034
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/034_enterprise_report_versions_responses.sql
+          echo "OK: 034 applied."
+
+      # A migration that reports success while half its objects are missing is worse than one
+      # that fails: the app then fails later, somewhere else, for a reason nobody connects
+      # back to here.
+      - name: Verify what actually landed
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- both tables must exist ---"
+          COUNT=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM information_schema.tables
+             WHERE table_schema='public'
+               AND table_name IN ('enterprise_document_versions','enterprise_report_responses');")
+          if [ "$COUNT" != "2" ]; then
+            echo "::error::expected 2 new tables, found $COUNT"; exit 1
+          fi
+          echo "  both present."
+
+          echo ""
+          echo "--- the UNIQUE that makes the FKs legal ---"
+          UQ=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM pg_constraint
+             WHERE conname='uq_ent_document_tenant_id'
+               AND conrelid='enterprise_documents'::regclass;")
+          if [ "$UQ" != "1" ]; then
+            echo "::error::uq_ent_document_tenant_id is missing -- the FKs cannot be trusted"
+            exit 1
+          fi
+          echo "  present."
+
+          echo ""
+          echo "--- the foreign keys actually created ---"
+          psql "$DATABASE_URL" -c "
+            SELECT conrelid::regclass AS child, conname, pg_get_constraintdef(oid) AS definition
+              FROM pg_constraint
+             WHERE conrelid IN ('enterprise_document_versions'::regclass,
+                                'enterprise_report_responses'::regclass)
+               AND contype='f'
+             ORDER BY child, conname;"
+
+          echo ""
+          echo "--- RLS must be ENABLED on both, or tenant isolation has no final line ---"
+          psql "$DATABASE_URL" -c "
+            SELECT relname, relrowsecurity
+              FROM pg_class
+             WHERE relname IN ('enterprise_document_versions','enterprise_report_responses');"
+
+          echo ""
+          echo "--- and the policies must exist ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename, policyname FROM pg_policies
+             WHERE tablename IN ('enterprise_document_versions','enterprise_report_responses')
+             ORDER BY tablename;"
+
+          echo ""
+          echo "CONFIRMED: 034 is live."

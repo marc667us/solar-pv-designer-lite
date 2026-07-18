@@ -41,7 +41,8 @@ from werkzeug.utils import secure_filename
 from app.enterprise_programme import (
     applications,
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, reports, rev4_phases, rollout, site_qualification, sponsors, tenancy, txn,
+    rbac, report_responses, reports, rev4_phases, rollout, site_qualification, sponsors,
+    tenancy, txn,
     workflows,
 )
 from app.enterprise_programme.documents import DocumentError
@@ -127,6 +128,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         rollout.ensure_schema(c)        # no-op on Postgres (migration 029 owns it)
         sponsors.ensure_schema(c)       # no-op on Postgres (migration 030 owns it)
         applications.ensure_schema(c)   # no-op on Postgres (migration 031 owns it)
+        report_responses.ensure_schema(c)  # no-op on Postgres (migration 034 owns it)
         _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------
