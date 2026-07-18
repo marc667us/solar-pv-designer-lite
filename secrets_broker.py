@@ -56,6 +56,7 @@ import sqlite3
 import threading
 import time
 import uuid
+import secrets_file          # encrypted-at-rest store; env still wins (see _env_warm)
 from dataclasses import dataclass, asdict
 from typing import Any
 
@@ -413,7 +414,15 @@ def _env_warm(logical_path: str) -> dict | None:
         return None
     out: dict[str, str] = {}
     for field_name, env_name in fields.items():
+        # PRECEDENCE: the real environment first, the encrypted store only as a filler.
+        #
+        # On Render every secret arrives as a dashboard environment variable and there is no
+        # `.env` at all, so this order leaves production behaviour byte-for-byte unchanged --
+        # the encrypted store can only supply a value the environment did not already have.
+        # A security change that can take the site down is not a security improvement.
         val = os.environ.get(env_name, "")
+        if not val:
+            val = secrets_file.get(env_name, "")
         if val:
             out[field_name] = val
     return out if out else None

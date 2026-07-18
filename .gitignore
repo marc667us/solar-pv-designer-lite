@@ -1,5 +1,8 @@
 # Sensitive
 .env
+# Encrypted secrets store. Ciphertext without SOLARPRO_SECRETS_KEY, but a committed
+# ciphertext plus a leaked key is still a breach -- and keys leak (2026-07-10).
+.env.enc
 *.db
 *.db-shm
 *.db-wal

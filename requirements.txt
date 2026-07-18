@@ -21,6 +21,10 @@ psycopg2-binary>=2.9.9
 # avoid a heavy dependency tree. The [cryptography] extra pulls in PyCA
 # cryptography for RS256 verification.
 python-jose[cryptography]>=3.3.0
+# Direct dependency since 2026-07-18: secrets_file.py encrypts .env at rest
+# with Fernet. It arrived transitively via python-jose before; a transitive
+# dependency that a security feature relies on is one refactor from vanishing.
+cryptography>=42.0.0
 
 # SOC 2 M3.4 observability -- Prometheus client for /metrics exposure
 # (counters / histograms / gauges). FOSS (Apache-2.0). The library is
