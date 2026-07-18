@@ -269,10 +269,37 @@ PHASE_DELIVERABLES: dict[str, tuple[tuple[str, str], ...]] = {
 # reports" rather than in the operator's face. Inventing a curated list for a phase the owner
 # has not specified would be guessing, and guessing is what produced 114 buttons.
 PHASE_REPORT_BUTTONS: dict[str, tuple[str, ...]] = {
+    # INITIATION -- the owner's own list, xx201 s39, in the owner's order.
     "R4_INITIATION": ("R4P1_D01",   # Programme Concept Note
                       "R4P1_D13",   # Programme Business Case
                       "R4P1_D14",   # Official Programme Plan
                       "R4P1_D09"),  # Programme Charter
+
+    # THE OTHER FIVE, aligned to their phase 2026-07-18 ("6 phases agreed... align them with
+    # their phase report"). Each keeps the phase's HEADLINE DOCUMENTS -- the ones a sponsor or
+    # a reviewer actually reads -- and its GATE report, which is the evidence the phase cannot
+    # advance without. The working detail of each phase (registers, trackers, per-site
+    # records, inspections) stays one click away under "more reports": those are records the
+    # programme accumulates, not reports an agent writes to be read.
+    "R4_PLANNING":   ("R4P2_D07",   # Programme Feasibility Study
+                      "R4P2_D17",   # Funding Strategy
+                      "R4P2_D25",   # Programme Implementation Plan
+                      "R4P2_D26",   # Executive Planning Report
+                      "R4P2_D27"),  # Planning Approval Request   *gate*
+    "R4_EXECUTION":  ("R4P3_D15",   # Progress Reports
+                      "R4P3_D20",   # Commissioning
+                      "R4P3_D21"),  # Handover Preparation        *gate*
+    "R4_MONITORING": ("R4P4_D19",   # Executive Status Report
+                      "R4P4_D02",   # Regional Performance Report
+                      "R4P4_D04",   # Project Progress Report
+                      "R4P4_D15"),  # Energy Generation Monitoring
+    "R4_VALUE":      ("R4P5_D01",   # Benefits Realisation Plan
+                      "R4P5_D16",   # Performance Baseline
+                      "R4P5_D17"),  # Post-Implementation Review  *gate*
+    "R4_CLOSURE":    ("R4P6_D01",   # Final Completion Report
+                      "R4P6_D07",   # Final Performance Report
+                      "R4P6_D08",   # Lessons Learned
+                      "R4P6_D14"),  # Programme Closure Certificate *gate*
 }
 
 
