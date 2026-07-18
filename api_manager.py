@@ -21,7 +21,7 @@ WHY THIS MODULE EXISTS
 - Every call is logged to api_logs table for monitoring/debugging
 """
 
-import os, json, time, sqlite3, hashlib, logging
+import os, json, time, sqlite3, hashlib, logging, contextvars
 from datetime import datetime
 
 import secrets_broker  # Phase 1: routes secret reads through the broker (audit + tier + future Vault)
@@ -290,8 +290,18 @@ class _AIClient:
           - Admin bypass: is_admin=True skips gate (call still ledger-recorded).
           - Anonymous user_id=None: per-user cap skipped, org spend cap still enforced.
         """
+        # Reset per call: a stale reason from a previous request would be reported against this
+        # one, which is worse than no reason at all -- it would send the operator to fix a
+        # problem that is already over.
+        self.last_failure_reason = ""
+
         allowed, cap_reason = ai_budget.check_caps(user_id=user_id, is_admin=is_admin)
         if not allowed:
+            # The app's OWN budget stopped this, not the provider. Codex (2026-07-18) rated an
+            # exhausted internal cap a BETTER permanent-failure candidate than a daily provider
+            # quota, because a daily quota resets and this does not. It must never be reported
+            # as a provider fault -- the fix is config here, not a key or a model.
+            self.last_failure_reason = "capped:" + str(cap_reason or "")[:80]
             _prompt_text = (system or "") + "\n".join(
                 m.get("content", "") for m in (messages or []))
             ai_budget.record_usage(
@@ -315,6 +325,11 @@ class _AIClient:
             or self._github(messages, system, max_tokens)
             or ("I'm having trouble connecting to AI services right now. Please try again in a moment.", "rule_based")
         )
+
+        # Every provider failed and the chain produced the canned string. If nothing along the
+        # way named a reason, say so honestly rather than inventing one.
+        if provider == "rule_based" and not self.last_failure_reason:
+            self.last_failure_reason = self.AI_FAIL_ERROR
 
         if ckey and provider not in ("rule_based",):
             self._s.set(ckey, {"reply": reply, "provider": provider}, cache_ttl, "ai")
@@ -355,12 +370,97 @@ class _AIClient:
                         self._s.log("anthropic", _model, "ok", (time.time()-t)*1000)
                         return reply, "claude"
                 except Exception as me:
-                    logger.warning("claude %s failed: %s", _model, me)
+                    # Enum, not the exception text: the same leak rule as _openrouter.
+                    logger.warning("claude %s failed: %s", _model,
+                                   self.classify_ai_failure(me))
             self._s.log("anthropic", _m, "error", (time.time()-t)*1000, "all models failed")
             return None
         except Exception as e:
-            self._s.log("anthropic", model or "claude", "error", (time.time()-t)*1000, str(e))
+            self._s.log("anthropic", model or "claude", "error", (time.time()-t)*1000,
+                        self.classify_ai_failure(e))
             return None
+
+    # The failure reason of the most recent AI attempt, as one of the AI_FAIL_* enums below.
+    # Read by the enterprise document writer so an operator is told WHY the writer was
+    # unavailable instead of being told only THAT it was. Reset at the start of every chat().
+    #
+    # BACKED BY A CONTEXTVAR, because `api.ai` is a SHARED SINGLETON. Codex (MEDIUM,
+    # 2026-07-18): a plain instance attribute on a singleton is process-wide state, so a
+    # concurrent request could overwrite this between another request's chat() returning and
+    # its reason being read -- showing operator A the cause of operator B's failure. The
+    # property below keeps the original `self.last_failure_reason` read/write syntax (every
+    # call site and test double is unchanged) while storing per-context.
+    _FAILURE_REASON: contextvars.ContextVar[str] = contextvars.ContextVar(
+        "ai_last_failure_reason", default="")
+
+    @property
+    def last_failure_reason(self):
+        return self._FAILURE_REASON.get()
+
+    @last_failure_reason.setter
+    def last_failure_reason(self, value):
+        self._FAILURE_REASON.set(value or "")
+
+    # Failure buckets. These are the whole vocabulary: an unrecognised failure is AI_FAIL_ERROR,
+    # never a guess. Codex (HIGH, 2026-07-18): `model_deprecated` MUST be its own bucket -- two
+    # of the five free fallbacks are marked "going away 2026-07-19", and a retired id returns
+    # 404/400, which reads exactly like a bad key if the two are pooled. Pooling them is how a
+    # retirement gets misdiagnosed as an auth problem and "fixed" by rotating a healthy key.
+    AI_FAIL_AUTH        = "auth"             # 401/403 -- key missing, invalid, revoked
+    AI_FAIL_RATE        = "rate_limited"     # 429 -- quota/free-tier cap
+    AI_FAIL_DEPRECATED  = "model_deprecated" # 404 -- model id retired or unknown
+    # 400 is SEPARATE from 404 and the distinction is the point. Codex (HIGH, 2026-07-18): a
+    # 400 is most often OUR malformed payload -- a bad parameter, an unsupported field, a
+    # request the provider validated and refused. Filing that under "model retired" sends the
+    # operator to swap healthy model ids while the actual defect sits in our request body.
+    AI_FAIL_BADREQUEST  = "bad_request"      # 400 -- the provider refused OUR request
+    AI_FAIL_TIMEOUT     = "timeout"          # socket/deadline expiry
+    AI_FAIL_EMPTY       = "empty_completion" # 200 with nothing usable in it
+    AI_FAIL_BADRESPONSE = "bad_response"     # 200 whose JSON is not the shape we expect
+    AI_FAIL_NETWORK     = "network"          # DNS/connection refused/TLS
+    AI_FAIL_ERROR       = "error"            # genuinely unclassified
+
+    @staticmethod
+    def classify_ai_failure(exc):
+        """Map a provider exception to one AI_FAIL_* enum.
+
+        Input:  the exception raised while calling a provider.
+        Output: a short stable enum string, safe to persist and to show an operator.
+
+        THIS FUNCTION MUST NEVER RETURN PROVIDER TEXT. Codex (HIGH, 2026-07-18): the HTTP error
+        BODY of a failed completion can echo request diagnostics and prompt fragments, and this
+        repo leaked five live secrets into PUBLIC GitHub Actions logs for 35 days on 2026-07-10.
+        So we read `HTTPError.code` -- an integer -- and never call `.read()` on it. The enum is
+        the entire output; the body is not sampled, not truncated, not logged.
+        """
+        import urllib.error as _ue
+        import socket as _sock
+
+        if isinstance(exc, ValueError):
+            # Raised by _openrouter itself for an empty completion; a JSON/shape failure
+            # surfaces as KeyError/TypeError and is a different bucket.
+            return _AIClient.AI_FAIL_EMPTY
+        if isinstance(exc, (KeyError, IndexError, TypeError)):
+            return _AIClient.AI_FAIL_BADRESPONSE
+        if isinstance(exc, _sock.timeout) or isinstance(exc, TimeoutError):
+            return _AIClient.AI_FAIL_TIMEOUT
+        if isinstance(exc, _ue.HTTPError):
+            code = getattr(exc, "code", 0)
+            if code in (401, 403):
+                return _AIClient.AI_FAIL_AUTH
+            if code == 429:
+                return _AIClient.AI_FAIL_RATE
+            if code == 404:
+                return _AIClient.AI_FAIL_DEPRECATED
+            if code == 400:
+                return _AIClient.AI_FAIL_BADREQUEST
+            return _AIClient.AI_FAIL_ERROR
+        if isinstance(exc, _ue.URLError):
+            # URLError wraps socket errors; a timeout arrives here rather than bare.
+            if isinstance(getattr(exc, "reason", None), (_sock.timeout, TimeoutError)):
+                return _AIClient.AI_FAIL_TIMEOUT
+            return _AIClient.AI_FAIL_NETWORK
+        return _AIClient.AI_FAIL_ERROR
 
     def _openrouter(self, messages, system, max_tokens, deadline=None):
         """Try each free model in turn. One retirement must not take the chain down.
@@ -382,11 +482,17 @@ class _AIClient:
         would.
         """
         if not self.openrouter_key or not self.openrouter_models:
+            # No key configured at all is an auth problem, and it is the single most likely
+            # cause of a PERMANENT outage on a fresh deploy -- an env var that was never set
+            # looks identical, from the operator's chair, to one that is rejected. Name it.
+            self.last_failure_reason = (self.AI_FAIL_AUTH if not self.openrouter_key
+                                        else self.AI_FAIL_DEPRECATED)
             return None
 
         import urllib.request as _ur, json as _j
         msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
         last_error = None
+        last_reason = ""
 
         for model in self.openrouter_models:
             timeout = 30
@@ -420,10 +526,23 @@ class _AIClient:
                 return reply, "openrouter"
             except Exception as e:
                 last_error = e
-                self._s.log("openrouter", model, "error", (time.time() - t) * 1000, str(e))
-                logger.warning("openrouter model %s failed: %s", model, e)
+                # ENUM ONLY -- never `str(e)`, never the HTTP body. Codex (HIGH, 2026-07-18):
+                # `str(e)` on an HTTPError, and the provider JSON behind it, can carry request
+                # diagnostics and prompt fragments; api_logs is readable wherever the SQLite
+                # file is, and this repo has a live-secret-leak history (2026-07-10). The enum
+                # plus the model slug is everything a diagnosis needs and nothing an attacker
+                # wants.
+                reason = self.classify_ai_failure(e)
+                last_reason = reason
+                self._s.log("openrouter", model, "error", (time.time() - t) * 1000, reason)
+                logger.warning("openrouter model %s failed: %s", model, reason)
 
-        logger.warning("openrouter: every free model failed, last error: %s", last_error)
+        # The reason the LAST model gave is the one the operator is shown. With a homogeneous
+        # failure (every model 429s, or the key is bad for all of them) that is the true cause;
+        # with a mixed failure it is at least a real observed reason rather than a guess.
+        self.last_failure_reason = last_reason or self.AI_FAIL_ERROR
+        logger.warning("openrouter: every free model failed, last reason: %s",
+                       self.last_failure_reason)
         return None
 
     def _ollama(self, messages, system, max_tokens):
@@ -442,7 +561,8 @@ class _AIClient:
             self._s.log("ollama", self.ollama_model, "ok", (time.time()-t)*1000)
             return reply, "ollama"
         except Exception as e:
-            self._s.log("ollama", self.ollama_model, "error", (time.time()-t)*1000, str(e))
+            self._s.log("ollama", self.ollama_model, "error", (time.time()-t)*1000,
+                        self.classify_ai_failure(e))
             logger.warning("ollama failed: %s", e)
             return None
 
@@ -466,7 +586,8 @@ class _AIClient:
             self._s.log("github_models", self.github_model, "ok", (time.time()-t)*1000)
             return reply, "github_models"
         except Exception as e:
-            self._s.log("github_models", self.github_model, "error", (time.time()-t)*1000, str(e))
+            self._s.log("github_models", self.github_model, "error", (time.time()-t)*1000,
+                        self.classify_ai_failure(e))
             logger.warning("github_models failed: %s", e)
             return None
 

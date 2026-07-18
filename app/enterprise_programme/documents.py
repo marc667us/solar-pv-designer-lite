@@ -40,6 +40,7 @@ gap silently: an activity the AI could not speak to still says TO BE COMPLETED.
 
 from __future__ import annotations
 
+import contextvars
 import io
 import json
 import re
@@ -1140,6 +1141,79 @@ def _brief(facts: dict) -> str:
     return " ".join(bits)
 
 
+# WHY THE WRITER LAST FAILED, for the operator's error message.
+#
+# The owner has now hit "the document writer was not available" repeatedly with no way to tell
+# a dead key from a rate limit from our own refusal of a draft. Codex (HIGH, 2026-07-18) proved
+# those are indistinguishable from anything observable, because every provider failure is
+# funnelled into one `except Exception`. This carries the reason the last few metres to the
+# screen so the next report is a diagnosis, not another guess.
+#
+# Deliberately not a return-value change: `_ai_write` returns `str | None` and is stubbed by
+# dozens of tests via monkeypatch. Widening its signature would break every one of those stubs
+# to carry a value only the error path reads.
+#
+# A CONTEXTVAR, NOT A MODULE GLOBAL. Codex (MEDIUM, 2026-07-18): a plain global is one slot per
+# PROCESS, so two operators generating documents concurrently would race -- operator A could be
+# shown operator B's reason. That is worse than the generic message this work replaces, because
+# a confidently WRONG diagnosis sends someone to fix healthy config. A ContextVar is scoped to
+# the executing context, so each request reads back only what it itself recorded, under sync
+# workers, threads, or async alike.
+_LAST_WRITER_FAILURE: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "enterprise_last_writer_failure", default="")
+
+
+def _record_writer_failure(reason: str) -> None:
+    """Remember why the writer just failed. Enum-ish strings only, never provider text."""
+    _LAST_WRITER_FAILURE.set((reason or "")[:120])
+
+
+def last_writer_failure() -> str:
+    """The reason the writer last failed in THIS request context, or "" if none was recorded.
+
+    Note it is NOT cleared on a successful write -- it is a "last failure", not a "current
+    state". That is safe only because every read site is immediately preceded by a same-request
+    write: each `return None` in `_ai_write` records a reason before returning, and the callers
+    read it only on `if draft is None`. Do not read this value anywhere that guarantee does not
+    hold, or you may report a reason belonging to an earlier, already-recovered failure.
+    """
+    return _LAST_WRITER_FAILURE.get()
+
+
+def _writer_unavailable_message() -> str:
+    """The operator-facing message for an unusable writer, naming the cause when we know it.
+
+    THE LEADING CLAUSE IS FIXED. `test_route_fails_loudly_when_the_writer_is_unreachable`
+    asserts the byte substring "writing service is unavailable"
+    (tests/enterprise_programme/test_document_writes_and_report_page.py:364), and that
+    assertion is the contract that keeps this path failing LOUDLY instead of silently saving
+    a gap-filled report. Append to the message; never reword the front of it.
+    """
+    reason = last_writer_failure()
+    if not reason:
+        return "the writing service is unavailable; try again later"
+    # Plain English per bucket. An operator should not have to read the source to act.
+    plain = {
+        "auth":             "the AI key is missing or rejected -- set OPENROUTER_API_KEY",
+        "rate_limited":     "the free AI tier is rate-limited -- try again later",
+        "model_deprecated": "the configured AI models were not found -- one may be retired",
+        # Deliberately points INWARDS. A 400 is the provider telling us our request was wrong,
+        # so sending the operator to swap model ids or keys would waste their time on healthy
+        # config. This one is ours to fix.
+        "bad_request":      "the AI request was rejected as malformed -- this is an app defect,"
+                            " please report it",
+        "timeout":          "the AI provider did not answer in time",
+        "empty_completion": "the AI provider returned nothing",
+        "bad_response":     "the AI provider returned an unexpected response",
+        "network":          "the AI provider could not be reached",
+        "output_rejected":  "the draft was rejected by the safety check, not by the provider",
+        "error":            "the AI provider failed for an unrecognised reason",
+    }.get(reason.split(":", 1)[0], "the AI provider failed")
+    if reason.startswith("capped:"):
+        plain = "this app's own AI budget cap is exhausted -- raise or reset the cap"
+    return f"the writing service is unavailable ({plain})"
+
+
 def _ai_write(subject: str, facts: dict, passage_body: str = "", *,
               brief: str = "", document_title: str = "") -> str | None:
     """Ask the LLM to WRITE this section of this document.
@@ -1237,21 +1311,48 @@ def _ai_write(subject: str, facts: dict, passage_body: str = "", *,
             max_tokens=700,
             endpoint="enterprise_document_generation",
         )
-    except Exception:
+    except Exception as e:
+        # The provider layer usually classified this already; if the throw came from our own
+        # call-site instead, classify it here so the slot is never left stale.
+        #
+        # EVERY LOOKUP HERE IS DEFENSIVE ON PURPOSE. This is an error handler: if it raises,
+        # it destroys the original exception and reports its own AttributeError instead --
+        # which is exactly how a diagnosable fault becomes an undiagnosable one. A test double
+        # without `classify_ai_failure`, or an older client object, must degrade to "error",
+        # never explode. (Caught by this file's own test double, 2026-07-18.)
+        reason = ""
+        try:
+            reason = getattr(_api.ai, "last_failure_reason", "") or ""
+            if not reason:
+                classify = getattr(_api.ai, "classify_ai_failure", None)
+                reason = classify(e) if callable(classify) else "error"
+        except Exception:
+            reason = "error"
+        _record_writer_failure(reason or "error")
         return None
 
     if not reply or provider in ("rule_based", "capped"):
         # The rule-based fallback is a canned string; presenting it as a drafted section
         # would be passing off a placeholder as content.
+        #
+        # Ask the provider layer why. It classified the failure at the point it happened,
+        # which is the only place the HTTP status was still in scope.
+        _record_writer_failure(getattr(_api.ai, "last_failure_reason", "") or "error")
         return None
     reply = reply.strip()
     if not reply:
+        _record_writer_failure("empty_completion")
         return None
 
     violation = _ai_output_violation(reply, facts)
     if violation:
         # A rejected draft must not fall into the old gap path. On the AI-requested owner
         # route the caller turns this None into a DocumentError, so no fake report is saved.
+        #
+        # This is a REFUSAL BY US, not a provider fault -- record it as such, or an operator
+        # will go hunting for a dead key when the writer actually did reply and we declined
+        # the draft. Codex (MEDIUM, 2026-07-18) called out exactly this misread.
+        _record_writer_failure("output_rejected")
         return None
 
     # THE INSUFFICIENT ESCAPE HATCH IS GONE (2026-07-16). It used to be the honest answer:
@@ -1467,10 +1568,7 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
                     # use_ai=False remains the deterministic unit-test path. use_ai=True
                     # means the owner path requested the writing service and it failed or
                     # returned an unsafe draft; saving a quote-shaped gap would be dishonest.
-                    raise DocumentError(
-                        "DOCUMENT",
-                        "the writing service is unavailable; try again later",
-                    )
+                    raise DocumentError("DOCUMENT", _writer_unavailable_message())
                 written, repeated = _accept_or_retry_ai(
                     draft, heading=heading, subject=subject, passage_body=body, brief=brief)
             if written:
@@ -1503,10 +1601,7 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
                     # use_ai=False remains the deterministic unit-test path. use_ai=True
                     # means the owner path requested the writing service and it failed or
                     # returned an unsafe draft; saving a marker-filled report is the defect.
-                    raise DocumentError(
-                        "DOCUMENT",
-                        "the writing service is unavailable; try again later",
-                    )
+                    raise DocumentError("DOCUMENT", _writer_unavailable_message())
                 written, repeated = _accept_or_retry_ai(
                     draft, heading=heading, subject=subject, brief=brief)
 
