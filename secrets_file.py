@@ -186,6 +186,61 @@ def get(name: str, default: str = "") -> str:
         return default
 
 
+def populate_environ() -> int:
+    """Put the decrypted secrets into os.environ, without overriding what is already there.
+
+    Input:  none.
+    Output: how many variables were set (0 when there is no store).
+
+    WHY THIS IS NECESSARY, and it is not optional:
+
+    `secrets_broker` is NOT the app's only reader of secrets. `web_app.py` reads SECRET_KEY
+    straight from `os.environ` and falls back to `secrets.token_hex(32)` when it is missing --
+    a RANDOM key on every restart, which silently invalidates every session and logs out every
+    user. Several other modules read os.environ directly too. So an encrypted store that only
+    the broker can see would let an operator delete their `.env`, watch the app start
+    "successfully", and then field complaints about being logged out constantly.
+
+    `setdefault` semantics, deliberately: the real environment still wins, exactly as in
+    `secrets_broker._env_warm` and in web_app's own `.env` loader. This function fills gaps.
+
+    NEVER LOGS A NAME OR A VALUE -- a count only. Callers run this at boot, where logs are
+    verbose and widely read.
+    """
+    try:
+        data = load()
+    except SecretsFileError as exc:
+        # LOUD, BUT NEVER FATAL. This is the boot path, and `wsgi.py` says in its own
+        # docstring why that matters: "an exception raised here means the process never
+        # listens and Render restarts it forever. That is precisely how the 2026-07-09
+        # Postgres expiry became a total outage."
+        #
+        # I shipped this as a `raise` on 2026-07-18 and it immediately took out the test
+        # suite, because any process without the master key now died at import. On Render it
+        # would have been worse: a missing env var could refuse the whole site rather than
+        # degrade one feature.
+        #
+        # `load()` still raises for callers who explicitly ASK for the store -- the CLI, and
+        # anything that cannot work without it. That is where the Q6 protection belongs. This
+        # function's job is only to FILL GAPS, and a gap-filler that cannot run is not a
+        # reason to refuse to start: the environment may well already hold everything, which
+        # is exactly the case on Render.
+        logger.error("secrets_file: %s", exc)
+        logger.error("secrets_file: continuing WITHOUT the encrypted store -- any secret it "
+                     "was meant to supply will be missing")
+        return 0
+
+    applied = 0
+    for name, value in data.items():
+        if not os.environ.get(name):
+            os.environ[name] = value
+            applied += 1
+    if applied:
+        logger.info("secrets_file: populated %d environment variables from the "
+                    "encrypted store", applied)
+    return applied
+
+
 def encrypt_file(src: str, dst: str | None = None) -> str:
     """Encrypt a plaintext `.env` into `.env.enc`. Returns the path written.
 

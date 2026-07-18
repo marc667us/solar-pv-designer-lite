@@ -1,0 +1,141 @@
+# Push OPENROUTER_API_KEY to the live Render service.
+#
+# WHY: the enterprise document writer has failed for the owner across four sessions with
+# "the writing service is unavailable". On 2026-07-18 the cause was finally MEASURED rather
+# than guessed: the key the owner supplied works, but four of the five free models return 429
+# and only nemotron answers. `/api/health/ai` reports openrouter "configured" on live -- but
+# that check only proves an env var EXISTS, never that it is valid or has quota. A stale or
+# exhausted key looks identical to a working one from outside.
+#
+# This writes the known-good key so live and local stop disagreeing.
+#
+# NON-DESTRUCTIVE: uses the per-key PUT endpoint
+#   PUT /v1/services/{id}/env-vars/OPENROUTER_API_KEY
+# NOT the bulk replace endpoint
+#   PUT /v1/services/{id}/env-vars       (that would wipe every other variable)
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=SET_OPENROUTER_KEY.
+#
+# THE KEY IS NEVER PRINTED. Only its length and a fingerprint of the first six characters
+# reach the log -- this repo leaked five live secrets into PUBLIC Actions logs for 35 days on
+# 2026-07-10, and Actions logs here are public.
+
+name: Set Render OPENROUTER_API_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type SET_OPENROUTER_KEY to write it to Render."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RENDER_API_KEY:     ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID:  ${{ secrets.RENDER_SERVICE_ID }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      CONFIRM:            ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SET_OPENROUTER_KEY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- OPENROUTER_API_KEY will be written to the Render service ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=SET_OPENROUTER_KEY to commit."
+          fi
+
+      - name: Verify the inputs exist (without revealing them)
+        run: |
+          set -e
+          for v in RENDER_API_KEY RENDER_SERVICE_ID OPENROUTER_API_KEY; do
+            eval "val=\$$v"
+            if [ -z "$val" ]; then
+              echo "::error::$v is not set as a repository secret"; exit 1
+            fi
+            echo "  $v present (length ${#val})"
+          done
+
+      # PROVE THE KEY WORKS BEFORE WRITING IT. Pushing an untested key would replace one
+      # unverified value with another and leave the owner exactly where they started.
+      - name: Prove the key actually answers
+        run: |
+          set -e
+          CODE=$(curl -s -o /tmp/r.json -w "%{http_code}" \
+            -X POST https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"model":"nvidia/nemotron-3-super-120b-a12b:free",
+                 "messages":[{"role":"user","content":"Say OK."}],"max_tokens":20}')
+          echo "  HTTP $CODE from OpenRouter"
+          case "$CODE" in
+            200) echo "  the key WORKS -- safe to write" ;;
+            401|403) echo "::error::the key is rejected (auth). Not writing it."; exit 1 ;;
+            429) echo "::error::the key is rate-limited right now. Not writing it -- it would" \
+                      "look identical to the failure being fixed."; exit 1 ;;
+            *)   echo "::error::unexpected HTTP $CODE. Not writing it."; exit 1 ;;
+          esac
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The key is valid and WOULD be written to Render."
+          echo "  Re-run with -f confirm=SET_OPENROUTER_KEY to commit."
+          echo "================================================================"
+
+      - name: Write it to Render (per-key, non-destructive)
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          # Body built by python into a FILE, never inlined into the curl command line: an
+          # inlined secret shows up in `set -x` traces and in process listings.
+          python3 -c "import json,os;open('/tmp/body.json','w').write(json.dumps({'value':os.environ['OPENROUTER_API_KEY']}))"
+          CODE=$(curl -s -o /tmp/put.json -w "%{http_code}" \
+            -X PUT "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/OPENROUTER_API_KEY" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/body.json)
+          rm -f /tmp/body.json
+          if [ "$CODE" != "200" ] && [ "$CODE" != "201" ]; then
+            echo "::error::Render returned HTTP $CODE writing the env var"; exit 1
+          fi
+          echo "  written (HTTP $CODE)"
+
+      # Confirm what LANDED, without printing the value. Render returns the env var; we check
+      # only that it is present and the right length.
+      - name: Verify what landed
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            -o /tmp/envs.json
+          # Written to a script file rather than a heredoc: a heredoc body has to sit at
+          # column 0, which terminates the surrounding YAML block scalar.
+          printf '%s\n' \
+            'import json, os' \
+            'want = os.environ["OPENROUTER_API_KEY"]' \
+            'data = json.load(open("/tmp/envs.json"))' \
+            'rows = data if isinstance(data, list) else data.get("envVars", [])' \
+            'for item in rows:' \
+            '    ev = item.get("envVar", item)' \
+            '    if ev.get("key") == "OPENROUTER_API_KEY":' \
+            '        got = ev.get("value", "")' \
+            '        print("  present on Render, length", len(got))' \
+            '        print("  matches the tested key:", got == want)' \
+            '        raise SystemExit(0 if got == want else 1)' \
+            'raise SystemExit("OPENROUTER_API_KEY not found after writing it")' \
+            > /tmp/verify.py
+          python3 /tmp/verify.py
+          rm -f /tmp/verify.py /tmp/envs.json
+          echo "  a redeploy is needed for the running process to pick it up."

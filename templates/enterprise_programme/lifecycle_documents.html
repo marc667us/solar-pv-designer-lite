@@ -118,9 +118,15 @@
            report, then opens it for you to review, edit and save. A ★ report is the evidence
            a stage gate needs; a ⚙ report is written by the design engine from the reference
            design. #}
+        {# OWNER, 2026-07-18: "the buttons must be just the report generator agents, reports
+           are as given in the revision requirement" / "remove all unneeded buttons under each
+           phase". `dels` is now the phase's REPORTS, not its whole deliverable list -- for
+           Initiation exactly the four of xx201 s39. The rest sit under "more reports" below,
+           because the ask was for less noise, not less capability. #}
         {% for pcode, pno, pname in phases_ordered %}
-        {% set dels = phase_deliverables.get(pcode, []) %}
-        {% if dels %}
+        {% set dels = phase_report_buttons.get(pcode, []) %}
+        {% set more = phase_more_reports.get(pcode, []) %}
+        {% if dels or more %}
         <div class="card mb-2 {{ 'border-warning' if pcode == open_phase or pcode == current_phase }}"
              id="phase-{{ pcode }}">
           <div class="card-header py-2">
@@ -146,7 +152,38 @@
               {% if deliverable_gate.get(dcode) %}<span class="badge bg-success ms-1" title="opens stage gate {{ deliverable_gate[dcode] }}">★ {{ deliverable_gate[dcode] }}</span>{% endif %}
             </button>
             {% endfor %}
+            {% if not dels %}
+            <span class="text-muted small">No headline report for this phase — see below.</span>
+            {% endif %}
           </div>
+
+          {# EVERYTHING ELSE, collapsed. Nothing was removed from the app; it was removed from
+             the operator's face. A phase with 27 deliverables rendered as 27 buttons is a
+             list of the lifecycle, not a set of actions. #}
+          {% if more %}
+          <details class="px-3 pb-2">
+            <summary class="small text-muted" style="cursor:pointer">
+              more reports ({{ more|length }})
+            </summary>
+            <div class="d-flex flex-wrap gap-2 pt-2">
+              {% for dcode, dtitle in more %}
+              {% set locked = deliverable_gate.get(dcode) and not can_register_evidence %}
+              {% set engine = deliverable_engine.get(dcode) %}
+              <button type="submit" name="deliverable_code" value="{{ dcode }}"
+                      class="btn btn-sm btn-outline-secondary"
+                      {% if locked %}disabled title="needs edit rights to produce gate evidence"{% endif %}>
+                {{ dtitle }}
+                {% if engine %}<i class="bi bi-gear-fill ms-1" title="written by the design engine"></i>{% endif %}
+                {# NAMES the gate, not just a star. A gate report is the evidence a phase
+                   cannot advance without, and "which gate?" is the whole question the
+                   operator is asking -- collapsing the section must not collapse the answer.
+                   (Caught by test_the_page_names_the_gate_each_of_the_five_opens.) #}
+                {% if deliverable_gate.get(dcode) %}<span class="badge bg-success ms-1" title="opens stage gate {{ deliverable_gate[dcode] }}">★ {{ deliverable_gate[dcode] }}</span>{% endif %}
+              </button>
+              {% endfor %}
+            </div>
+          </details>
+          {% endif %}
         </div>
         {% endif %}
         {% endfor %}

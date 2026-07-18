@@ -285,6 +285,107 @@ class TestTheBrokerIntegration:
         assert secrets_broker._env_warm("ai/openrouter") is None   # absent, not an exception
 
 
+class TestPopulateEnviron:
+    """The store must reach code that reads os.environ DIRECTLY, not only the broker.
+
+    THE BUG THIS PREVENTS, caught before it shipped on 2026-07-18: `web_app.py` reads
+    SECRET_KEY straight from `os.environ` and falls back to `secrets.token_hex(32)` when it is
+    missing -- a RANDOM key on every restart, which silently invalidates every session and
+    logs out every user. An encrypted store only the broker could see would have let the
+    plaintext `.env` be deleted, the app start "successfully", and the real symptom appear
+    later as constant logouts with no obvious cause.
+    """
+
+    def test_it_fills_variables_the_environment_does_not_have(self, tmp_path, monkeypatch):
+        src = _write_env(tmp_path, "SECRET_KEY=stable-across-restarts")
+        secrets_file.encrypt_file(src)
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        secrets_file._cache = None
+
+        assert secrets_file.populate_environ() == 1
+        assert os.environ["SECRET_KEY"] == "stable-across-restarts"
+
+    def test_it_never_overrides_the_real_environment(self, tmp_path, monkeypatch):
+        """Same rule as the broker and as web_app's own loader: the environment wins. A store
+        that overrode it would let a stale file shadow a rotated production secret.
+        """
+        src = _write_env(tmp_path, "SECRET_KEY=from-the-store")
+        secrets_file.encrypt_file(src)
+        monkeypatch.setenv("SECRET_KEY", "from-the-environment")
+        secrets_file._cache = None
+
+        assert secrets_file.populate_environ() == 0
+        assert os.environ["SECRET_KEY"] == "from-the-environment"
+
+    def test_an_empty_value_in_the_environment_counts_as_absent(self, tmp_path, monkeypatch):
+        """`SECRET_KEY=` set to empty is not a configured secret -- and Flask would take the
+        empty string and produce an unusable session key rather than fall back.
+        """
+        src = _write_env(tmp_path, "SECRET_KEY=real-value")
+        secrets_file.encrypt_file(src)
+        monkeypatch.setenv("SECRET_KEY", "")
+        secrets_file._cache = None
+
+        assert secrets_file.populate_environ() == 1
+        assert os.environ["SECRET_KEY"] == "real-value"
+
+    def test_no_store_is_a_silent_no_op(self, monkeypatch):
+        """Render has no .env.enc. Boot must be completely unaffected there."""
+        monkeypatch.delenv(secrets_file.MASTER_KEY_ENV, raising=False)
+        secrets_file._cache = None
+        assert secrets_file.populate_environ() == 0
+
+    def test_an_unopenable_store_is_LOUD_but_never_stops_the_process(self, tmp_path,
+                                                                     monkeypatch, caplog):
+        """THE REGRESSION I SHIPPED AND HAD TO PULL BACK, 2026-07-18.
+
+        I first made this RAISE. It immediately took out the test suite -- every process
+        without the master key died at import -- and on Render it would have been worse: a
+        missing environment variable could have refused the whole site rather than degrade
+        one feature. `wsgi.py`'s own docstring warns about precisely this: "an exception
+        raised here means the process never listens and Render restarts it forever. That is
+        precisely how the 2026-07-09 Postgres expiry became a total outage."
+
+        The Q6 protection did not go away -- it moved to where it belongs. `load()` still
+        raises for callers who explicitly ASK for the store. `populate_environ` only fills
+        gaps, and a gap-filler that cannot run is not a reason to refuse to start.
+        """
+        import logging
+        src = _write_env(tmp_path, "SECRET_KEY=x")
+        secrets_file.encrypt_file(src)
+        monkeypatch.delenv(secrets_file.MASTER_KEY_ENV, raising=False)
+        secrets_file._cache = None
+
+        with caplog.at_level(logging.ERROR):
+            assert secrets_file.populate_environ() == 0      # no exception
+        assert secrets_file.MASTER_KEY_ENV in caplog.text, "the failure must still be LOUD"
+        assert "continuing WITHOUT" in caplog.text
+
+    def test_load_still_raises_for_a_caller_that_explicitly_asks(self, tmp_path, monkeypatch):
+        """Where the Q6 protection lives now. The CLI, and anything that cannot work without
+        the store, must still be told plainly rather than handed an empty dict.
+        """
+        src = _write_env(tmp_path, "SECRET_KEY=x")
+        secrets_file.encrypt_file(src)
+        monkeypatch.delenv(secrets_file.MASTER_KEY_ENV, raising=False)
+        secrets_file._cache = None
+
+        with pytest.raises(secrets_file.SecretsFileError):
+            secrets_file.load(force=True)
+
+    def test_it_logs_a_count_not_the_names(self, tmp_path, monkeypatch, caplog):
+        import logging
+        src = _write_env(tmp_path, "PAYSTACK_SECRET_KEY=sk_test_anothersecret")
+        secrets_file.encrypt_file(src)
+        monkeypatch.delenv("PAYSTACK_SECRET_KEY", raising=False)
+        secrets_file._cache = None
+
+        with caplog.at_level(logging.INFO):
+            secrets_file.populate_environ()
+        assert "sk_test_anothersecret" not in caplog.text
+        assert "PAYSTACK_SECRET_KEY" not in caplog.text
+
+
 class TestItDoesNotLeakThroughLogs:
 
     def test_loading_logs_a_count_not_the_names_or_values(self, tmp_path, caplog):

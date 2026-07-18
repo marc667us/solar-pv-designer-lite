@@ -250,6 +250,48 @@ PHASE_DELIVERABLES: dict[str, tuple[tuple[str, str], ...]] = {
     for phase in PHASE_CODES
 }
 
+# THE BUTTONS THE OPERATOR ACTUALLY SEES.
+#
+# OWNER, 2026-07-18: "all the buttons that come are not needed, the buttons must be just the
+# report generator agents, reports are as given in the revision requirement" and "remove all
+# unneeded buttons under each phase."
+#
+# The page was rendering EVERY deliverable of every phase as a button -- 14 for Initiation
+# alone, 114 in total. That is a list of the lifecycle, not a set of actions, and it buries
+# the four reports the owner's workflow is actually built on.
+#
+# INITIATION is specified exactly, by xx201 s39: Concept Note, Business Case, Programme Plan,
+# Programme Charter, in that order. It is the owner's own list and it is not negotiable.
+#
+# THE OTHER PHASES have no such list in the revision, so they show the deliverable that OPENS
+# THAT PHASE'S GATE -- the one report that has to exist for the programme to move on. Nothing
+# is deleted: everything else remains generatable, and the page keeps it behind "more
+# reports" rather than in the operator's face. Inventing a curated list for a phase the owner
+# has not specified would be guessing, and guessing is what produced 114 buttons.
+PHASE_REPORT_BUTTONS: dict[str, tuple[str, ...]] = {
+    "R4_INITIATION": ("R4P1_D01",   # Programme Concept Note
+                      "R4P1_D13",   # Programme Business Case
+                      "R4P1_D14",   # Official Programme Plan
+                      "R4P1_D09"),  # Programme Charter
+}
+
+
+def report_buttons_for(phase_code: str) -> tuple[str, ...]:
+    """The deliverable codes to show as primary buttons for a phase.
+
+    Input:  a phase code.
+    Output: its deliverable codes in display order.
+
+    Falls back to the phase's gate deliverable, so an unspecified phase shows the one report
+    that must exist rather than all twenty-seven of them.
+    """
+    explicit = PHASE_REPORT_BUTTONS.get(phase_code)
+    if explicit:
+        return explicit
+    return tuple(code for code, _title in PHASE_DELIVERABLES.get(phase_code, ())
+                 if code in DELIVERABLE_GATE_DOC_TYPE)
+
+
 # code -> (phase_code, title). One flat index so a deliverable resolves without knowing its
 # phase -- the UI, the generator and the gate check all need this.
 DELIVERABLE_INDEX: dict[str, tuple[str, str]] = {

@@ -73,6 +73,21 @@ if os.path.exists(_env_path):
                 _k, _v = _line.split("=", 1)
                 os.environ.setdefault(_k.strip(), _v.strip())
 
+# The ENCRYPTED secrets store, same gap-filling rule as the .env loader above.
+#
+# HERE, not only in wsgi.py/start.py, because this module is imported by pytest and by
+# tooling that never touches either entry point -- and the secrets it needs are read from
+# os.environ a few lines below (SECRET_KEY) and at user-seed time
+# (SOLARPRO_ADMIN_PASSWORD). Putting it in the entry points only meant the test suite
+# imported a web_app with no secrets at all (2026-07-18).
+#
+# NEVER FATAL: a secrets problem may degrade a feature, never stop the app importing.
+try:
+    import secrets_file as _secrets_file
+    _secrets_file.populate_environ()
+except Exception:
+    pass
+
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))

@@ -10,6 +10,16 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 from dotenv import load_dotenv
 load_dotenv()
 
+# The encrypted secrets store -- same position as load_dotenv, same gap-filling rule, and it
+# must run before web_app is imported (see the note in wsgi.py: web_app reads SECRET_KEY from
+# os.environ at import time and falls back to a RANDOM key, logging every user out on restart).
+try:
+    import secrets_file
+    secrets_file.populate_environ()
+except Exception as _secrets_exc:      # a secrets problem must not stop the app starting
+    print(f"warning: encrypted secrets store unavailable "
+          f"({type(_secrets_exc).__name__}); continuing without it")
+
 PORT = 5000
 
 # ── Start Flask via Waitress ──────────────────────────────────

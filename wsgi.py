@@ -10,6 +10,30 @@ retries lazily on later requests so the app recovers without a redeploy.
 """
 from dotenv import load_dotenv
 load_dotenv()
+
+# The encrypted secrets store, loaded in the SAME position as load_dotenv and with the same
+# rule: it fills gaps, it never overrides a value the environment already has.
+#
+# IT MUST RUN BEFORE `from web_app import app`. web_app reads SECRET_KEY straight from
+# os.environ at import time and falls back to `secrets.token_hex(32)` when it is missing -- a
+# RANDOM key on every restart, which silently invalidates every session and logs out every
+# user. Loading the store after that import would be too late to matter.
+#
+# On Render this is a no-op: there is no .env.enc there and every secret is a dashboard
+# variable. It exists so a machine can hold its secrets encrypted instead of in plaintext.
+#
+# WRAPPED, because this module must not raise at import under ANY circumstance -- see the
+# docstring above and boot_state.py. `populate_environ` is already written not to raise, and
+# this is the second belt: a secrets problem may degrade a feature, never refuse the port.
+try:
+    import secrets_file
+    secrets_file.populate_environ()
+except Exception as _secrets_exc:                       # pragma: no cover - boot resilience
+    import logging
+    logging.getLogger("wsgi").error(
+        "secrets_file could not be loaded at boot (%s); continuing without the encrypted "
+        "store", type(_secrets_exc).__name__)
+
 from web_app import app, init_db
 import boot_state
 

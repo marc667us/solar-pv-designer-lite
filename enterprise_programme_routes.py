@@ -1370,6 +1370,18 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 programme_id=programme_id,
                 phases_ordered=rev4_phases.PHASES,
                 phase_deliverables=rev4_phases.PHASE_DELIVERABLES,
+                # OWNER, 2026-07-18: the page rendered all 114 deliverables as buttons. The
+                # buttons are now just the reports the agents write for that phase -- for
+                # Initiation, exactly the four of xx201 s39. Everything else stays reachable
+                # under "more reports": the owner asked for less noise, not less capability.
+                phase_report_buttons={
+                    pcode: [(c, rev4_phases.DELIVERABLE_INDEX[c][1])
+                            for c in rev4_phases.report_buttons_for(pcode)]
+                    for pcode in rev4_phases.PHASE_CODES},
+                phase_more_reports={
+                    pcode: [(c, t) for c, t in rev4_phases.PHASE_DELIVERABLES[pcode]
+                            if c not in set(rev4_phases.report_buttons_for(pcode))]
+                    for pcode in rev4_phases.PHASE_CODES},
                 deliverable_gate=gates.DELIVERABLE_GATE,
                 deliverable_engine=rev4_phases.DELIVERABLE_ENGINE,
                 gate_of_doc_type=gates.GATE_OF_DOC_TYPE,
