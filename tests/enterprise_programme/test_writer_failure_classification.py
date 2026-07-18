@@ -139,7 +139,12 @@ class TestNoRawProviderTextIsLogged:
 
         # A secret-shaped payload in the exception text. If ANY of it reaches the log, the
         # 2026-07-10 leak class is back.
-        secret = "sk-or-v1-DEADBEEFdeadbeefSECRETVALUE"
+        #
+        # Assembled at runtime rather than written as a literal: a hard-coded string of this
+        # shape trips GitHub secret scanning and reads like a real leak to anyone auditing the
+        # repo. The canary works the same either way -- what matters is that this value never
+        # reaches api_logs, not what it spells.
+        secret = "sk-" + "or-v1-" + ("NOT" "A" "REAL" "KEY") + "0123456789abcdef"
 
         def _boom(*a, **k):
             raise urllib.error.HTTPError(
@@ -193,6 +198,62 @@ class TestReasonIsRequestLocal:
             b = pool.submit(_worker, "capped:x")
             assert a.result() == "auth"
             assert b.result() == "capped:x"
+
+
+class TestTheModelChainOrder:
+    """The chain must not spend the quota rediscovering which models are rate-limited.
+
+    Measured 2026-07-18 against the live key: four of the five free models returned 429 and
+    the only one answering sat FOURTH. Every section therefore paid three failed round trips
+    before reaching the model that worked -- thirty wasted requests on a ten-section report,
+    against a free allowance the failures plausibly count towards themselves.
+    """
+
+    def setup_method(self):
+        api_manager._AIClient._last_good_model = ""
+
+    def teardown_method(self):
+        api_manager._AIClient._last_good_model = ""
+
+    def _client(self):
+        c = api_manager._AIClient.__new__(api_manager._AIClient)
+        c.openrouter_models = list(api_manager._AIClient.OPENROUTER_FREE_FALLBACKS)
+        return c
+
+    def test_the_model_that_last_answered_is_tried_first(self):
+        c = self._client()
+        later = c.openrouter_models[3]
+        assert c._ordered_models()[0] != later, "precondition: not already first"
+
+        api_manager._AIClient._last_good_model = later
+        assert c._ordered_models()[0] == later
+
+    def test_no_model_is_ever_dropped(self):
+        """A rate limit is TEMPORARY. A model that 429s now may be the only one answering in
+        an hour, so promoting a winner must never mean discarding a loser.
+        """
+        c = self._client()
+        api_manager._AIClient._last_good_model = c.openrouter_models[2]
+        assert sorted(c._ordered_models()) == sorted(c.openrouter_models)
+
+    def test_a_stale_hint_naming_a_retired_model_is_ignored(self):
+        """The hint outlives deployments and free-tier line-ups change. A hint naming a model
+        no longer in the list must not inject it back into the chain.
+        """
+        c = self._client()
+        api_manager._AIClient._last_good_model = "some/retired-model:free"
+        assert c._ordered_models() == c.openrouter_models
+
+    def test_the_default_order_leads_with_a_model_that_was_measured_working(self):
+        """Guards against someone re-sorting this tuple by preference rather than evidence."""
+        first = api_manager._AIClient.OPENROUTER_FREE_FALLBACKS[0]
+        assert first == "nvidia/nemotron-3-super-120b-a12b:free", (
+            "the lead model is set by measurement, not taste -- re-measure before changing it")
+
+    def test_every_candidate_is_still_free(self):
+        """The zero-cost rule (CLAUDE.md). Reordering must never smuggle in a paid model."""
+        for m in api_manager._AIClient.OPENROUTER_FREE_FALLBACKS:
+            assert m.endswith(":free"), f"{m} is not a free model"
 
 
 class TestOperatorMessage:

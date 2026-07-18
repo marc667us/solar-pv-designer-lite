@@ -239,13 +239,33 @@ class _AIClient:
     # 2026-07-14, best prose first. These write governance-document sections, so the order is
     # by quality of ordinary English, not by speed. The tail is small and fast: if the big
     # ones are rate-limited (free tiers are), a short section still gets written.
+    # ORDER CHANGED 2026-07-18 after measuring all five against the live key. Four returned
+    # 429 and only nemotron answered -- and it was FOURTH, so every section paid three failed
+    # round trips before reaching the one model that worked. On a ten-section report that is
+    # thirty wasted requests, and on a free tier the failures plausibly count against the
+    # allowance too, so the old order was spending quota to discover the same thing each time.
+    #
+    # This order is a STARTING GUESS, not a fact. Free-tier availability rotates: today's
+    # winner is tomorrow's 429. `_ordered_models` below promotes whichever model actually
+    # answered last, so the chain corrects itself rather than waiting for someone to re-measure
+    # and edit this tuple.
     OPENROUTER_FREE_FALLBACKS = (
-        "meta-llama/llama-3.3-70b-instruct:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",   # the only one answering on 2026-07-18
+        "meta-llama/llama-3.3-70b-instruct:free",   # best prose when it is available
         "qwen/qwen3-next-80b-a3b-instruct:free",
         "google/gemma-4-31b-it:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "meta-llama/llama-3.2-3b-instruct:free",
+        "meta-llama/llama-3.2-3b-instruct:free",    # small and fast: a short section still lands
     )
+
+    # The model that most recently ANSWERED, promoted to the front of the next attempt.
+    #
+    # Deliberately process-global, and unlike `last_failure_reason` that is the right choice
+    # here: this is a performance hint about a THIRD PARTY's availability, not per-request
+    # data. Every worker faces the same rate limits, so sharing the observation is the point,
+    # and being wrong costs exactly one extra attempt that would have happened anyway. There is
+    # no cross-request information disclosure of the kind that made the failure reason a
+    # ContextVar.
+    _last_good_model = ""
 
     @staticmethod
     def _free_models():
@@ -273,6 +293,28 @@ class _AIClient:
             if m not in out:
                 out.append(m)
         return out
+
+    def _ordered_models(self):
+        """The models to try, best-known-first.
+
+        Input:  none (reads self.openrouter_models and the last-good hint).
+        Output: the same models, with whichever one last ANSWERED moved to the front.
+
+        WHY THIS EXISTS: on 2026-07-18 four of five free models were rate-limited and the one
+        that worked sat fourth, so every section burned three failures to rediscover the same
+        fact. A static order can only ever encode the day it was written; free-tier
+        availability rotates. Promoting the last success means the chain costs one wasted
+        attempt after a rotation instead of three on every single call.
+
+        No model is ever DROPPED -- a rate limit is temporary, and a model that 429s now is a
+        model that may be the only one answering in an hour.
+        """
+        models = list(self.openrouter_models)
+        good = _AIClient._last_good_model
+        if good and good in models:
+            models.remove(good)
+            models.insert(0, good)
+        return models
 
     def reload(self):
         self._load()
@@ -494,7 +536,7 @@ class _AIClient:
         last_error = None
         last_reason = ""
 
-        for model in self.openrouter_models:
+        for model in self._ordered_models():
             timeout = 30
             if deadline is not None:
                 remaining = deadline - time.time()
@@ -523,6 +565,9 @@ class _AIClient:
                     raise ValueError("empty completion")
                 self._s.log("openrouter", model, "ok", (time.time() - t) * 1000)
                 self.openrouter_model = model
+                # Remember what worked so the NEXT call starts here instead of walking the
+                # rate-limited models again.
+                _AIClient._last_good_model = model
                 return reply, "openrouter"
             except Exception as e:
                 last_error = e
@@ -613,6 +658,28 @@ class _EmailClient:
         self.addr_billing  = _env("EMAIL_BILLING",  "billing@aiappinvent.com")
         self.addr_hello    = _env("EMAIL_HELLO",    "sales@aiappinvent.com")
         self.addr_proposals= _env("EMAIL_PROPOSALS","sales@aiappinvent.com")
+
+    def _ordered_models(self):
+        """The models to try, best-known-first.
+
+        Input:  none (reads self.openrouter_models and the last-good hint).
+        Output: the same models, with whichever one last ANSWERED moved to the front.
+
+        WHY THIS EXISTS: on 2026-07-18 four of five free models were rate-limited and the one
+        that worked sat fourth, so every section burned three failures to rediscover the same
+        fact. A static order can only ever encode the day it was written; free-tier
+        availability rotates. Promoting the last success means the chain costs one wasted
+        attempt after a rotation instead of three on every single call.
+
+        No model is ever DROPPED -- a rate limit is temporary, and a model that 429s now is a
+        model that may be the only one answering in an hour.
+        """
+        models = list(self.openrouter_models)
+        good = _AIClient._last_good_model
+        if good and good in models:
+            models.remove(good)
+            models.insert(0, good)
+        return models
 
     def reload(self):
         self._load()
@@ -908,6 +975,28 @@ class _PaymentClient:
     def _load(self):
         self.secret_key = os.environ.get("PAYSTACK_SECRET_KEY", "")
         self.public_key = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
+
+    def _ordered_models(self):
+        """The models to try, best-known-first.
+
+        Input:  none (reads self.openrouter_models and the last-good hint).
+        Output: the same models, with whichever one last ANSWERED moved to the front.
+
+        WHY THIS EXISTS: on 2026-07-18 four of five free models were rate-limited and the one
+        that worked sat fourth, so every section burned three failures to rediscover the same
+        fact. A static order can only ever encode the day it was written; free-tier
+        availability rotates. Promoting the last success means the chain costs one wasted
+        attempt after a rotation instead of three on every single call.
+
+        No model is ever DROPPED -- a rate limit is temporary, and a model that 429s now is a
+        model that may be the only one answering in an hour.
+        """
+        models = list(self.openrouter_models)
+        good = _AIClient._last_good_model
+        if good and good in models:
+            models.remove(good)
+            models.insert(0, good)
+        return models
 
     def reload(self):
         self._load()
