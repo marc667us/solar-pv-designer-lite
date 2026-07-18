@@ -253,3 +253,40 @@ class TestTheSupportSurfaceIsActuallyReachable:
             s.update({"user_id": 1, "username": "admin", "is_admin": True})
         r = c.post("/admin/ops/support/fix/../../etc/passwd")
         assert r.status_code in (400, 404, 405)
+
+    def test_a_fix_really_runs_the_endpoint_behind_it(self):
+        """Not "the button exists" -- the button WORKS.
+
+        Exercised exactly as the browser calls it: a JSON body with the token in the
+        `X-CSRF-Token` HEADER. That detail matters and was a real bug: the endpoint first
+        forwarded the token as a FORM field, so `request.form` was empty and every fix failed
+        its CSRF check for a reason that looked nothing like the cause.
+        """
+        import re
+        c = self._client()
+        with c.session_transaction() as s:
+            s.update({"user_id": 1, "username": "admin", "is_admin": True})
+
+        html = c.get("/admin/operations").get_data(as_text=True)
+        m = (re.search(r'name="csrf-token"\s+content="([^"]+)"', html)
+             or re.search(r"const CSRF = .*?'([^']+)'", html))
+        token = m.group(1) if m else ""
+
+        for fix_id in ops.FIXES:
+            r = c.post(f"/admin/ops/support/fix/{fix_id}", json={},
+                       headers={"X-CSRF-Token": token})
+            assert r.status_code == 200, f"{fix_id} returned {r.status_code}"
+            assert r.get_json()["ok"] is True, (
+                f"{fix_id} reported failure: {r.get_json()}")
+
+    def test_the_ops_page_actually_offers_the_buttons(self):
+        """The panel has to be ON THE PAGE. `ops_support` was fully built and tested once
+        already while being reachable from nowhere -- that is the failure this pins.
+        """
+        c = self._client()
+        with c.session_transaction() as s:
+            s.update({"user_id": 1, "username": "admin", "is_admin": True})
+        html = c.get("/admin/operations").get_data(as_text=True)
+
+        for needle in ("Technical support", "runSupportSweep", "runFixAll", "fixAllBtn"):
+            assert needle in html, f"the Ops Center page is missing {needle!r}"

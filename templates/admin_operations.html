@@ -85,6 +85,28 @@
         </button>
       </div>
       <div id="pingResult" class="mt-3 small font-monospace"></div>
+
+      {# ---------------- technical support ----------------
+         OWNER, 2026-07-18: "when a test fails or gives an error there must be a button to fix
+         it and a button to fix all -- this must be one of the agent tech support" and "the
+         test results must also have plain english to explain at the opcenter test result
+         pane".
+
+         Deliberately NOT monospace and NOT raw JSON like the pane above: the point of this
+         panel is that it reads as sentences. The raw status stays visible in a muted chip so
+         nothing is hidden -- it simply stops being the headline. #}
+      <hr class="border-secondary my-4">
+      <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+        <h6 class="mb-0"><i class="bi bi-life-preserver me-1"></i>Technical support</h6>
+        <button class="btn btn-sm btn-primary" onclick="runSupportSweep()">
+          <i class="bi bi-stethoscope me-1"></i>Check everything
+        </button>
+        <button class="btn btn-sm btn-warning d-none" id="fixAllBtn" onclick="runFixAll()">
+          <i class="bi bi-tools me-1"></i>Fix all
+        </button>
+        <span class="small text-muted ms-auto" id="supportSummary"></span>
+      </div>
+      <div id="supportResults" class="small"></div>
     </div>
   </div>
 
@@ -521,6 +543,107 @@ function apiPost(url, body={}) {
 
 function apiGet(url) {
   return fetch(url, {headers: {'X-CSRF-Token': CSRF}}).then(r => r.json());
+}
+
+/* ---------------- technical support ----------------
+   Runs every check and shows what each RESULT MEANS, with the fix that fits.
+
+   The severity here is the app's judgement, not the check's raw word: "not_configured" is
+   informational for the background queue (this plan has none, by design) and a real failure
+   for the AI provider (the report writer cannot work without one). That distinction is the
+   whole reason this panel exists -- see ops_support.py. */
+const SEV = {
+  error: {cls: 'danger',    icon: 'exclamation-octagon-fill', label: 'Problem'},
+  warn:  {cls: 'warning',   icon: 'exclamation-triangle-fill', label: 'Worth a look'},
+  info:  {cls: 'info',      icon: 'info-circle-fill',          label: 'By design'},
+  ok:    {cls: 'success',   icon: 'check-circle-fill',         label: 'Working'}
+};
+
+function esc(s) {
+  /* Everything below is injected as HTML, and some of it (the raw status, the detail) comes
+     from a provider rather than from us. Escape it. */
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderSupport(data) {
+  document.getElementById('supportSummary').textContent = data.summary || '';
+
+  const fixAll = document.getElementById('fixAllBtn');
+  fixAll.classList.toggle('d-none', !(data.fix_all && data.fix_all.length));
+  if (data.fix_all && data.fix_all.length) {
+    fixAll.innerHTML = '<i class="bi bi-tools me-1"></i>Fix all (' + data.fix_all.length + ')';
+  }
+
+  document.getElementById('supportResults').innerHTML = (data.results || []).map(r => {
+    const s = SEV[r.severity] || SEV.warn;
+    /* A fix button ONLY where a fix genuinely exists. Where it does not, the guidance says
+       what a human would have to do -- a button that cannot do the thing is worse than a
+       sentence telling you what the thing is. */
+    const btn = r.fix_id
+      ? '<button class="btn btn-sm btn-outline-' + s.cls + ' ms-2 flex-shrink-0" ' +
+        'onclick="runFix(\'' + esc(r.fix_id) + '\', this)">' + esc(r.fix_label) + '</button>'
+      : '';
+    const manual = r.manual
+      ? '<div class="text-muted fst-italic mt-1">' + esc(r.manual) + '</div>' : '';
+    return '' +
+      '<div class="d-flex align-items-start gap-2 py-2 border-bottom border-secondary">' +
+        '<i class="bi bi-' + s.icon + ' text-' + s.cls + ' mt-1"></i>' +
+        '<div class="flex-grow-1">' +
+          '<div class="fw-semibold">' + esc(r.label) +
+            ' <span class="badge bg-' + s.cls + ' ms-1">' + s.label + '</span>' +
+            ' <span class="badge bg-dark text-muted ms-1" title="the raw result">' +
+              esc(r.raw) + '</span>' +
+          '</div>' +
+          '<div>' + esc(r.plain) + '</div>' + manual +
+        '</div>' + btn +
+      '</div>';
+  }).join('') || '<div class="text-muted">No checks were run.</div>';
+}
+
+function runSupportSweep() {
+  document.getElementById('supportSummary').textContent = 'Checking...';
+  document.getElementById('supportResults').innerHTML =
+    '<div class="text-muted">Running every check...</div>';
+  return apiGet('/admin/ops/support/sweep')
+    .then(renderSupport)
+    .catch(e => {
+      document.getElementById('supportSummary').textContent = '';
+      document.getElementById('supportResults').innerHTML =
+        '<div class="text-danger">The checks could not be run (' + esc(e.message || e) +
+        '). The page itself is fine; try again.</div>';
+    });
+}
+
+function runFix(fixId, btn) {
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'Working...';
+  return apiPost('/admin/ops/support/fix/' + encodeURIComponent(fixId), {})
+    .then(res => {
+      btn.innerHTML = res.ok ? 'Done' : 'Did not work';
+      /* Re-check afterwards rather than assume the fix worked: the point of this panel is to
+         show the state of the system, not our hopes for it. */
+      return runSupportSweep();
+    })
+    .catch(() => { btn.disabled = false; btn.innerHTML = original; });
+}
+
+async function runFixAll() {
+  const btn = document.getElementById('fixAllBtn');
+  btn.disabled = true;
+  const data = await apiGet('/admin/ops/support/sweep');
+  const fixes = data.fix_all || [];
+  /* SEQUENTIAL, worst first (the server orders them). One fix can change what another finds,
+     and firing them together makes the result impossible to reason about. */
+  for (let i = 0; i < fixes.length; i++) {
+    btn.innerHTML = 'Fixing ' + (i + 1) + ' of ' + fixes.length + '...';
+    try { await apiPost('/admin/ops/support/fix/' + encodeURIComponent(fixes[i].id), {}); }
+    catch (e) { /* keep going: a fix that fails must not block the ones after it */ }
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-tools me-1"></i>Fix all';
+  return runSupportSweep();
 }
 
 function showResult(elId, data, isError=false) {

@@ -141,12 +141,22 @@ def register_ops_support(app, *, admin_required, csrf_protect):
             from flask import session as _s
             sess.update(dict(_s))
 
+        # FORWARD THE CSRF TOKEN THE WAY IT ARRIVED. The Ops Center page sends it as the
+        # `X-CSRF-Token` HEADER with a JSON body (see admin_operations.html), so
+        # `request.form` is empty on this request -- passing a form field would hand the
+        # inner endpoint a blank token and every fix would fail its CSRF check for reasons
+        # that look nothing like the real cause. Both channels are forwarded so this works
+        # whichever way the caller sent it.
+        token = (request.headers.get("X-CSRF-Token")
+                 or request.form.get("_csrf", "")
+                 or (request.get_json(silent=True) or {}).get("_csrf", ""))
         try:
             if fix.method == "POST":
                 resp = client.post(fix.endpoint,
-                                   data={"_csrf": request.form.get("_csrf", "")})
+                                   data={"_csrf": token},
+                                   headers={"X-CSRF-Token": token})
             else:
-                resp = client.get(fix.endpoint)
+                resp = client.get(fix.endpoint, headers={"X-CSRF-Token": token})
             ok = resp.status_code < 400
             return jsonify({
                 "ok": ok,
