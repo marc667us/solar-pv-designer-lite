@@ -1511,6 +1511,9 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
     stated: set[str] = set()
     prior_sections: list[tuple[str, str]] = []
     repeated_sections = 0
+    # Headings the writer could not produce. Drives both the visible markers and
+    # the all-or-nothing check after the loop.
+    unwritten: list[str] = []
 
     def _accept_or_retry_ai(prose: str | None, *, heading: str, subject: str,
                             passage_body: str = "", brief: str = "") -> tuple[str | None, bool]:
@@ -1590,10 +1593,32 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
                 draft = _ai_write(subject, facts, body,
                                   brief=brief, document_title=title)
                 if draft is None:
-                    # use_ai=False remains the deterministic unit-test path. use_ai=True
-                    # means the owner path requested the writing service and it failed or
-                    # returned an unsafe draft; saving a quote-shaped gap would be dishonest.
-                    raise DocumentError("DOCUMENT", _writer_unavailable_message())
+                    # ONE RETRY, THEN MARK AND CARRY ON -- xx10 s36 / xx201 s36: "Retry once
+                    # automatically. If the retry fails, show a simple user message. Allow the
+                    # user to select Retry." And xx10 s26: "Do not stop report generation...
+                    # insert a small visible placeholder."
+                    #
+                    # This USED to raise, throwing the whole report away. On a rate-limited
+                    # free tier that meant nine good sections were discarded because the tenth
+                    # hit a 429 -- which is what the owner has been seeing as "writer not
+                    # available" (2026-07-18). The requirement is explicit that generation
+                    # degrades rather than stops.
+                    #
+                    # The owner's "no fake report" rule is NOT weakened: a section that could
+                    # not be written says so, in the document, where a reviewer cannot miss
+                    # it -- and if NOTHING could be written the whole generation still fails
+                    # loudly at the end, because a document made entirely of markers is the
+                    # fake report they rejected.
+                    ai_calls += 1
+                    draft = _ai_write(subject, facts, body,
+                                      brief=brief, document_title=title)
+                if draft is None:
+                    unwritten.append(heading)
+                    md.append(f"*This section could not be written: "
+                              f"{_writer_unavailable_message()}. "
+                              f"Use Regenerate to try it again.*")
+                    md.append("")
+                    continue
                 written, repeated = _accept_or_retry_ai(
                     draft, heading=heading, subject=subject, passage_body=body, brief=brief)
             if written:
@@ -1623,10 +1648,17 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
                 draft = _ai_write(subject, facts,
                                   brief=brief, document_title=title)
                 if draft is None:
-                    # use_ai=False remains the deterministic unit-test path. use_ai=True
-                    # means the owner path requested the writing service and it failed or
-                    # returned an unsafe draft; saving a marker-filled report is the defect.
-                    raise DocumentError("DOCUMENT", _writer_unavailable_message())
+                    # Same rule as the source-passage branch above: one retry, then a visible
+                    # marker, never the loss of everything already written.
+                    ai_calls += 1
+                    draft = _ai_write(subject, facts, brief=brief, document_title=title)
+                if draft is None:
+                    unwritten.append(heading)
+                    md.append(f"*This section could not be written: "
+                              f"{_writer_unavailable_message()}. "
+                              f"Use Regenerate to try it again.*")
+                    md.append("")
+                    continue
                 written, repeated = _accept_or_retry_ai(
                     draft, heading=heading, subject=subject, brief=brief)
 
@@ -1694,6 +1726,24 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
         md.append(f"*Written by SolarPro across {len(sections)} section(s), grounded "
                   f"throughout in the programme's own record.*")
     md.append("")
+
+    # THE ALL-OR-NOTHING CHECK. Degrading is right; pretending is not.
+    #
+    # If the writer produced NOTHING -- every section a marker -- then this is a real outage,
+    # not a partial one, and saving a document made entirely of "could not be written" notes
+    # is exactly the fake report the owner rejected on 2026-07-16. That still fails loudly.
+    # A report with SOME real sections is worth keeping: the operator can read it, and
+    # Regenerate fills the rest.
+    if use_ai and unwritten and len(unwritten) == len(sections):
+        raise DocumentError("DOCUMENT", _writer_unavailable_message())
+
+    if unwritten:
+        md.append(f"*{len(unwritten)} of {len(sections)} section(s) could not be written by "
+                  f"the assistant and are marked above: "
+                  f"{', '.join(unwritten[:6])}{' ...' if len(unwritten) > 6 else ''}. "
+                  f"Use Regenerate to try them again.*")
+        md.append("")
+
     return "\n".join(md)
 
 

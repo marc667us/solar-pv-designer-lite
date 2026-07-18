@@ -392,3 +392,73 @@ def test_render_html_escapes_raw_html_from_an_uploaded_document():
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in out
     assert "&lt;img src=x onerror=alert(1)&gt;" in out
     assert "<h1>T</h1>" in out                    # ...while still rendering real markdown
+
+
+def test_a_partly_written_report_is_SAVED_with_the_gaps_marked(ent, programme, monkeypatch):
+    """xx10 s26 / xx201 s36: generation DEGRADES, it does not stop.
+
+    THE BUG THE OWNER HIT FOR FOUR SESSIONS. One rate-limited section threw the entire report
+    away -- and on a free tier where four of five models return 429, that is the difference
+    between "here is your concept note, two sections need a retry" and "the writing service is
+    unavailable" with nine good sections silently discarded.
+
+    The revision is explicit: "Do not stop report generation... insert a small visible
+    placeholder" and "Retry once automatically... Allow the user to select Retry."
+    """
+    client, wa, uid = ent
+    _login(client, uid)
+    before = _doc_count(wa, programme)
+
+    calls = {"n": 0}
+
+    def _flaky(subject, facts, passage_body="", *, brief="", document_title=""):
+        # One section refuses twice -- the first attempt AND its automatic retry -- so it is
+        # genuinely given up on. Everything else writes.
+        calls["n"] += 1
+        if calls["n"] in (2, 3):
+            documents._record_writer_failure("rate_limited")
+            return None
+        return f"Real prose for {subject}."
+
+    monkeypatch.setattr(documents, "_ai_write", _flaky)
+
+    r = _concept_note(client, programme)
+    assert r.status_code == 200
+
+    assert _doc_count(wa, programme) == before + 1, (
+        "a partly written report must be SAVED, not discarded")
+
+    md = _latest_markdown(wa, programme)
+    assert "Real prose for" in md, "the sections that succeeded must be kept"
+    assert "could not be written" in md, "the section that failed must say so, visibly"
+    assert "Regenerate" in md, "the operator must be told how to retry it"
+
+
+def test_a_section_gets_one_automatic_retry_before_being_given_up_on(ent, programme,
+                                                                    monkeypatch):
+    """xx201 s36: "Retry once automatically." On a rate-limited tier the second attempt
+    often lands, so abandoning a section on its first refusal wastes a working report.
+    """
+    client, wa, uid = ent
+    _login(client, uid)
+
+    attempts = {"n": 0}
+
+    def _fails_once_then_works(subject, facts, passage_body="", *, brief="",
+                               document_title=""):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            documents._record_writer_failure("rate_limited")
+            return None
+        return f"Recovered prose for {subject}."
+
+    monkeypatch.setattr(documents, "_ai_write", _fails_once_then_works)
+
+    r = _concept_note(client, programme)
+    assert r.status_code == 200
+
+    md = _latest_markdown(wa, programme)
+    assert "Recovered prose for" in md
+    assert "could not be written" not in md, (
+        "the retry succeeded, so no section should be marked as unwritten")
+    assert attempts["n"] > 1, "the writer was never retried"
