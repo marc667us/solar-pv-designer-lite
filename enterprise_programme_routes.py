@@ -41,7 +41,8 @@ from werkzeug.utils import secure_filename
 from app.enterprise_programme import (
     applications,
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, report_responses, reports, rev4_phases, rollout, site_qualification, sponsors,
+    rbac, report_responses, reports, rev4_phases, rollout, site_assignments,
+    site_qualification, sponsors,
     tenancy, txn,
     workflows,
 )
@@ -129,6 +130,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         sponsors.ensure_schema(c)       # no-op on Postgres (migration 030 owns it)
         applications.ensure_schema(c)   # no-op on Postgres (migration 031 owns it)
         report_responses.ensure_schema(c)  # no-op on Postgres (migration 034 owns it)
+        site_assignments.ensure_schema(c)  # no-op on Postgres (migration 035 owns it)
         _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------

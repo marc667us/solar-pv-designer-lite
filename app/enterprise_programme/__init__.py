@@ -10,7 +10,7 @@ docs/enterprise-programme/rebuild/09-supervisor-adjudication.md.
 
 from __future__ import annotations
 
-from . import constants, report_responses
+from . import constants, report_responses, site_assignments
 from .gates import (
     CONTROL_GUARDS,
     EnterpriseGateError,
@@ -54,6 +54,10 @@ __all__ = [
     # with the gate and approval vocabularies already flattened into this namespace, and a
     # silently shadowed constant in an acceptance rule is not a defect anyone finds quickly.
     "report_responses",
+    # Installer/supplier assignment to a site, reusing the marketplace list and bidding
+    # (xx201 planning, owner 2026-07-18). Exported as the MODULE: its vocabulary
+    # (AWARDED / SIGNED / ...) would collide with the approval and gate vocabularies.
+    "site_assignments",
     # tenancy
     "personal_tenant_id",
     "apply_enterprise_guc",

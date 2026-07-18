@@ -1,0 +1,199 @@
+# Apply migration 035 -- assign installers and suppliers to a site.
+#
+# OWNER, 2026-07-18: "in the planning stage the installation must be assigned to installer and
+# suppliers, so reuse the installer and supplier list and bidding to select and sign qualified
+# contractors and suppliers to a particular site."
+#
+# ADDITIVE: one new table, its indexes and its RLS policy. It drops nothing, rewrites no data
+# and alters no existing table -- so unlike 034 there is no constraint to add to something
+# already live, and no lock window worth discussing.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=APPLY_035.
+#
+# WHAT THE DRY-RUN IS FOR. The new table's composite FKs reference `enterprise_sites` and
+# `enterprise_programme_registry`, and a composite FK needs a UNIQUE on exactly the referenced
+# columns. If either parent lacks it the FKs are rejected and the migration dies partway.
+# That is the failure this gate exists to catch -- learned the hard way on 034, where the same
+# check found `enterprise_documents` had only `PRIMARY KEY (id)` and the migration would have
+# failed on the live database.
+
+name: Apply Migration 035 (site assignments)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type APPLY_035 to actually create the table."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLY_035" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- 035 WILL BE APPLIED ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be created ==="
+            echo "Re-run with -f confirm=APPLY_035 to commit."
+          fi
+
+      - name: Verify the migration file exists
+        run: test -f migrations/035_enterprise_site_assignments.sql && echo "OK"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then echo "::error::solarpro-postgres not found"; exit 1; fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Check the preconditions
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- the two parent tables must exist (migration 026) ---"
+          for t in enterprise_sites enterprise_programme_registry; do
+            N=$(psql "$DATABASE_URL" -At -c "
+              SELECT count(*) FROM information_schema.tables
+               WHERE table_schema='public' AND table_name='$t';")
+            echo "  $t present: $N"
+            if [ "$N" != "1" ]; then
+              echo "::error::$t is missing -- migration 026 has not run"; exit 1
+            fi
+          done
+
+          echo ""
+          echo "--- each parent needs UNIQUE (tenant_id, id) or the composite FKs fail ---"
+          for t in enterprise_sites enterprise_programme_registry; do
+            N=$(psql "$DATABASE_URL" -At -c "
+              SELECT count(*) FROM pg_constraint
+               WHERE conrelid='$t'::regclass AND contype IN ('u','p')
+                 AND pg_get_constraintdef(oid) ILIKE '%tenant_id, id%';")
+            echo "  $t has UNIQUE (tenant_id, id): $N  (must be >= 1)"
+            if [ "$N" = "0" ]; then
+              echo "::error::$t has no UNIQUE (tenant_id, id) -- the FKs would be REJECTED"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "--- the RLS helper must exist (migration 025) ---"
+          H=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM pg_proc WHERE proname='current_enterprise_tenant_ids';")
+          echo "  current_enterprise_tenant_ids present: $H"
+          if [ "$H" = "0" ]; then
+            echo "::error::the RLS helper is missing -- migration 025 has not run"; exit 1
+          fi
+
+          echo ""
+          echo "--- does the new table already exist? (a rerun is a no-op) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT table_name FROM information_schema.tables
+             WHERE table_schema='public' AND table_name='enterprise_site_assignments';"
+
+      - name: Dry-run -- nothing created
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. 035 WOULD create enterprise_site_assignments with its"
+          echo "  indexes and RLS policy. Nothing was changed."
+          echo "  Re-run with -f confirm=APPLY_035 to commit."
+          echo "================================================================"
+
+      - name: Apply 035
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/035_enterprise_site_assignments.sql
+          echo "OK: 035 applied."
+
+      # A migration that reports success while half its objects are missing is worse than one
+      # that fails: the app then breaks later, somewhere else, for a reason nobody connects
+      # back to here.
+      - name: Verify what actually landed
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          N=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM information_schema.tables
+             WHERE table_schema='public' AND table_name='enterprise_site_assignments';")
+          if [ "$N" != "1" ]; then echo "::error::the table is not there"; exit 1; fi
+          echo "  table present."
+
+          echo ""
+          echo "--- foreign keys ---"
+          psql "$DATABASE_URL" -c "
+            SELECT conname, pg_get_constraintdef(oid) AS definition
+              FROM pg_constraint
+             WHERE conrelid='enterprise_site_assignments'::regclass AND contype='f'
+             ORDER BY conname;"
+
+          echo ""
+          echo "--- the CHECKs that keep the record honest ---"
+          psql "$DATABASE_URL" -c "
+            SELECT conname, pg_get_constraintdef(oid) AS definition
+              FROM pg_constraint
+             WHERE conrelid='enterprise_site_assignments'::regclass AND contype='c'
+             ORDER BY conname;"
+
+          echo ""
+          echo "--- RLS must be ENABLED, with its policy ---"
+          psql "$DATABASE_URL" -c "
+            SELECT relname, relrowsecurity FROM pg_class
+             WHERE relname='enterprise_site_assignments';"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename, policyname FROM pg_policies
+             WHERE tablename='enterprise_site_assignments';"
+
+          echo ""
+          echo "CONFIRMED: 035 is live."
