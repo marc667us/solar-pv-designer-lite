@@ -2142,10 +2142,21 @@ def landing_page2():
 @app.route("/register", methods=["GET", "POST"])
 @limiter.limit("10 per hour")
 def register():
-    # SOC 2 M1.1 (2026-06-25): Keycloak is now the only auth path.
-    # All methods unconditionally route to the OIDC blueprint -- no env
-    # check, no ?legacy=1 escape. The legacy form below is dead code.
-    if request.method in ("GET", "POST"):
+    # 2026-07-18: THE ENV CHECK IS BACK, and it is not optional.
+    #
+    # This routed to Keycloak UNCONDITIONALLY -- "no env check, no ?legacy=1
+    # escape". That made the documented rollback impossible: `Rollback From
+    # Keycloak` strips every KEYCLOAK_* variable and expects the legacy form to
+    # take over, but this still bounced to /auth/login, which then 503d with no
+    # issuer to talk to. Result: EVERY login and registration on the live site
+    # was a dead end, /admin/marketplace included, with no way back short of
+    # re-provisioning Keycloak. An auth path with no fallback is a single point
+    # of total lockout.
+    #
+    # Keycloak stays the path whenever KEYCLOAK_ENABLED is set, so nothing
+    # changes while it is on. With it off, the legacy form below serves again --
+    # exactly what the rollback workflow promises.
+    if os.environ.get("KEYCLOAK_ENABLED", "").strip().lower() in ("1", "true", "yes"):
         _kc_next = request.args.get("next")
         if _kc_next:
             return redirect(url_for("oidc.auth_register", next=_kc_next))
@@ -2265,10 +2276,21 @@ def verify_email(token):
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("20 per hour")
 def login():
-    # SOC 2 M1.1 (2026-06-25): Keycloak is now the only auth path.
-    # All methods unconditionally route to the OIDC blueprint -- no env
-    # check, no ?legacy=1 escape. The legacy form below is dead code.
-    if request.method in ("GET", "POST"):
+    # 2026-07-18: THE ENV CHECK IS BACK, and it is not optional.
+    #
+    # This routed to Keycloak UNCONDITIONALLY -- "no env check, no ?legacy=1
+    # escape". That made the documented rollback impossible: `Rollback From
+    # Keycloak` strips every KEYCLOAK_* variable and expects the legacy form to
+    # take over, but this still bounced to /auth/login, which then 503d with no
+    # issuer to talk to. Result: EVERY login and registration on the live site
+    # was a dead end, /admin/marketplace included, with no way back short of
+    # re-provisioning Keycloak. An auth path with no fallback is a single point
+    # of total lockout.
+    #
+    # Keycloak stays the path whenever KEYCLOAK_ENABLED is set, so nothing
+    # changes while it is on. With it off, the legacy form below serves again --
+    # exactly what the rollback workflow promises.
+    if os.environ.get("KEYCLOAK_ENABLED", "").strip().lower() in ("1", "true", "yes"):
         _kc_next = request.args.get("next")
         if _kc_next:
             _r = redirect(url_for("oidc.auth_login", next=_kc_next))
