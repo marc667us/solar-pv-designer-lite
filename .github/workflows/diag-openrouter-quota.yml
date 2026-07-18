@@ -1,0 +1,102 @@
+# What is OpenRouter ACTUALLY saying right now?
+#
+# The owner reports "writer not available -- rate limiter blocking the AI agent" and it has
+# survived several fixes. Every further guess is expensive, so this workflow stops guessing:
+# it makes ONE real request with the live key and prints the status line, the rate-limit
+# headers and the error body verbatim.
+#
+# It also answers a question the rotation plan DEPENDS on and which has never been checked:
+# is the free-tier daily allowance attached to the KEY or to the ACCOUNT? If it is the
+# account, then rotating the key does NOT hand back a fresh 50 requests, and any advice
+# saying otherwise is wrong.
+#
+# Costs ONE request out of the daily 50 (max_tokens 1). Read-only otherwise -- it creates,
+# writes and deletes nothing.
+#
+#   gh workflow run "Diag OpenRouter Quota"
+
+name: Diag OpenRouter Quota
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - name: The key's own account view
+        run: |
+          set -e
+          [ -n "$OPENROUTER_API_KEY" ] || { echo "::error::OPENROUTER_API_KEY empty"; exit 1; }
+          echo "=== GET /api/v1/key ==="
+          curl -sS -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            "https://openrouter.ai/api/v1/key" -o /tmp/k.json -w "HTTP %{http_code}\n"
+          python3 -c "
+          import json
+          d=json.load(open('/tmp/k.json')).get('data',{})
+          for k,v in d.items(): print(f'  {k}: {v}')
+          "
+
+      # THE DEFINITIVE TEST. One real completion, headers included. A 429 here with
+      # 'free-models-per-day' in the body IS the quota ceiling, stated by the provider.
+      - name: One real completion, with the response headers
+        run: |
+          set -e
+          echo "=== POST /api/v1/chat/completions (max_tokens=1, free model) ==="
+          curl -sS -D /tmp/h.txt --max-time 120 \
+            -X POST "https://openrouter.ai/api/v1/chat/completions" \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" -H "Content-Type: application/json" \
+            -d '{"model":"nvidia/nemotron-nano-9b-v2:free","max_tokens":1,
+                 "messages":[{"role":"user","content":"hi"}]}' \
+            -o /tmp/r.json -w "HTTP %{http_code}\n" || true
+
+          echo ""
+          echo "--- status + rate-limit / reset headers ---"
+          grep -iE "^HTTP/|x-ratelimit|retry-after|x-reset" /tmp/h.txt || echo "  (no rate-limit headers returned)"
+
+          echo ""
+          echo "--- response body (verbatim, first 800 chars) ---"
+          head -c 800 /tmp/r.json; echo
+
+          echo ""
+          echo "--- verdict ---"
+          if grep -qi "free-models-per-day" /tmp/r.json; then
+            echo "  QUOTA CEILING CONFIRMED: the daily free-model allowance is spent."
+            echo "  This is NOT a code fault. Batching reduces how fast it is reached;"
+            echo "  it cannot raise the ceiling itself."
+            echo ""
+            echo "  IMPORTANT: OpenRouter meters this per ACCOUNT, not per key -- so"
+            echo "  MINTING A NEW KEY DOES NOT HAND BACK A FRESH 50. Verify against the"
+            echo "  limits printed above before advising a rotation as a capacity fix."
+          elif grep -qiE "\"error\"" /tmp/r.json; then
+            echo "  An error that is NOT the daily quota -- read the body above."
+          else
+            echo "  The key WORKS and quota is available right now."
+            echo "  If the app still reports the writer unavailable, the fault is in the"
+            echo "  APP, not the provider. Next: check the failure reason the app recorded"
+            echo "  (api_manager.classify_ai_failure -> last_failure_reason)."
+          fi
+
+      # Which models the chain actually depends on -- a retired model id looks like an
+      # outage and has bitten this project before (2026-07-14).
+      - name: Are the chain's models still alive?
+        run: |
+          set -e
+          curl -sS "https://openrouter.ai/api/v1/models" -o /tmp/m.json
+          python3 - <<'PY'
+          import json
+          ids = {m.get('id') for m in json.load(open('/tmp/m.json')).get('data', [])}
+          chain = ["nvidia/nemotron-nano-9b-v2:free",
+                   "meta-llama/llama-3.3-70b-instruct:free",
+                   "google/gemma-2-9b-it:free",
+                   "mistralai/mistral-7b-instruct:free",
+                   "qwen/qwen-2.5-72b-instruct:free"]
+          for c in chain:
+              print(("  ALIVE   " if c in ids else "  MISSING ") + c)
+          PY
