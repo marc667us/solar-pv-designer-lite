@@ -202,10 +202,44 @@ _BROKEN: dict[str, Callable[[str, str], Explanation]] = {
 # A fix is something this app can safely do TO ITSELF. Provisioning, spending and deployment
 # config are not on this list on purpose: a button that cannot really do the thing is worse
 # than a sentence telling you what the thing is.
-FIXES: dict[str, str] = {
-    "clear_cache": "Clear the application cache",
-    "ai_recheck":  "Re-test the AI provider",
-    "vacuum_db":   "Compact the database",
+class Fix(NamedTuple):
+    """A remedy the app can actually carry out on itself.
+
+    label     -- what the button says.
+    endpoint  -- the EXISTING ops endpoint that does the work. Nothing here reimplements an
+                 action; every fix delegates to a route that is already tested and already
+                 permission-checked, so a button can never do something the operator could
+                 not already do by hand.
+    method    -- how that endpoint must be called.
+    done      -- what to tell the operator afterwards.
+    """
+
+    label: str
+    endpoint: str
+    method: str
+    done: str
+
+
+# THE REGISTRY IS EXECUTABLE, NOT DECORATIVE.
+#
+# This was a dict of LABELS when first written on 2026-07-18, and a test called
+# `test_every_offered_fix_is_one_the_app_can_actually_perform` asserted only that an id
+# appeared in it. That assertion proved nothing: the buttons would have rendered and done
+# NOTHING. The owner asked "check if the agent technical support are still working and able to
+# catch and fix the issues" -- and the honest answer was no.
+#
+# Every entry now names the real endpoint that performs it, and a test walks these endpoints
+# against the app's actual URL map, so an id with no route behind it fails the suite.
+FIXES: dict[str, Fix] = {
+    "clear_cache": Fix("Clear the application cache",
+                       "/admin/ops/cache/clear", "POST",
+                       "Cached files were cleared."),
+    "ai_recheck":  Fix("Re-test the AI provider",
+                       "/admin/ops/ping/ai", "GET",
+                       "The AI provider was tested again."),
+    "vacuum_db":   Fix("Compact the database",
+                       "/admin/ops/db/vacuum", "POST",
+                       "The database was compacted."),
 }
 
 

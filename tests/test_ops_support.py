@@ -17,6 +17,19 @@ import pytest
 
 import ops_support as ops
 
+# IMPORTED AT MODULE SCOPE, ON PURPOSE. `wsgi` registers the support routes onto the shared
+# Flask app, and Flask refuses to add a route once that app has served its first request. All
+# test modules are imported during collection, BEFORE any test runs, so importing here is the
+# only point at which registration is guaranteed to succeed -- exactly as it is in production,
+# where wsgi.py is the entry point and registers before the first request arrives.
+#
+# Importing it inside a test instead made these pass alone and fail in the full suite (found
+# 2026-07-18). That is worth knowing beyond the tests: wsgi.py wraps this registration in a
+# try/except for boot resilience, so a late import would be SWALLOWED and merely logged --
+# the feature would be silently absent, which is how ops_support came to be dead code in the
+# first place.
+import wsgi as _wsgi
+
 
 class TestAbsentByDesignIsNotAFailure:
     """The owner's actual complaint."""
@@ -101,8 +114,25 @@ class TestFixAll:
                 "ping/queue": ops.explain("ping/queue", "not_configured")}
         assert ops.fixable(exps) == []
 
-    def test_every_offered_fix_is_one_the_app_can_actually_perform(self):
-        """A fix id with no implementation behind it is a button that lies."""
+    def test_every_offered_fix_names_a_ROUTE_THAT_EXISTS_in_the_app(self):
+        """A fix id with no implementation behind it is a button that lies.
+
+        THIS TEST USED TO LIE TOO. It asserted only that the id appeared in a dict -- and that
+        dict held nothing but LABELS, so every button would have rendered and done NOTHING.
+        The owner asked directly whether the tech-support agent could actually fix anything
+        (2026-07-18) and the honest answer was no. It now walks the app's real URL map, so a
+        fix whose endpoint does not exist fails here rather than on the operator's screen.
+        """
+        rules = {str(r.rule): r.methods for r in _wsgi.app.url_map.iter_rules()}
+
+        for fix_id, fix in ops.FIXES.items():
+            assert fix.endpoint in rules, (
+                f"{fix_id} points at {fix.endpoint}, which is not a route in this app")
+            assert fix.method in rules[fix.endpoint], (
+                f"{fix_id} calls {fix.endpoint} with {fix.method}, which that route refuses "
+                f"(it allows {sorted(rules[fix.endpoint] - {'HEAD', 'OPTIONS'})})")
+
+    def test_every_recommended_fix_id_is_registered(self):
         for exp in self._mixed().values():
             if exp.fix_id:
                 assert exp.fix_id in ops.FIXES, f"{exp.fix_id} has no registered action"
@@ -162,3 +192,64 @@ class TestEveryExplanationIsActuallyPlain:
         e = ops.explain(check, raw)
         if e.severity in (ops.ERROR, ops.WARN, ops.INFO) and not e.fix_id:
             assert e.manual, f"{check}: no button and no guidance leaves the operator stuck"
+
+
+class TestTheSupportSurfaceIsActuallyReachable:
+    """The owner asked directly: "check if the agent technical support are still working".
+
+    It was NOT. `ops_support` was imported by nothing, so on the live site it did precisely
+    nothing -- tested logic behind no route is not a feature. These tests exist so that can
+    never be true again silently: if the routes stop being registered, or stop being
+    admin-only, the suite says so.
+    """
+
+    def _client(self):
+        return _wsgi.app.test_client()
+
+    def test_both_routes_are_registered(self):
+        rules = {str(r.rule) for r in _wsgi.app.url_map.iter_rules()}
+        assert "/admin/ops/support/sweep" in rules
+        assert "/admin/ops/support/fix/<fix_id>" in rules
+
+    def test_an_anonymous_caller_cannot_run_diagnostics(self):
+        """A sweep names what is broken and how. That is a map for an attacker, not a
+        public page.
+        """
+        assert self._client().get("/admin/ops/support/sweep").status_code != 200
+
+    def test_an_anonymous_caller_cannot_run_a_fix(self):
+        """Far worse than reading: this one CHANGES the running system."""
+        assert self._client().post(
+            "/admin/ops/support/fix/clear_cache").status_code != 200
+
+    def test_an_admin_gets_every_check_explained(self):
+        c = self._client()
+        with c.session_transaction() as s:
+            s.update({"user_id": 1, "username": "admin", "is_admin": True})
+        r = c.get("/admin/ops/support/sweep")
+        assert r.status_code == 200
+
+        data = r.get_json()
+        assert data["summary"]
+        assert data["results"], "a sweep with no results is not a sweep"
+        for row in data["results"]:
+            assert row["plain"], f"{row['id']} came back with no explanation"
+            assert row["severity"] in ops.SEVERITY_ORDER
+
+    def test_the_queue_is_not_red_on_this_plan(self):
+        """The owner's original report -- 'queue to configured error' -- asserted against the
+        real endpoint rather than against the explainer in isolation.
+        """
+        c = self._client()
+        with c.session_transaction() as s:
+            s.update({"user_id": 1, "username": "admin", "is_admin": True})
+        rows = {r["id"]: r for r in c.get("/admin/ops/support/sweep").get_json()["results"]}
+        assert rows["ping/queue"]["severity"] != ops.ERROR
+
+    def test_an_unknown_fix_id_is_refused_not_attempted(self):
+        """This endpoint must never become a way to call arbitrary routes."""
+        c = self._client()
+        with c.session_transaction() as s:
+            s.update({"user_id": 1, "username": "admin", "is_admin": True})
+        r = c.post("/admin/ops/support/fix/../../etc/passwd")
+        assert r.status_code in (400, 404, 405)

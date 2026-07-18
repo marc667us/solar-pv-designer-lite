@@ -66,5 +66,27 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "Enterprise Programme module failed to register (app still serving): %s", _e
     )
 
+# --- Ops Center technical support --------------------------------------------
+# Explains every ops check in plain English and offers the fix that fits.
+#
+# Registered HERE for the same reason as the enterprise module: web_app.py is CRLF + mojibake
+# and must never be edited. Wrapped in its own try/except so a fault in the SUPPORT surface can
+# never stop the app serving -- a diagnostic tool that can take the site down is worse than no
+# diagnostic tool.
+try:
+    from new_ops_support_routes import register_ops_support
+    import web_app as _wa2
+
+    register_ops_support(
+        app,
+        admin_required=_wa2.admin_required,
+        csrf_protect=_wa2.csrf_protect,
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Ops support surface failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()
