@@ -203,10 +203,13 @@ def test_the_owners_four_documents_are_all_bound_to_an_engine():
     assert engine["R4P4_D19"] == "monitoring"            # Executive Status Report
 
 
-def test_all_112_revision_4_deliverables_are_encoded():
-    """The owner's spec (sections 9-14) names 112 deliverables across six phases: 12 for
+def test_all_114_revision_4_deliverables_are_encoded():
+    """The owner's spec (sections 9-14) named 112 deliverables across six phases; it is 114
+    since 2026-07-18, when revision xx201 appended Programme Business Case and Official
+    Programme Plan to Initiation (12 -> 14). Originally: 12 for
     Initiation, 27 Planning, 21 Execution, 19 Monitoring, 17 Value Realisation, 16 Closure."""
-    assert sum(len(v) for v in rev4_phases.PHASE_DELIVERABLES.values()) == 112
+    # 114 since 2026-07-18, not the original 112: revision xx201 s39 needs four Initiation reports and two of them -- Programme Business Case (R4P1_D13) and Official Programme Plan (R4P1_D14) -- did not exist. They are APPENDED, so every pre-existing code still resolves to the same deliverable it always did.
+    assert sum(len(v) for v in rev4_phases.PHASE_DELIVERABLES.values()) == 114
     assert len(rev4_phases.PHASE_DELIVERABLES) == 6
     # every phase in the lifecycle has at least one named deliverable button
     assert set(rev4_phases.PHASE_DELIVERABLES) == set(rev4_phases.PHASE_CODES)

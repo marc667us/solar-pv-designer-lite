@@ -357,6 +357,185 @@ PROGRAMME_APPROVAL_REQUEST: tuple[Section, ...] = (
 )
 
 
+# =============================================================================
+# R4P1_D13 -- Programme Business Case
+# =============================================================================
+# The investment-justification document. It answers ONE question -- should the sponsor put
+# money into this rather than into something else -- and everything here serves that.
+#
+# It is written AFTER the concept note has been accepted by both recipients (xx201 s25), so
+# unlike the concept note it is not writing from a one-line description: it has an approved
+# document behind it. That is why several briefs tell the writer to build on the accepted
+# concept note rather than restate it. A business case that merely repeats the concept note
+# at greater length is the failure mode to avoid.
+BUSINESS_CASE: tuple[Section, ...] = (
+    Section(
+        "Executive summary",
+        "State, for a sponsor who will read only this section, what is proposed, what it is "
+        "expected to cost, what it is expected to return, and what decision is being asked "
+        "for. Lead with the recommendation, not with background.",
+        "objectives",
+    ),
+    Section(
+        "Strategic case",
+        "Explain why this programme is worth doing at all: the problem it addresses and how "
+        "it fits the sponsor's or the country's energy priorities. Where an earlier concept "
+        "note is on the record, build on it rather than restating it. Do NOT state or imply "
+        "that any earlier document has been accepted, approved or endorsed -- you are not "
+        "told the lifecycle state and an unearned acceptance is a liability.",
+        "objectives",
+    ),
+    Section(
+        "Options considered",
+        "Set out the realistic options and say plainly why the recommended one is preferred. "
+        "At minimum consider: do nothing and continue with grid and generators; individual "
+        "unaggregated purchases by beneficiaries; a sponsor-funded grant programme; and the "
+        "recommended aggregated financed programme. A business case with only one option is "
+        "not a case, it is an assertion.",
+        "money",
+    ),
+    Section(
+        "Economic case",
+        "Give the indicative capital and operating costs over the asset's life, and the "
+        "benefits expected against them -- energy saved, expenditure avoided, generator fuel "
+        "displaced. State the payback period and whether the return is positive over the "
+        "asset life. Compare against the counterfactual of doing nothing. Say which "
+        "assumptions the result is most sensitive to -- tariff movement, demand accuracy, "
+        "financing cost -- and which way the case turns if they move against it. Where a "
+        "figure is not on the record, reason to an indicative value and LABEL it as "
+        "indicative or assumed. Never present a modelled figure as a confirmed one.",
+        "money",
+    ),
+    Section(
+        "Commercial and financing case",
+        "Describe how the programme would be paid for and on what indicative terms: the "
+        "split between grant, loan and beneficiary contribution, the currency, the indicative "
+        "tenor, and what security or guarantee is envisaged. State plainly whether the "
+        "expected repayment is affordable against the beneficiary's current energy "
+        "expenditure -- a financing structure that costs more than the bill it replaces is "
+        "not viable and must be said so. Financing institutions are PROSPECTIVE until an "
+        "agreement is executed: never state or imply that any institution has committed "
+        "funds, approved a facility or agreed terms.",
+        "money",
+    ),
+    Section(
+        "Management case",
+        "Explain how the programme would actually be delivered and governed: who runs it, "
+        "who assures the technical work independently of whoever delivers it, how delivery "
+        "is procured, what the reporting cadence to the sponsor is, and how a problem gets "
+        "escalated. Name roles, not people, where individuals are not on the record.",
+        "governance",
+    ),
+    Section(
+        "Risks and assumptions",
+        "State the principal risks to the investment and the assumptions the case rests on, "
+        "with what would be done about each. Affordability of repayments and the accuracy of "
+        "the demand baseline belong here if they bear on the programme.",
+        "risk",
+    ),
+    Section(
+        "Recommendation and decision sought",
+        "State the recommended option and the specific decision being asked of the sponsor, "
+        "including any conditions that should attach to an approval. End with the decision, "
+        "not with a summary.",
+        "governance",
+    ),
+)
+
+
+# =============================================================================
+# R4P1_D14 -- Official Programme Plan
+# =============================================================================
+# What the programme will actually DO, written once the business case is accepted and the
+# recipients have asked for a plan (xx201 s30-s32).
+#
+# The scope boundary matters and is deliberate: this is the plan that CLOSES Initiation, not
+# the detailed Planning-phase plan. xx201 s32 says so explicitly -- "do not introduce detailed
+# Planning Phase activities yet". Its job is to be complete enough to authorise a charter.
+PROGRAMME_PLAN: tuple[Section, ...] = (
+    Section(
+        "Programme background and goal",
+        "State briefly where the programme came from and what it is for, carrying forward "
+        "whatever earlier programme documents are on the record. Do not re-argue the "
+        "investment case here; summarise it. Do NOT state or imply that any earlier document "
+        "has been accepted, approved or endorsed -- you are not told the lifecycle state.",
+        "objectives",
+    ),
+    Section(
+        "Objectives and intended outcomes",
+        "State what the programme will achieve and how anyone would know it had. Prefer "
+        "recorded targets; where none exist, give indicative outcomes and label them as such.",
+        "objectives",
+    ),
+    Section(
+        "Beneficiaries and scope",
+        "Define who the programme serves and what is in and out of scope. Exclusions matter "
+        "as much as inclusions: a plan that names no boundary has none.",
+        "beneficiaries",
+    ),
+    Section(
+        "Partnership and governance structure",
+        "Set out the parties and who decides what: the programme developer, the beneficiary "
+        "organisation, the sponsor institution, and the technical assurance role. For each, "
+        "say what it decides, what it only advises on, and what it is accountable for. State "
+        "which decisions need sponsor approval and which do not. Describe a role generically "
+        "where the institution is not on the record.",
+        "governance",
+    ),
+    Section(
+        "Technical approach",
+        "Describe how the systems will be designed and to what standards, including how "
+        "individual installations are sized to a beneficiary's actual demand rather than "
+        "assigned a uniform size, how equipment quality is specified and verified, and how "
+        "installations are tested and commissioned before they are accepted. Say what "
+        "happens to a site that turns out to be unsuitable.",
+        "design",
+    ),
+    Section(
+        "Financing approach",
+        "Describe how delivery will be funded and how any beneficiary repayment is intended "
+        "to work. Keep prospective financiers prospective -- no institution has committed "
+        "anything until an agreement is executed.",
+        "money",
+    ),
+    Section(
+        "Programme phases and workstreams",
+        "Set out the phases the programme will run through and the workstreams inside them, "
+        "at the level of what each delivers. Do NOT expand this into detailed Planning-phase "
+        "activities or a task list -- this plan closes Initiation, it does not replace the "
+        "Planning phase that follows it.",
+        "schedule",
+    ),
+    Section(
+        "Indicative schedule and milestones",
+        "Give the sequence and the decision points that gate it. Durations are indicative at "
+        "this stage and must be labelled as such.",
+        "schedule",
+    ),
+    Section(
+        "Expected benefits",
+        "State the benefits the programme is expected to deliver, WHO receives each one, and "
+        "the indicator and baseline by which each would be measured once it is running. A "
+        "benefit with no indicator cannot be claimed later. Carry forward anything material "
+        "an earlier business case put on the record.",
+        "objectives",
+    ),
+    Section(
+        "Preliminary risks",
+        "State the principal risks to delivery and what would be done about each. Carry "
+        "forward anything material an earlier business case put on the record.",
+        "risk",
+    ),
+    Section(
+        "Immediate next actions",
+        "State what happens next, who does it, and what each action must produce, ending at "
+        "the point the Programme Charter is issued for approval. Name the decisions the "
+        "recipients are being asked to take and anything the programme is waiting on.",
+        "governance",
+    ),
+)
+
+
 # deliverable code -> its document shape.
 #
 # ONLY the Initiation phase is authored so far, deliberately. The owner rejected two builds
@@ -371,6 +550,11 @@ DOCUMENT_TEMPLATES: dict[str, tuple[Section, ...]] = {
     "R4P1_D09": PROGRAMME_CHARTER,
     "R4P1_D10": PRELIMINARY_BUDGET,
     "R4P1_D12": PROGRAMME_APPROVAL_REQUEST,
+    # The owner's four Initiation reports (xx201 s39) are Concept Note (D01), Business Case
+    # (D13), Programme Plan (D14) and Programme Charter (D09). All four are now authored, so
+    # the chain has a real document shape at every step rather than a generic fallback.
+    "R4P1_D13": BUSINESS_CASE,
+    "R4P1_D14": PROGRAMME_PLAN,
 }
 
 

@@ -2,7 +2,7 @@
 
 THE OWNER'S ASK: "the app must work to produce report" -- "using existing design options".
 
-Seven of Revision 4's 112 deliverables are engineering documents: the programme feasibility
+Seven of Revision 4's 114 deliverables are engineering documents: the programme feasibility
 study, the cost plan, the BOQ, the funding strategy, the implementation plan, the executive
 planning report and the executive status report (rev4_phases.DELIVERABLE_ENGINE). The
 capital-investment engine already writes every one of them from a real design.

@@ -11,7 +11,7 @@ So these tests drive the ROUTES, not the service (the service is covered by
 test_deliverables_open_gates.py). They ask the three questions that decide whether the model
 is actually wired:
 
-  * does the page OFFER Revision 4's 112 deliverables, and say which five open a gate?
+  * does the page OFFER Revision 4's 114 deliverables, and say which five open a gate?
   * does choosing one in the form make the generated document open that gate?
   * does a bad choice get REFUSED, rather than quietly downgraded to a document that looks
     right and opens nothing?

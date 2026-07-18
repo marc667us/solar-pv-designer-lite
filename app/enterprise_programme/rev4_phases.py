@@ -85,7 +85,7 @@ GATE_FOR_PHASE: dict[str, str] = {phase: code for code, phase, _, _ in GATES}
 # engine map) are DERIVED from these lists below, never hand-written beside them. A
 # hand-kept second column would be one edit away from naming the wrong deliverable.
 PHASE_DELIVERABLE_NAMES: dict[str, list[str]] = {
-    # ---- section 9: Initiation Deliverable Buttons (12) ----
+    # ---- section 9: Initiation Deliverable Buttons (14) ----
     "R4_INITIATION": [
         "Programme Concept Note",
         "Problem Statement",
@@ -99,6 +99,18 @@ PHASE_DELIVERABLE_NAMES: dict[str, list[str]] = {
         "Preliminary Budget",
         "Preliminary Schedule",
         "Programme Approval Request",
+        # APPENDED 2026-07-18 for the owner's revision (revision request xx201 s39), which
+        # names four Initiation reports: Concept Note, Business Case, Programme Plan,
+        # Programme Charter. Two of those had no deliverable at all -- the chain
+        # concept note -> business case -> programme plan -> charter could not be built
+        # because its middle two documents did not exist.
+        #
+        # APPENDED, NEVER INSERTED. Codes are positional (see PHASE_DELIVERABLES below), so
+        # inserting these next to the Concept Note would silently re-point R4P1_D02..D12 and
+        # every already-stored document's doc_type would then name a different deliverable
+        # than the one that wrote it. They take D13 and D14 for that reason alone.
+        "Programme Business Case",      # R4P1_D13
+        "Official Programme Plan",      # R4P1_D14
     ],
     # ---- section 10: Planning Deliverable Buttons (27) ----
     "R4_PLANNING": [
@@ -421,7 +433,10 @@ GATE_AUTHORITY: dict[str, str] = {code: role for code, _, _, role in GATES}
 # The owner's section 9-14 counts. If a future edit changes a list, this assert is the
 # canary that the deliverable contract moved.
 _EXPECTED_DELIVERABLE_COUNTS = {
-    "R4_INITIATION": 12,
+    # 14, not 12, since 2026-07-18: Programme Business Case (D13) and Official Programme Plan
+    # (D14) were appended for revision xx201 s39. This assert is the canary that the
+    # deliverable contract moved -- so it moves deliberately, in the same commit, or not at all.
+    "R4_INITIATION": 14,
     "R4_PLANNING":   27,
     "R4_EXECUTION":  21,
     "R4_MONITORING": 19,

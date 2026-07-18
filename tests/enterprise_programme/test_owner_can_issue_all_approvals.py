@@ -105,7 +105,10 @@ def _approval_request(db, programme):
     """The Initiation gate's evidence, written by the app.
 
     Revision 4's R4G1_INITIATION reads exactly one document -- the Programme Approval Request
-    (R4P1_D12), the last of the Initiation phase's twelve deliverable buttons.
+    (R4P1_D12). It is no longer the LAST Initiation button: revision xx201 appended the
+    Programme Business Case (D13) and the Official Programme Plan (D14) on 2026-07-18. The
+    gate still reads D12 and only D12 -- which deliverable opens a gate is set by
+    DELIVERABLE_GATE_DOC_TYPE, not by position in the list.
     """
     return documents.generate_document(
         db, db.org, OWNER, programme,

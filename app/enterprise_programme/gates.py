@@ -623,7 +623,9 @@ assert len(_demanded) == len(set(_demanded)), (
 del _demanded
 
 
-# deliverable code -> the gate that deliverable opens. Five of Revision 4's 112.
+# deliverable code -> the gate that deliverable opens. Five of Revision 4's 114
+# (112 until 2026-07-18, when xx201 appended two Initiation deliverables; neither of the
+# new ones opens a gate, so this map is unchanged in content).
 DELIVERABLE_GATE: dict[str, str] = {
     code: GATE_OF_DOC_TYPE[doc_type]
     for code, doc_type in DELIVERABLE_GATE_DOC_TYPE.items()

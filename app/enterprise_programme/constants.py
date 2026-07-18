@@ -17,7 +17,7 @@ THE LIFECYCLE IS NOT HERE ANY MORE (Slice 0b-ii, 2026-07-16)
 This file used to own the lifecycle as well: 16 phases, 14 stage gates, 453 activities and
 144 deliverables. The owner rejected that model as "made too large" and asked for the old map
 to be removed rather than left dormant, so it is DELETED -- not deprecated, not kept beside
-the new one. Revision 4's SIX phases, FIVE gates and 112 deliverables live in `rev4_phases.py`,
+the new one. Revision 4's SIX phases, FIVE gates and 114 deliverables live in `rev4_phases.py`,
 which is the single source of truth for anything phase- or gate-shaped.
 
 `rev4_phases` imports the hold/terminal pseudo-states back from this file, so do not add an
@@ -39,7 +39,7 @@ from __future__ import annotations
 # must be removed and deleted" -- and, on leaving things dormant instead: "item marked to be
 # removed must be removed and delected".
 #
-# The lifecycle now lives in `rev4_phases.py`: SIX phases, FIVE gates, 112 deliverables, and
+# The lifecycle now lives in `rev4_phases.py`: SIX phases, FIVE gates, 114 deliverables, and
 # no activities at all (a report IS one deliverable). Everything phase- or gate-shaped is
 # imported from there.
 #

@@ -155,11 +155,12 @@ def _sections(md: str) -> list[tuple[str, str]]:
 
 
 def test_every_phase_has_deliverables_and_they_came_from_the_owner_spec():
-    """112 deliverables across the six phases. If this drops to 0 the phase renders no
+    """114 deliverables across the six phases. If this drops to 0 the phase renders no
     buttons, and there is no way left to ask for a report at all."""
     assert len(PHASE_DELIVERABLES) == 6
     assert all(len(v) > 0 for v in PHASE_DELIVERABLES.values())
-    assert len(DELIVERABLE_INDEX) == 112
+    # 114 since 2026-07-18, not the original 112: revision xx201 s39 needs four Initiation reports and two of them -- Programme Business Case (R4P1_D13) and Official Programme Plan (R4P1_D14) -- did not exist. They are APPENDED, so every pre-existing code still resolves to the same deliverable it always did.
+    assert len(DELIVERABLE_INDEX) == 114
     # Verbatim from the owner's Revision 4 spec (sections 9-14), not paraphrased.
     assert DELIVERABLE_INDEX["R4P1_D01"] == ("R4_INITIATION", "Programme Concept Note")
     # Six phases, in the owner's order -- the report buttons are grouped by these.
@@ -597,7 +598,7 @@ def test_no_two_sections_of_a_report_make_the_SAME_STATEMENT(db, monkeypatch):
 
 
 def test_no_report_the_app_can_write_repeats_itself_on_the_deterministic_path():
-    """No deliverable may produce a report with the SAME HEADING twice. All 112 of them.
+    """No deliverable may produce a report with the SAME HEADING twice. All 114 of them.
 
     THE DEFECT THIS PINS, found 2026-07-16 while rewriting the suite for Rev 4:
     `_TOPICS` deliberately maps TWO needle groups to the `design` topic -- the design PHRASES

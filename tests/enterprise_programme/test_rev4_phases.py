@@ -33,14 +33,14 @@ def test_five_gates_and_monitoring_has_none():
 def test_deliverable_counts_match_spec_sections_9_to_14():
     # These are the owner's own button lists, authored verbatim -- not the old 144.
     assert {c: len(v) for c, v in r4.PHASE_DELIVERABLES.items()} == {
-        "R4_INITIATION": 12,
+        "R4_INITIATION": 14,
         "R4_PLANNING": 27,
         "R4_EXECUTION": 21,
         "R4_MONITORING": 19,
         "R4_VALUE": 17,
         "R4_CLOSURE": 16,
     }
-    assert len(r4.DELIVERABLE_INDEX) == 12 + 27 + 21 + 19 + 17 + 16
+    assert len(r4.DELIVERABLE_INDEX) == 14 + 27 + 21 + 19 + 17 + 16
 
 
 def test_specific_owner_deliverables_present_in_right_phase():
@@ -70,7 +70,8 @@ def test_every_deliverable_has_a_code_that_resolves_back_to_its_own_name():
     for phase, items in r4.PHASE_DELIVERABLES.items():
         for code, title in items:
             assert r4.DELIVERABLE_INDEX[code] == (phase, title)
-    assert len(r4.DELIVERABLE_CODES) == 112
+    # 114 since 2026-07-18, not the original 112: revision xx201 s39 needs four Initiation reports and two of them -- Programme Business Case (R4P1_D13) and Official Programme Plan (R4P1_D14) -- did not exist. They are APPENDED, so every pre-existing code still resolves to the same deliverable it always did.
+    assert len(r4.DELIVERABLE_CODES) == 114
 
 
 def test_codes_are_positional_within_their_phase():
