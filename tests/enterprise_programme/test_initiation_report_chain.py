@@ -15,6 +15,7 @@ import pytest
 
 from app.enterprise_programme import document_templates as templates
 from app.enterprise_programme import documents, rev4_phases
+from app.enterprise_programme.documents import _SETTLED_CLAIM_RE
 
 # The owner's chain, in order (xx201 s39, s56).
 CHAIN = [
@@ -133,6 +134,65 @@ class TestNoBriefPresumesAnApprovalTheAppCannotKnow:
                 assert "prospective" in low or "never state" in low, (
                     f"{title} / {section.heading}: raises financing institutions without "
                     "holding the line that none has committed anything")
+
+
+class TestTheSafetyCheckDoesNotBlockTheBusinessCase:
+    """The guard must stop liability claims WITHOUT making the required options comparison
+    impossible to write.
+
+    FOUND ON LIVE, 2026-07-18, with a real model behind a real key: the Business Case's
+    options section was rejected outright because it contained "sponsor-funded grant
+    programme". That phrase names a CATEGORY OF OPTION -- and xx201 s6 requires exactly that
+    option to be compared -- so the guard made the mandatory comparison unwritable and the
+    Business Case failed every single time. The classification shipped earlier the same day is
+    what identified it as OUR refusal rather than a provider outage.
+    """
+
+    @pytest.mark.parametrize("phrase", [
+        "a sponsor-funded grant programme",
+        "donor-funded schemes are unsustainable at scale",
+        "grant-funded installations create subsidy dependence",
+        "self-funded purchase by each shop",
+        "the bank-financed aggregated programme is preferred",
+    ])
+    def test_an_option_category_is_not_a_liability_claim(self, phrase):
+        assert not _SETTLED_CLAIM_RE.search(phrase), (
+            f"{phrase!r} names a kind of arrangement, not a claim about this programme")
+
+    @pytest.mark.parametrize("dash,name", [
+        ("-", "ASCII hyphen-minus"),
+        ("‐", "hyphen"),
+        ("‑", "non-breaking hyphen"),   # THE ONE THAT ACTUALLY BIT
+        ("‒", "figure dash"),
+        ("–", "en dash"),
+        ("—", "em dash"),
+        ("−", "minus sign"),
+    ])
+    def test_every_dash_form_compounds_not_only_the_ascii_one(self, dash, name):
+        """THE SECOND BUG, and the more instructive one.
+
+        Fixing this with an ASCII-only `(?<!-)` did NOT work, and the live re-run proved it:
+        the model writes "sponsor‑funded" with a NON-BREAKING HYPHEN. To a regex that is
+        a different character entirely, so an ASCII-only exemption exempts nothing. Models
+        emit typographic dashes routinely -- any guard that reasons about hyphenation has to
+        know the whole family or it is guarding a form nobody writes.
+        """
+        assert not _SETTLED_CLAIM_RE.search(f"a sponsor{dash}funded grant programme"), (
+            f"U+{ord(dash):04X} ({name}) is not treated as compounding")
+
+    @pytest.mark.parametrize("phrase", [
+        "the World Bank approved funding on 1 July 2026",
+        "the programme is funded by the Ministry of Energy",
+        "the facility was approved last week",
+        "the sponsor decided to proceed",
+        "financing was authorised",
+        "the works have been contracted",
+    ])
+    def test_a_real_liability_claim_is_still_caught(self, phrase):
+        """The exemption is a hyphen and nothing more. If this ever goes quiet, a document can
+        tell a sponsor money is in place when it is not -- the failure this guard exists for.
+        """
+        assert _SETTLED_CLAIM_RE.search(phrase), f"{phrase!r} must not pass the guard"
 
 
 class TestAppendingDidNotRepointAnything:

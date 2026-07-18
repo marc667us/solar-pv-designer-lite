@@ -1065,8 +1065,33 @@ def _trusted_ai_claim_text(facts: dict) -> str:
     return " ".join(str(x) for x in trusted if x)
 
 
+# A claim that something IS approved / funded / contracted / decided. The liability this
+# guard exists to stop is a document telling a sponsor that money or authority is already in
+# place when it is not.
+#
+# `(?<!-)` EXCLUDES THE COMPOUND-ADJECTIVE FORM, and that exclusion is load-bearing rather
+# than cosmetic. Proven live on 2026-07-18: the Business Case's options comparison was
+# rejected outright because it contained the phrase "sponsor-funded grant programme" -- which
+# names a CATEGORY OF OPTION, not a claim that this programme has been funded. xx201 s6
+# REQUIRES that exact option to be compared ("Sponsor-funded free systems"), so without this
+# the mandatory options comparison could never be written and the Business Case failed 100%
+# of the time.
+#
+# The distinction is grammatical and it holds: "sponsor-funded", "donor-funded",
+# "bank-financed", "grant-funded" are adjectives describing a KIND of arrangement. "the
+# programme is funded", "the facility was approved" are claims about THIS programme, and they
+# are still caught -- a hyphen is the only thing this exempts.
+# EVERY HYPHEN AND DASH, not just the ASCII one. Proven live on 2026-07-18: an ASCII-only
+# `(?<!-)` did NOT fix the rejection, because the model writes "sponsor‑funded" with
+# U+2011 NON-BREAKING HYPHEN. Models routinely emit the typographic forms -- U+2010 hyphen,
+# U+2011 non-breaking hyphen, U+2013 en dash, U+2014 em dash -- and to a regex those are
+# different characters entirely, so an ASCII-only exemption silently exempts nothing.
+#
+# (The tell was there earlier and I walked past it: printing that draft to a cp1252 console
+# died with `UnicodeEncodeError: '‑'`.)
+_DASHES = "\\-‐‑‒–—―−"
 _SETTLED_CLAIM_RE = re.compile(
-    r"\b(approved|authorised|authorized|funded|contracted|decided)\b", re.I)
+    rf"\b(?<![{_DASHES}])(approved|authorised|authorized|funded|contracted|decided)\b", re.I)
 _DATE_CLAIM_RE = re.compile(
     r"\b(?:\d{1,2}\s+"
     r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
