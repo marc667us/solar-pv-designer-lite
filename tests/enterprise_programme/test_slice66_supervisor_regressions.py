@@ -176,13 +176,26 @@ def test_a_report_cannot_fan_out_into_an_unbounded_number_of_llm_calls(db, monke
         calls.append(subject)
         return f"{subject} is drafted by the writing service."
 
+    # BOTH WRITING PATHS ARE COUNTED. Sections are now prefetched in BATCHES to survive
+    # OpenRouter's 50-requests-a-day free tier, so most sections are written by
+    # `_ai_write_many` and never reach `_ai_write`. Counting only the single-section path
+    # would have let an unbounded batch fan-out pass this test while reporting zero calls --
+    # the budget must bound the TOTAL number of provider round trips, whichever path makes
+    # them, because that total is what the timeout and the daily quota actually see.
+    def _counting_ai_write_many(sections, facts, *, document_title="", deadline=None):
+        calls.append(f"batch:{len(list(sections))}")
+        return {}
+
     monkeypatch.setattr(documents, "_ai_write", _counting_ai_write)
+    monkeypatch.setattr(documents, "_ai_write_many", _counting_ai_write_many)
     monkeypatch.setattr(documents, "MAX_AI_SECTIONS", 2)
 
     md = documents.build_markdown(c, org, pid, widest,
                                   title=DELIVERABLE_INDEX[widest][1], use_ai=True)
 
-    assert len(calls) == 2, "the AI budget did not stop the fan-out"
+    assert len(calls) == 2, (
+        f"the AI budget did not stop the fan-out: {len(calls)} provider calls on a budget "
+        f"of 2 -- {calls}")
     # ...and the report is still a report: every section is present. Past the model budget it
     # uses the deterministic path; a failed first model call is covered by the loud-failure
     # document tests instead of being passed off as a report.

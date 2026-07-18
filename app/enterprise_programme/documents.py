@@ -1239,6 +1239,148 @@ def _writer_unavailable_message() -> str:
     return f"the writing service is unavailable ({plain})"
 
 
+# How many sections to ask for in ONE model call.
+#
+# THE REASON IS QUOTA, AND IT IS MEASURED. OpenRouter's free tier allows 50 requests PER DAY
+# on this account -- its own words, 2026-07-18: "Rate limit exceeded: free-models-per-day.
+# Add 10 credits to unlock 1000 free model requests per day", with X-RateLimit-Limit: 50.
+# One call per section made a 10-section concept note cost 10 of those 50, so the whole
+# platform could produce FIVE documents a day and then reported "the writing service is
+# unavailable" for the rest of it. That is what the owner hit, repeatedly.
+#
+# The owner has ruled out paying (the zero-cost rule in CLAUDE.md), so the only lever left is
+# to ask for less. Four sections per call takes a concept note from 10 calls to 3: five
+# documents a day becomes sixteen.
+#
+# WHY NOT ONE CALL FOR THE WHOLE DOCUMENT. Wall clock. The free models run around 26 tokens/s,
+# gunicorn's timeout here is 300s (Procfile), and a full document is thousands of output
+# tokens -- one giant call would routinely be killed mid-write, trading a quota failure for a
+# timeout failure. Four is the largest batch that comfortably fits, and the request carries a
+# deadline so a slow provider degrades into marked sections rather than a dead request.
+AI_BATCH_SECTIONS = 4
+
+# The marker the model puts before each section so the batch can be split apart again.
+# Deliberately not a markdown heading: the PROSE may legitimately contain "##", and splitting
+# on something the content can also produce is how one section swallows the next.
+_BATCH_MARK = "<<<SECTION:"
+
+
+def _ai_write_many(sections, facts: dict, *, document_title: str,
+                   deadline=None) -> dict[str, str]:
+    """Write SEVERAL sections in one model call. Returns {heading: prose}.
+
+    Input:  an iterable of (heading, brief) pairs, the programme facts, the document title.
+    Output: prose per heading. A heading that could not be parsed back out is simply ABSENT,
+            and the caller writes it individually -- a partial batch is a saving, not a loss.
+
+    Same safety rules as `_ai_write`, because this is the same act: assumptions are labelled,
+    nothing is asserted as approved/funded/contracted, and no institution, person or date is
+    invented. The batch prompt repeats them rather than referring to them, because a model
+    given four tasks at once drifts further than one given a single task.
+
+    Returns {} rather than raising on any failure. The caller already knows how to write a
+    section on its own; this is an optimisation, and an optimisation that can break the
+    feature is not one.
+    """
+    items = [(h, b) for h, b in sections]
+    if not items:
+        return {}
+
+    # Bound before the try, so the failure path can always read the reason without having to
+    # ask whether the name exists yet -- an import that fails would otherwise leave `_api`
+    # unbound and turn a handled failure into a NameError inside the handler.
+    _api = None
+    try:
+        from api_manager import api as _api
+
+        asks = []
+        for heading, brief in items:
+            asks.append(f"{_BATCH_MARK}{heading}>>>\n{brief}")
+        body = "\n\n".join(asks)
+
+        reply, provider = _api.ai.chat(
+            [{"role": "user", "content":
+                f"{_brief(facts)}\n\n"
+                f"Document: {document_title}\n\n"
+                f"Write EACH of the following sections of this document. For every one, "
+                f"repeat its marker line exactly as given, then the section's prose beneath "
+                f"it. Write nothing else -- no headings of your own, no commentary, no "
+                f"numbering.\n\n"
+                f"{body}\n\n"
+                f"Each section is one to three short paragraphs of continuous prose, as it "
+                f"would appear in the document named above.\n\n"
+                f"WRITE EVERY SECTION. Do not ask for more information and do not leave any "
+                f"of them for someone else to finish -- there is no one else. Where the "
+                f"programme has not recorded a fact a section needs, apply what a solar "
+                f"programme adviser would reasonably expect for a programme of this type, in "
+                f"this country, at this scale, and MARK IT AS SUCH -- \"indicative\", "
+                f"\"assumed\", \"subject to survey\", \"typical for\". A labelled assumption "
+                f"is professional; a blank is not.\n\n"
+                f"Never state or imply that anything is approved, authorised, funded, "
+                f"contracted or decided unless the background says so, and never attribute a "
+                f"named institution, person, date or commitment the background does not give "
+                f"you. Reasoning to an indicative number and labelling it is right. Inventing "
+                f"a signed agreement is not."}],
+            system=("You write sections of solar programme governance documents for a "
+                    "government ministry or development finance institution. You are writing "
+                    "a DOCUMENT, not answering a question: continuous prose a minister could "
+                    "read, in the register of a formal programme paper.\n\n"
+                    "You are the author of record. A section you decline to write is a "
+                    "section that ships blank. At concept stage you are expected to reason "
+                    "from what a programme of this type, scale and country would typically "
+                    "involve, and to LABEL that reasoning as indicative or assumed. What you "
+                    "must never do is dress an assumption as a settled fact.\n\n"
+                    "Reproduce each section marker EXACTLY as it was given to you, on its own "
+                    "line, immediately before that section's prose."),
+            # Sized per section rather than per call, so a longer document does not silently
+            # get thinner sections than a short one.
+            max_tokens=min(3000, 620 * len(items)),
+            endpoint="enterprise_document_generation_batch",
+            deadline=deadline,
+        )
+    except Exception:
+        _record_writer_failure(
+            getattr(getattr(_api, "ai", None), "last_failure_reason", "") or "error")
+        return {}
+
+    if not reply or provider in ("rule_based", "capped"):
+        _record_writer_failure(getattr(_api.ai, "last_failure_reason", "") or "error")
+        return {}
+
+    # SPLIT THE REPLY BACK INTO SECTIONS.
+    #
+    # A marker counts only when it is ALONE ON ITS OWN LINE and matches a heading we actually
+    # asked for. Splitting on the bare marker text anywhere in the reply meant prose that
+    # merely MENTIONED "<<<SECTION:" silently truncated its own section -- the document lost
+    # everything after that point with no error, which is the worst way to fail. Requiring a
+    # whole line, and a known heading, means stray text is prose and nothing else.
+    wanted = {f"{_BATCH_MARK}{heading}>>>": heading for heading, _b in items}
+    chunks: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in reply.splitlines():
+        key = line.strip()
+        if key in wanted:
+            current = wanted[key]
+            # A heading returned TWICE: keep the first and ignore the rest, rather than let a
+            # later empty repeat wipe prose that was already written.
+            chunks.setdefault(current, [])
+            continue
+        if current is not None:
+            chunks[current].append(line)
+
+    out: dict[str, str] = {}
+    for heading, prose_lines in chunks.items():
+        prose = "\n".join(prose_lines).strip()
+        if not prose:
+            continue                      # not returned usably; the caller writes it alone
+        # The same output guard as the single-section path. A batch is not a way around it.
+        if _ai_output_violation(prose, facts):
+            _record_writer_failure("output_rejected")
+            continue
+        out[heading] = prose
+    return out
+
+
 def _ai_write(subject: str, facts: dict, passage_body: str = "", *,
               brief: str = "", document_title: str = "") -> str | None:
     """Ask the LLM to WRITE this section of this document.
@@ -1514,6 +1656,38 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
     # Headings the writer could not produce. Drives both the visible markers and
     # the all-or-nothing check after the loop.
     unwritten: list[str] = []
+    # How many sections the WRITER actually produced prose for -- as opposed to the
+    # deterministic fallback. Drives the all-or-nothing check at the end.
+    ai_written = 0
+
+    # PREFETCH THE SECTIONS IN BATCHES, to spend a fraction of the daily request allowance.
+    #
+    # Deliberately a CACHE the loop reads from, rather than a rewrite of the loop. Everything
+    # below -- the dedupe guard, the automatic retry, the visible markers, the source-passage
+    # precedence -- keeps working unchanged, and a section the batch did not return simply
+    # falls through to being written on its own, exactly as before. The optimisation can fail
+    # completely and the feature still works; it just costs more quota.
+    #
+    # Sections with a matching passage in an UPLOADED document are excluded: those are written
+    # from that passage, and the batch prompt has no way to carry a different source extract
+    # per section without becoming the very thing it is avoiding -- one call per section.
+    import time as _time
+    # ONE wall clock for the whole request's model work -- the prefetch below AND the section
+    # loop after it both measure against this. Defined unconditionally so the loop's check is
+    # never reading a name the prefetch branch happened not to create.
+    # 210s inside gunicorn's 300s (Procfile) leaves room to finish and store the document.
+    _ai_deadline = (_time.time() + 210) if use_ai else None
+
+    batched: dict[str, str] = {}
+    if use_ai and len(sections) > 1:
+        _plain = [(s.heading, s.brief) for s in sections
+                  if not find_relevant_passage(f"{title} — {s.heading}", passages)]
+        for _i in range(0, len(_plain), AI_BATCH_SECTIONS):
+            if ai_calls >= MAX_AI_SECTIONS or _time.time() >= _ai_deadline - 5:
+                break
+            ai_calls += 1
+            batched.update(_ai_write_many(_plain[_i:_i + AI_BATCH_SECTIONS], facts,
+                                          document_title=title, deadline=_ai_deadline))
 
     def _accept_or_retry_ai(prose: str | None, *, heading: str, subject: str,
                             passage_body: str = "", brief: str = "") -> tuple[str | None, bool]:
@@ -1580,7 +1754,13 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
         # this request, so the number of them cannot be unbounded. Past the budget the report
         # keeps generating on the deterministic path -- the same path it takes when no LLM is
         # reachable at all -- so a long report degrades in quality, never in availability.
-        may_use_ai = use_ai and ai_calls < MAX_AI_SECTIONS
+        # The budget is BOTH a call count and a wall clock. The count alone was enough when
+        # every call was one section; once a prefetch can spend most of the request's time up
+        # front, a request that used little quota could still walk into gunicorn's 300s and
+        # die with NOTHING saved. Past the clock the report finishes on the deterministic
+        # path -- degraded, but written and stored, which is the outcome that matters.
+        may_use_ai = (use_ai and ai_calls < MAX_AI_SECTIONS
+                      and (_ai_deadline is None or _time.time() < _ai_deadline - 20))
 
         if hit:
             # `src_heading`, NOT `heading`: that name is this section's own title, and the
@@ -1622,6 +1802,7 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
                 written, repeated = _accept_or_retry_ai(
                     draft, heading=heading, subject=subject, passage_body=body, brief=brief)
             if written:
+                ai_written += 1
                 md.append(written)
                 md.append("")
                 if repeated:
@@ -1643,7 +1824,16 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
         else:
             written = None
             repeated = False
-            if may_use_ai:
+            # THE PREFETCH IS SPENT HERE. If the batch already wrote this heading, use it and
+            # make NO provider call -- that consumption is the entire point of the prefetch.
+            # Without this read the batch would be pure overhead: three extra calls on top of
+            # the ten it was meant to replace, making the quota problem worse rather than
+            # better. (Codex caught exactly that, 2026-07-18.)
+            draft = batched.pop(heading, None)
+            if draft is not None:
+                written, repeated = _accept_or_retry_ai(
+                    draft, heading=heading, subject=subject, brief=brief)
+            elif may_use_ai:
                 ai_calls += 1
                 draft = _ai_write(subject, facts,
                                   brief=brief, document_title=title)
@@ -1663,6 +1853,7 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
                     draft, heading=heading, subject=subject, brief=brief)
 
             if written:
+                ai_written += 1
                 md.append(written)
                 md.append("")
                 if repeated:
@@ -1734,7 +1925,17 @@ def build_markdown(c, tenant_id: str, programme_id: int, deliverable_code: str, 
     # is exactly the fake report the owner rejected on 2026-07-16. That still fails loudly.
     # A report with SOME real sections is worth keeping: the operator can read it, and
     # Regenerate fills the rest.
-    if use_ai and unwritten and len(unwritten) == len(sections):
+    # The test is "did the writer produce ANYTHING", not "is every section marked". Those were
+    # the same question when each section got its own call and its own retry. They stopped
+    # being the same once the prefetch could spend part of the budget: in a total outage the
+    # early sections burn the allowance failing, the later ones are never attempted at all and
+    # quietly take the deterministic path -- so `unwritten` came up SHORT of the section count
+    # and a document with no written prose in it was saved. That is the fake report the owner
+    # rejected on 2026-07-16, arriving through a side door.
+    #
+    # Counting sections the writer actually wrote closes it, and does not depend on how the
+    # budget happened to be spent.
+    if use_ai and unwritten and ai_written == 0:
         raise DocumentError("DOCUMENT", _writer_unavailable_message())
 
     if unwritten:
