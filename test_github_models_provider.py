@@ -154,6 +154,53 @@ def test_empty_or_malformed_falls_back_without_raising():
         assert _safe(bad) == _DEFAULT
 
 
+# ── 3d. the deadline must bind EVERY provider, not just openrouter ────────────────────
+# Until 2026-07-19 `chat` passed `deadline` only to `_openrouter`. Once OpenRouter had spent
+# the caller's budget, `_github` still opened a 30s socket and `_ollama` another 60s -- up to
+# 90s past a ceiling whose own docstring calls it "a HARD wall-clock ceiling ... not advice".
+# The enterprise writer budgets 210s inside a 300s gunicorn worker and can start its last
+# batch at ~204s, so the overrun plus trailing DB writes runs past the worker timeout and the
+# worker is killed mid-request -- a failure with no page, no status and no recorded reason.
+import time as _t
+
+
+def test_expired_deadline_skips_github_entirely():
+    c = api_manager._AIClient(api_manager._Store())
+    c.github_token = "x"
+    assert c._github([{"role": "user", "content": "hi"}], "", 10,
+                     deadline=_t.time() - 1) is None
+
+
+def test_expired_deadline_skips_ollama_entirely():
+    c = api_manager._AIClient(api_manager._Store())
+    c.ollama_url = "http://127.0.0.1:1"
+    assert c._ollama([{"role": "user", "content": "hi"}], "", 10,
+                     deadline=_t.time() - 1) is None
+
+
+def test_a_nearly_expired_deadline_returns_fast_rather_than_hanging():
+    """The socket timeout must shrink to what is LEFT, not the provider's full budget.
+
+    With a stale tunnel (an unroutable address that resolves), the old code blocked for the
+    full 60s. Bounded by the deadline it must give up in about the time remaining.
+    """
+    c = api_manager._AIClient(api_manager._Store())
+    c.ollama_url = "http://10.255.255.1:9"          # routable-looking, never answers
+    start = _t.time()
+    c._ollama([{"role": "user", "content": "hi"}], "", 10, deadline=start + 2)
+    assert _t.time() - start < 15, "ollama ignored the remaining budget"
+
+
+def test_chat_passes_the_deadline_to_every_provider():
+    """The contract: no provider in the chain may be invoked without the ceiling."""
+    import inspect
+    src = inspect.getsource(api_manager._AIClient.chat)
+    for call in ("self._openrouter(", "self._github(", "self._ollama("):
+        i = src.index(call)
+        args = src[i:src.index(")", i)]
+        assert "deadline" in args, f"{call} does not receive the deadline"
+
+
 # ── 4. chain order: github must be tried before ollama ────────────────────────────────
 def test_github_is_attempted_before_ollama():
     """A stale Ollama tunnel hangs for its full 60s timeout; github answers in ~1s.

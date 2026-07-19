@@ -390,8 +390,8 @@ class _AIClient:
             # on a 30s timeout with its own free allowance, so it is both likelier to answer and
             # cheaper to be wrong about. Ollama stays last: it is the only provider that keeps
             # working with no internet at all, which is exactly what a last resort is for.
-            or self._github(messages, system, max_tokens)
-            or self._ollama(messages, system, max_tokens)
+            or self._github(messages, system, max_tokens, deadline)
+            or self._ollama(messages, system, max_tokens, deadline)
             or ("I'm having trouble connecting to AI services right now. Please try again in a moment.", "rule_based")
         )
 
@@ -617,9 +617,19 @@ class _AIClient:
                        self.last_failure_reason)
         return None
 
-    def _ollama(self, messages, system, max_tokens):
+    def _ollama(self, messages, system, max_tokens, deadline=None):
         if not self.ollama_url:
             return None
+        # The largest overrun of the three: a 60s socket, and against a tunnel to the owner's
+        # own box, so a stale tunnel resolves and then hangs for the full duration. As the LAST
+        # provider it is also the one most likely to be reached with the budget already spent.
+        timeout = 60
+        if deadline is not None:
+            remaining = deadline - time.time()
+            if remaining <= 1:
+                logger.warning("ollama: out of time; falling back")
+                return None
+            timeout = min(60, remaining)
         t = time.time()
         try:
             import urllib.request as _ur, json as _j
@@ -628,7 +638,7 @@ class _AIClient:
                                  "stream": False}).encode()
             req = _ur.Request(f"{self.ollama_url}/api/chat", data=payload,
                               headers={"Content-Type": "application/json"})
-            with _ur.urlopen(req, timeout=60) as r:
+            with _ur.urlopen(req, timeout=timeout) as r:
                 reply = _j.loads(r.read())["message"]["content"].strip()
             self._s.log("ollama", self.ollama_model, "ok", (time.time()-t)*1000)
             return reply, "ollama"
@@ -709,9 +719,31 @@ class _AIClient:
         # (Codex MEDIUM, 2026-07-19.)
         return f"openai/{model}" if model.startswith(("gpt-", "o1", "o3", "o4")) else model
 
-    def _github(self, messages, system, max_tokens):
+    def _github(self, messages, system, max_tokens, deadline=None):
         if not self.github_token:
             return None
+        # HONOUR THE DEADLINE. Until 2026-07-19 it reached `_openrouter` only, so once
+        # OpenRouter had spent the caller's whole budget this provider still opened a fresh
+        # 30s socket and `_ollama` another 60s -- up to 90s PAST a ceiling documented as
+        # "not advice". The enterprise writer budgets 210s inside a 300s gunicorn worker, and
+        # its last batch may start at ~204s, so that overrun plus the trailing DB writes runs
+        # the request past the worker timeout. The worker is then KILLED mid-request: no error
+        # page, no classified failure reason, nothing in `last_failure_reason` -- exactly the
+        # shape of "the document writer doesn't work" with nothing to diagnose afterwards.
+        #
+        # KNOWN LIMIT (Codex, 2026-07-19): `urlopen(timeout=)` bounds each socket OPERATION,
+        # not the whole call, so a provider that trickles bytes can still drift past the
+        # deadline. Bounding it truly would need a cancellable worker per attempt. Not done:
+        # the writer's 210s budget now sits ~90s inside the 300s worker where it previously
+        # sat ON the boundary, so a read stall no longer costs the request. `_openrouter` has
+        # always had the same property -- this is a pre-existing limit, not a new one.
+        timeout = 30
+        if deadline is not None:
+            remaining = deadline - time.time()
+            if remaining <= 1:
+                logger.warning("github_models: out of time; falling back")
+                return None
+            timeout = min(30, remaining)
         t = time.time()
         # Resolved BEFORE the try so the failure path can always name the model that was
         # actually sent. Computed inside, it would be unbound whenever the failure happened
@@ -729,7 +761,7 @@ class _AIClient:
                                        "Content-Type": "application/json",
                                        "Accept": "application/json",
                                        "User-Agent": "solarpro/1.0"})
-            with _ur.urlopen(req, timeout=30) as r:
+            with _ur.urlopen(req, timeout=timeout) as r:
                 reply = _j.loads(r.read())["choices"][0]["message"]["content"]
             # Log the model actually SENT, not the one configured. They differ on the legacy
             # endpoint, and a stats page naming a model that never went over the wire sends
