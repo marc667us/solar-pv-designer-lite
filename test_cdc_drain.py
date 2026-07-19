@@ -90,6 +90,31 @@ def test_wrong_token_is_401(monkeypatch):
     assert _post(client, token="not-the-token").status_code == 401
 
 
+def test_a_non_ascii_secret_is_401_not_500(monkeypatch):
+    """THE REGRESSION TEST FOR THE FIRST LIVE FAILURE (2026-07-19).
+
+    `hmac.compare_digest` RAISES TypeError on non-ASCII str arguments. `gh secret set` was
+    fed the token over a PowerShell 5.1 pipe, which prepended a UTF-8 BOM, so the stored
+    secret began with U+FEFF and every request 500'd with
+    "comparing strings with non-ASCII characters is not supported" instead of returning 401.
+
+    A corrupted secret must fail CLOSED and legibly, never crash.
+    """
+    conn = _FakeConn()
+    client = _make_app(conn, token="﻿test-drain-token", monkeypatch=monkeypatch)
+    r = _post(client, token="test-drain-token")
+    assert r.status_code == 401
+    assert conn.statements == []
+
+
+def test_a_non_ascii_secret_still_authenticates_when_it_genuinely_matches(monkeypatch):
+    """Fixing the crash must not break the comparison itself."""
+    conn = _FakeConn(select_rows=[])
+    client = _make_app(conn, token="﻿test-drain-token", monkeypatch=monkeypatch)
+    r = _post(client, token="﻿test-drain-token")
+    assert r.status_code == 200
+
+
 def test_non_postgres_is_503_and_touches_nothing(monkeypatch):
     """A cron silently receiving 200 forever would hide a misconfigured environment."""
     conn = _FakeConn()

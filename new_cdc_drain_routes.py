@@ -168,7 +168,22 @@ def register_cdc_drain(app, get_db=None, admin_notify=None):
         presented = request.headers.get("Authorization") or ""
         if not presented.startswith("Bearer "):
             abort(401)
-        if not hmac.compare_digest(presented[7:], secret):
+
+        # COMPARE BYTES, NOT str. `hmac.compare_digest` RAISES TypeError
+        # ("comparing strings with non-ASCII characters is not supported") when either str
+        # argument is non-ASCII -- so a secret with one stray non-ASCII byte turns every
+        # request into an unhandled 500 instead of an honest 401.
+        #
+        # That is not hypothetical: it is exactly what happened on the first live run,
+        # 2026-07-19. `gh secret set` was fed the token over a PowerShell 5.1 pipe, which
+        # prepended a UTF-8 BOM, so the stored secret began with U+FEFF and this line raised
+        # on every call. Encoding both sides to UTF-8 bytes is still constant-time, never
+        # raises, and makes a corrupted secret fail CLOSED and legibly (401, which the cron
+        # already explains as "the GH secret and the Render env value disagree").
+        #
+        # Deliberately NOT stripping the BOM: silently repairing a malformed secret would
+        # hide the misconfiguration instead of reporting it.
+        if not hmac.compare_digest(presented[7:].encode("utf-8"), secret.encode("utf-8")):
             abort(401)
 
         # Loud, not silent. A cron quietly receiving 200/"skipped" forever would hide a
