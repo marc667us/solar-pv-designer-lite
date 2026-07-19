@@ -1,0 +1,169 @@
+# What is ACTUALLY in the live database -- old build vs current build?
+#
+# OWNER, 2026-07-19: "the previous build was supposed to be removed, and current build is
+# mixed up with stale old build somewhere."
+#
+# STRICTLY READ-ONLY. It runs COUNT(*) and nothing else: no INSERT, UPDATE, DELETE, TRUNCATE
+# or DDL anywhere, so it needs no confirm gate and cannot damage anything. It prints COUNTS
+# ONLY -- never a name, an email or a row -- because this repository's Actions logs are
+# public and leaked five live secrets for 35 days in July 2026.
+#
+# WHY THIS EXISTS RATHER THAN JUST RUNNING THE CLEAR WORKFLOW.
+# `Clear Enterprise Phase-1 Data` deletes eight tables. Its last two runs (2026-07-12) FAILED,
+# so that deletion has never completed and the old data is presumed still present. But
+# "presumed" is exactly the word that has cost this project time all week: github_models was
+# presumed configured, the OpenRouter models were presumed alive, the health endpoint was
+# presumed to be reading the right variable. Every one of those was wrong.
+#
+# Deleting live production data is irreversible. It gets MEASURED first, and the owner sees
+# the numbers before anything is removed.
+#
+#   gh workflow run "Diag Stale Build Inventory"
+
+name: Diag Stale Build Inventory
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Guard
+        run: |
+          set -e
+          [ -n "$DATABASE_URL" ] || { echo "::error::DATABASE_URL secret is empty"; exit 1; }
+          echo "  DATABASE_URL present (length ${#DATABASE_URL}) -- value never printed"
+
+      # psql 18 to match the live server (upgraded 2026-07-10). psql tolerates a version gap
+      # but pinning avoids surprises; pg_dump does NOT tolerate it, which is what broke the
+      # clear workflow's backup step.
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          /usr/lib/postgresql/18/bin/psql --version
+
+      # Which of these tables EXIST at all. A table that was never created reads as "0 rows"
+      # from a naive count, which would look like clean data rather than an absent feature --
+      # a distinction that decides whether there is anything to clean up.
+      # PER-TABLE, to_regclass-GUARDED COUNTS.
+      # NOT one UNION ALL: a single missing table aborts the whole statement, so the counts
+      # for every table that DOES exist are lost -- and "the query failed" reads exactly like
+      # "there is no stale data". Each table reports its own count, or ABSENT, independently.
+      # (Codex CRITICAL, 2026-07-19.)
+      #
+      # NAMES ARE NOT PRINTED FOR THE RESIDUE CHECK -- see the classified step below. These
+      # table names are already public in migrations/ in this repo, so listing them here
+      # discloses nothing new; the doc_type VALUES are business data and are not.
+      - name: Per-table row counts (old build vs current build)
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE
+              t   text;
+              n   bigint;
+              old_tables text[] := ARRAY[
+                  'enterprise_organisations','enterprise_memberships','enterprise_programmes',
+                  'enterprise_programme_phases','enterprise_beneficiaries',
+                  'enterprise_programme_project_links','enterprise_programme_jobs',
+                  'enterprise_programme_audit'];
+              cur_tables text[] := ARRAY[
+                  'enterprise_tenants','enterprise_programme_registry',
+                  'enterprise_documents','enterprise_jobs'];
+              old_total bigint := 0;
+          BEGIN
+              RAISE NOTICE '--- OLD BUILD (migration 024 Phase-1) ---';
+              FOREACH t IN ARRAY old_tables LOOP
+                  IF to_regclass('public.' || t) IS NULL THEN
+                      RAISE NOTICE '  ABSENT (already dropped)  %', t;
+                  ELSE
+                      EXECUTE format('SELECT count(*) FROM public.%I', t) INTO n;
+                      old_total := old_total + n;
+                      RAISE NOTICE '  % rows  %', lpad(n::text, 8), t;
+                  END IF;
+              END LOOP;
+              RAISE NOTICE '  OLD BUILD TOTAL ROWS: %', old_total;
+
+              RAISE NOTICE '--- CURRENT BUILD (2026-07-12 rebuild + Rev 4) ---';
+              FOREACH t IN ARRAY cur_tables LOOP
+                  IF to_regclass('public.' || t) IS NULL THEN
+                      RAISE NOTICE '  MISSING! (this is the LIVE module)  %', t;
+                  ELSE
+                      EXECUTE format('SELECT count(*) FROM public.%I', t) INTO n;
+                      RAISE NOTICE '  % rows  %', lpad(n::text, 8), t;
+                  END IF;
+              END LOOP;
+          END \$\$;"
+
+      # Is the CURRENT module serving stale residue? A document carrying a doc_type that no
+      # Rev 4 gate reads is old-build leftovers sitting INSIDE the current build's own table,
+      # which is what "mixed up with stale old build" looks like from the UI.
+      #
+      # CLASSIFIED COUNTERS ONLY -- no doc_type values, no dates. doc_type strings are
+      # business/workflow names and these Actions logs are PUBLIC. (Codex CRITICAL.)
+      - name: Stale residue INSIDE the current build (classified, no names)
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE
+              known   bigint := 0;
+              unknown bigint := 0;
+              n_types bigint := 0;
+          BEGIN
+              IF to_regclass('public.enterprise_documents') IS NULL THEN
+                  RAISE NOTICE '  enterprise_documents ABSENT';
+                  RETURN;
+              END IF;
+              -- 'known' = doc_types the Rev 4 deliverable model actually reads. Anything else
+              -- is residue. The PATTERN is deliberately coarse so no value is echoed back.
+              SELECT count(*) FILTER (WHERE doc_type LIKE 'rev4%'),
+                     count(*) FILTER (WHERE doc_type NOT LIKE 'rev4%'),
+                     count(DISTINCT doc_type)
+                INTO known, unknown, n_types
+                FROM public.enterprise_documents;
+              RAISE NOTICE '  documents with a Rev4 doc_type : %', known;
+              RAISE NOTICE '  documents with ANY OTHER type  : %  <-- residue if > 0', unknown;
+              RAISE NOTICE '  distinct doc_type values       : %', n_types;
+          END \$\$;"
+
+      # MARKETPLACE -- the owner also reports an issue in market admin. Counts only.
+      - name: Marketplace inventory
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -c "
+          SELECT 'equipment_catalog total'      t, count(*) FROM equipment_catalog
+          UNION ALL SELECT 'active',              count(*) FROM equipment_catalog WHERE is_active = 1
+          UNION ALL SELECT 'public_visible',      count(*) FROM equipment_catalog WHERE is_public_visible = 1
+          UNION ALL SELECT 'verified',            count(*) FROM equipment_catalog WHERE is_verified = 1
+          UNION ALL SELECT 'with datasheet_url',  count(*) FROM equipment_catalog
+                    WHERE COALESCE(datasheet_url,'') <> ''
+          UNION ALL SELECT 'orphan category_id',  count(*) FROM equipment_catalog ec
+                    WHERE ec.category_id IS NOT NULL AND ec.category_id <> 0
+                      AND NOT EXISTS (SELECT 1 FROM product_categories pc WHERE pc.id = ec.category_id);" \
+          || echo "  (a marketplace column is missing -- see error above; that itself is a finding)"
+
+      - name: Read the numbers before deleting anything
+        run: |
+          echo "================================================================"
+          echo "  READ-ONLY. Nothing was changed."
+          echo "  OLD-build counts > 0 => stale data is present and 'Clear Enterprise"
+          echo "  Phase-1 Data' is the tool -- but it deletes LIVE data irreversibly and"
+          echo "  its last two runs FAILED, so it must be dry-run first and the owner must"
+          echo "  approve the numbers above before -f confirm=CLEAR_ENTERPRISE_PHASE1."
+          echo "================================================================"

@@ -19,6 +19,11 @@ name: Diag OpenRouter Quota
 
 on:
   workflow_dispatch:
+    inputs:
+      probe:
+        description: "Set to 'yes' to POST a real completion to EVERY configured model. Proves they ANSWER, not merely that they exist -- but spends one of the 50 daily free requests per model."
+        required: false
+        default: "no"
 
 permissions:
   contents: read
@@ -83,20 +88,76 @@ jobs:
             echo "  (api_manager.classify_ai_failure -> last_failure_reason)."
           fi
 
+      # THE LIST MUST COME FROM THE CODE, NOT FROM THIS FILE.
+      # Until 2026-07-19 this step carried its OWN hardcoded chain (nemotron-nano-9b-v2,
+      # gemma-2-9b, mistral-7b, qwen-2.5-72b) which had drifted from what api_manager
+      # actually uses -- so it cheerfully reported on models the app does not call, and
+      # stayed silent about the three that HAD been retired. A diagnostic with its own
+      # private copy of the thing it is diagnosing tells you about the copy.
+      - uses: actions/checkout@v4
+
       # Which models the chain actually depends on -- a retired model id looks like an
-      # outage and has bitten this project before (2026-07-14).
+      # outage and has bitten this project before (2026-07-14 and again 2026-07-19).
       - name: Are the chain's models still alive?
         run: |
           set -e
           curl -sS "https://openrouter.ai/api/v1/models" -o /tmp/m.json
           python3 - <<'PY'
-          import json
-          ids = {m.get('id') for m in json.load(open('/tmp/m.json')).get('data', [])}
-          chain = ["nvidia/nemotron-nano-9b-v2:free",
-                   "meta-llama/llama-3.3-70b-instruct:free",
-                   "google/gemma-2-9b-it:free",
-                   "mistralai/mistral-7b-instruct:free",
-                   "qwen/qwen-2.5-72b-instruct:free"]
+          import ast, json, re, pathlib
+          # Parsed out of the source rather than imported, so this needs none of the app's
+          # dependencies installed.
+          src = pathlib.Path("api_manager.py").read_text(encoding="utf-8", errors="replace")
+          m = re.search(r"OPENROUTER_FREE_FALLBACKS\s*=\s*(\([^)]*\))", src, re.S)
+          chain = [s for s in ast.literal_eval(m.group(1))] if m else []
+          ids = {x.get('id') for x in json.load(open('/tmp/m.json')).get('data', [])}
+          print(f"  chain read from api_manager.py: {len(chain)} models")
+          missing = [c for c in chain if c not in ids]
           for c in chain:
               print(("  ALIVE   " if c in ids else "  MISSING ") + c)
+          pathlib.Path("/tmp/chain.json").write_text(json.dumps(chain))
+          if missing:
+              print(f"::error::{len(missing)} configured model(s) no longer exist: {missing}")
+              print("::error::Every call to these 404s. Replace them in "
+                    "api_manager.OPENROUTER_FREE_FALLBACKS.")
+          PY
+
+      # EXISTING IS NOT ANSWERING -- the distinction that cost this project months on
+      # github_models. A model can sit in the catalogue and still refuse every call (429 on a
+      # spent free tier, 404 after a silent retirement, 503 while a provider is down).
+      #
+      # NOT run by default: each probe spends one of the 50 daily free requests, so a full
+      # sweep costs 5 of them. Opt in with -f probe=yes when the question is "does the chain
+      # actually work right now" rather than "is it plausibly configured".
+      - name: Do they actually ANSWER? (opt-in -- spends quota)
+        if: inputs.probe == 'yes'
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          key = os.environ["OPENROUTER_API_KEY"]
+          chain = json.load(open("/tmp/chain.json"))
+          answered = 0
+          for model in chain:
+              body = json.dumps({"model": model, "max_tokens": 1,
+                                 "messages": [{"role": "user", "content": "Say OK."}]}).encode()
+              req = urllib.request.Request(
+                  "https://openrouter.ai/api/v1/chat/completions", data=body,
+                  headers={"Authorization": f"Bearer {key}",
+                           "Content-Type": "application/json"})
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      json.loads(r.read())["choices"][0]["message"]
+                  print(f"  ANSWERS   {model}")
+                  answered += 1
+              except urllib.error.HTTPError as e:
+                  detail = e.read()[:160].decode("utf-8", "replace")
+                  print(f"  HTTP {e.code}  {model}  {detail}")
+              except Exception as e:
+                  print(f"  FAILED    {model}  {e}")
+          print(f"\n  {answered}/{len(chain)} models answered.")
+          # Zero answering is the outage the owner sees. One or more answering means the
+          # chain works -- `_ordered_models` promotes whichever one did.
+          if answered == 0:
+              print("::error::NO configured model answered. The AI chain is down for "
+                    "OpenRouter; check whether the daily allowance is spent (step above).")
           PY
