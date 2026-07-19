@@ -161,10 +161,25 @@ jobs:
                   RAISE NOTICE '  enterprise_documents ABSENT';
                   RETURN;
               END IF;
-              -- 'known' = doc_types the Rev 4 deliverable model actually reads. Anything else
-              -- is residue. The PATTERN is deliberately coarse so no value is echoed back.
-              SELECT count(*) FILTER (WHERE doc_type LIKE 'rev4%'),
-                     count(*) FILTER (WHERE doc_type NOT LIKE 'rev4%'),
+              -- 'known' = doc_types the Rev 4 model actually produces. Two shapes, per
+              -- rev4_phases.deliverable_doc_type():
+              --   * a deliverable CODE, e.g. 'R4P1_D12'  -> LIKE 'R4P%'
+              --   * a GATE doc_type for the three gate-opening deliverables.
+              --
+              -- THE FIRST VERSION OF THIS QUERY TESTED `LIKE 'rev4%'` AND WAS WRONG: no
+              -- doc_type has ever started with 'rev4', so it classified all 9 live documents
+              -- as residue and would have reported a fabricated crisis. A guessed classifier
+              -- is not evidence -- exactly the mistake this whole workflow exists to avoid.
+              SELECT count(*) FILTER (
+                         WHERE doc_type LIKE 'R4P%'
+                            OR doc_type IN ('programme_approval_request',
+                                            'planning_approval_request',
+                                            'handover_preparation')),
+                     count(*) FILTER (
+                         WHERE doc_type NOT LIKE 'R4P%'
+                           AND doc_type NOT IN ('programme_approval_request',
+                                                'planning_approval_request',
+                                                'handover_preparation')),
                      count(DISTINCT doc_type)
                 INTO known, unknown, n_types
                 FROM public.enterprise_documents;
