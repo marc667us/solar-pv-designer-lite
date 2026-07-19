@@ -35,13 +35,29 @@ The ranking of honesty matters more than the ranking of convenience:
 Never a guessed PDF. A wrong datasheet on an electrical component is not a cosmetic defect --
 someone could specify or install from it.
 
-COVERAGE: the top ten brands are ~53% of the catalogue. 96 brand strings exist but many are
-multi-vendor labels ("Nexans / Tropical / Elsewedy") or placeholders ("Generic"), which
-deliberately resolve to nothing here rather than to a guess.
+COVERAGE: 240 of 588 products (40%). 96 brand strings exist but many are multi-vendor labels
+("Nexans / Tropical / Elsewedy") or placeholders ("Generic"), which deliberately resolve to
+nothing rather than to a guess.
 
-MAINTENANCE: add a brand only when its documentation URL has been opened and confirmed. An
-unverified entry here is exactly the kind of confident wrongness this file was written to
-avoid.
+AUDITED 2026-07-19 -- AND THE FIRST VERSION OF THIS FILE WAS WRONG.
+It shipped with 30 hand-written URLs, none of which had ever been fetched. Fetching them found
+13 returning 404, INCLUDING Nexans (29 products) and Legrand (24 products): 53 products were
+being redirected to DEAD PAGES. That is worse than the web search this file replaced, because
+a search at least finds something. Claimed coverage was 52%; real coverage was far lower, and
+part of it was actively harmful.
+
+The dead entries were REMOVED rather than repointed at a homepage. Several vendors' 404s
+resolve only to a corporate front page, and a front page is not a documentation library -- a
+search for "<brand> <model> datasheet" gets the user closer. An entry here must be a page that
+actually serves documents.
+
+403/406 entries are KEPT: those vendors block datacentre IPs and bot user-agents while serving
+browsers normally (the doc-redirect code documents the same behaviour). A bot-block is not a
+dead page.
+
+MAINTENANCE: add a brand only when its documentation URL has been FETCHED and confirmed -- not
+merely looked plausible. `.github/workflows/diag-brand-doc-links.yml` re-checks every URL
+monthly and FAILS on 404/410, so this cannot rot silently again.
 """
 
 # Brand (lowercased, trimmed) -> official documentation / product-support library.
@@ -51,38 +67,30 @@ BRAND_DOC_LIBRARY: dict[str, str] = {
     "schneider electric": "https://www.se.com/ww/en/download/",
     "mk":            "https://www.mkelectric.com/en-gb/support/Pages/Downloads.aspx",
     "mk electric":   "https://www.mkelectric.com/en-gb/support/Pages/Downloads.aspx",
-    "nexans":        "https://www.nexans.com/en/support/documentation/",
-    "legrand":       "https://www.legrand.com/en/support/documentation",
     "abb":           "https://library.abb.com/",
     "prysmian":      "https://www.prysmian.com/en/documents",
     "apc":           "https://www.apc.com/us/en/download/",
-    "philips":       "https://www.lighting.philips.com/support/downloads",
-    "signify":       "https://www.lighting.philips.com/support/downloads",
-    "furse":         "https://www.furse.com/en-gb/resources.html",
+    "philips":       "https://www.lighting.philips.com/support",
+    "signify":       "https://www.lighting.philips.com/support",
     "cummins":       "https://www.cummins.com/support/manuals",
-    "siemens":       "https://support.industry.siemens.com/cs/ww/en/",
-    "eaton":         "https://www.eaton.com/gb/en-gb/support/documentation.html",
-    "hager":         "https://www.hager.com/en/downloads",
-    "huawei":        "https://solar.huawei.com/en/download",
-    "jinko":         "https://www.jinkosolar.com/en/site/download",
-    "jinko solar":   "https://www.jinkosolar.com/en/site/download",
-    "trina":         "https://www.trinasolar.com/en-glob/resources/downloads",
-    "trina solar":   "https://www.trinasolar.com/en-glob/resources/downloads",
-    "longi":         "https://www.longi.com/en/support/download/",
+    "longi":         "https://www.longi.com/en/download/",
     "canadian solar": "https://www.canadiansolar.com/downloads/",
     "ja solar":      "https://www.jasolar.com/html/en/service/",
     "sma":           "https://www.sma.de/en/service/downloads",
-    "fronius":       "https://www.fronius.com/en/solar-energy/downloads",
+    "fronius":       "https://www.fronius.com/en/solar-energy",
     "growatt":       "https://en.growatt.com/support/download",
     "victron":       "https://www.victronenergy.com/support-and-downloads/technical-information",
     "victron energy": "https://www.victronenergy.com/support-and-downloads/technical-information",
-    "sungrow":       "https://en.sungrowpower.com/serviceSupport",
     "solaredge":     "https://www.solaredge.com/us/downloads",
     "pylontech":     "https://en.pylontech.com.cn/service/",
     "byd":           "https://www.bydbatterybox.com/downloads",
     "deye":          "https://www.deyeinverter.com/download/",
-    "must":          "https://www.mustpower.com/download",
     "felicity":      "https://www.felicitysolar.com/download",
+    "commscope":      "https://www.commscope.com/resources/",
+    "hikvision":      "https://www.hikvision.com/en/support/download/",
+    "ubiquiti":       "https://techspecs.ui.com/",
+    "panduit":        "https://www.panduit.com/en/support/download-center.html",
+    "socomec":        "https://www.socomec.com/en/documentation",
 }
 
 # Brand strings that must NEVER resolve to a library: placeholders and multi-vendor labels.

@@ -19,7 +19,7 @@ from brand_doc_library import BRAND_DOC_LIBRARY, NON_BRANDS, library_for
 def test_known_manufacturers_resolve():
     assert library_for("Schneider").startswith("https://")
     assert library_for("ABB").startswith("https://")
-    assert library_for("Jinko").startswith("https://")
+    assert library_for("Prysmian").startswith("https://")
 
 
 def test_lookup_is_case_and_whitespace_insensitive():
@@ -66,11 +66,23 @@ def test_non_brands_never_appear_as_real_entries():
     assert not (set(BRAND_DOC_LIBRARY) & NON_BRANDS)
 
 
-@pytest.mark.parametrize("brand", ["Schneider", "MK", "Nexans", "Legrand", "ABB",
-                                   "Prysmian", "APC", "Philips"])
+@pytest.mark.parametrize("brand", ["Schneider", "MK", "ABB", "Prysmian", "APC", "Philips"])
 def test_top_catalogue_brands_are_covered(brand):
-    """The measured top brands, which together are ~half the catalogue.
+    """The measured top brands still carrying a VERIFIED documentation URL.
 
-    If one is dropped, coverage silently collapses for a large slice of products.
+    Nexans and Legrand were removed on 2026-07-19: their documented URLs returned 404, so 53
+    products were being redirected to dead pages -- worse than the search fallback they
+    replaced. They come back only when someone confirms a working documentation URL.
     """
     assert library_for(brand), f"{brand} lost its documentation library"
+
+
+@pytest.mark.parametrize("brand", ["Nexans", "Legrand", "Jinko", "Trina", "Hager", "Sungrow"])
+def test_brands_with_no_verified_doc_page_fall_back_to_search(brand):
+    """Deliberately absent -- do not "restore" these without verifying the URL first.
+
+    Each 404'd when audited, or resolved only to a corporate homepage. A homepage is not a
+    documentation library, and a search for "<brand> <model> datasheet" gets the user closer
+    than a front page does. An entry here must be a page that actually serves documents.
+    """
+    assert library_for(brand) == ""

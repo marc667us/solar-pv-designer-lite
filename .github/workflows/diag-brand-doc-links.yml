@@ -1,0 +1,89 @@
+# Are the manufacturer documentation links still alive?
+#
+# WHY: on 2026-07-19 this library shipped with 30 hand-written URLs and NONE of them had been
+# fetched. An audit the same day found 13 returning 404 -- including Nexans (29 products) and
+# Legrand (24 products). Those products were being redirected to DEAD PAGES, which is worse
+# than the web-search fallback the library replaced: a search at least finds something.
+#
+# Vendor documentation URLs rot constantly -- sites get reorganised, regions get merged,
+# support moves to a new CMS. A hand-maintained link table without a checker is a table that
+# is quietly wrong, and nobody notices because nobody clicks 240 links.
+#
+# Same idea as tests/test_openrouter_free_models.py, which caught three retired AI models the
+# same day: assert against the real world on a schedule, not against a comment.
+#
+# READ-ONLY. It fetches public vendor pages and touches nothing in this system.
+#
+# 403/406 IS NOT A FAILURE. Several vendors block datacentre IPs and bot user-agents while
+# serving browsers fine -- the doc-redirect code already documents this ("many supplier sites
+# block bot probes and would look unreachable though the browser loads them fine"). Only 404
+# and 410 mean the page is genuinely gone. Treating a bot-block as death would delete working
+# links, which is the opposite of the point.
+
+name: Diag Brand Doc Links
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monthly. Vendor sites reorganise on the scale of months, not hours.
+    - cron: "23 5 1 * *"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch every documentation URL
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, collections, sys
+          from brand_doc_library import BRAND_DOC_LIBRARY
+
+          DEAD = {404, 410}          # the page is genuinely gone
+          seen, by_code = {}, collections.defaultdict(list)
+
+          for brand, url in sorted(BRAND_DOC_LIBRARY.items()):
+              if url in seen:                     # several brands share one URL
+                  by_code[seen[url]].append(brand)
+                  continue
+              try:
+                  r = urllib.request.urlopen(
+                      urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}),
+                      timeout=25)
+                  code = r.status
+              except urllib.error.HTTPError as e:
+                  code = e.code
+              except Exception:
+                  code = "ERR"
+              seen[url] = code
+              by_code[code].append(brand)
+              print(f"  {str(code):<6} {brand:<20} {url}")
+
+          dead = [b for c, bs in by_code.items() if c in DEAD for b in bs]
+          err  = by_code.get("ERR", [])
+          print()
+          for c in sorted(by_code, key=str):
+              print(f"  {c}: {len(by_code[c])}")
+
+          if dead:
+              print()
+              print(f"::error::{len(dead)} brand documentation URL(s) are GONE: {sorted(dead)}")
+              print("::error::Products for these brands are being sent to a dead page -- worse")
+              print("::error::than the search fallback. Fix the URL or REMOVE the entry from")
+              print("::error::brand_doc_library.py so those products fall back to search.")
+              sys.exit(1)
+
+          if err:
+              # Not a failure: a timeout or DNS blip from a CI runner is not evidence that a
+              # vendor site is gone, and failing on it would train everyone to ignore this job.
+              print(f"::warning::unreachable from this runner (inconclusive): {sorted(err)}")
+          print("\n  No dead links.")
+          PY
