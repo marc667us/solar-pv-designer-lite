@@ -112,5 +112,34 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "CDC drain surface failed to register (app still serving): %s", _e
     )
 
+# --- CDC pg_notify listener (change-data-capture, slice 4) --------------------
+# The BROADCAST half: slice 3's drainer runs in ONE worker and so cannot invalidate the
+# per-worker marketplace cache. This listens on the `cdc` channel that cdc_capture() has been
+# publishing to since migration 036 and clears this process's cache.
+#
+# SHIPS DARK. The thread starts, but the loop holds no connection and does nothing until the
+# `cdc_listener_enabled` flag in admin_settings says "1". The flag read fails closed.
+#
+# Started HERE, at import, deliberately: Render runs gunicorn with NO --preload (threads do
+# not survive fork()), so each worker imports this module itself and the thread really does
+# exist in the worker. start() is documented never to raise -- the try/except is the second
+# belt, for the same reason as every block above.
+try:
+    import cdc_listener
+    import web_app as _wa4
+    from app.enterprise_programme.flags import read_flag as _read_flag
+
+    cdc_listener.start(
+        get_db=_wa4.get_db,
+        invalidate=_wa4._mp_cache_invalidate,
+        notify_admin=_wa4._admin_notify,
+        read_flag=_read_flag,
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "CDC listener failed to start (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()

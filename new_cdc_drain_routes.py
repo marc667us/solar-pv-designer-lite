@@ -90,6 +90,26 @@ _LEASE_MINUTES = 15
 _MAX_ATTEMPTS = 5
 
 
+def _listener_status():
+    """The slice-4 broadcast listener's state, reported through this already-authenticated
+    endpoint.
+
+    WHY IT IS PIGGYBACKED HERE rather than given its own route: Render's free tier HIDES
+    runtime logs, so a listener that has silently died is otherwise indistinguishable from one
+    that simply has nothing to do -- the exact silent-failure shape this project keeps being
+    bitten by. This endpoint is already authenticated and already the place an operator looks
+    at CDC, so it costs no new public surface.
+
+    Imported lazily and defensively: the drainer is the durable half and must keep working
+    even if the listener module is absent or broken.
+    """
+    try:
+        import cdc_listener
+        return cdc_listener.status()
+    except Exception as e:                # noqa: BLE001
+        return {"error": ("listener status unavailable: " + str(e))[:120]}
+
+
 def _is_postgres():
     """Backend detection, matching get_db() exactly.
 
@@ -226,7 +246,8 @@ def register_cdc_drain(app, get_db=None, admin_notify=None):
                 )
 
         if not claimed:
-            return {"claimed": 0, "consumed": 0, "notified": False}, 200
+            return {"claimed": 0, "consumed": 0, "notified": False,
+                    "listener": _listener_status()}, 200
 
         ids = [int(r[0]) for r in claimed]
         title, body, severity, max_id = _summarise(claimed)
@@ -303,6 +324,7 @@ def register_cdc_drain(app, get_db=None, admin_notify=None):
             "consumed": len(ids),
             "notified": notified,
             "max_outbox_id": max_id,
+            "listener": _listener_status(),
             "summary": json.loads(json.dumps({"title": title, "body": body})),
         }, 200
 

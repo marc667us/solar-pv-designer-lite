@@ -133,7 +133,12 @@ def test_empty_outbox_does_nothing_and_does_not_notify(monkeypatch):
                        monkeypatch=monkeypatch)
     r = _post(client)
     assert r.status_code == 200
-    assert r.get_json() == {"claimed": 0, "consumed": 0, "notified": False}
+    body = r.get_json()
+    # Subset, not equality: the response also carries the slice-4 listener status block.
+    assert body["claimed"] == 0
+    assert body["consumed"] == 0
+    assert body["notified"] is False
+    assert "listener" in body
     assert calls == []
     # Nothing was claimed, so nothing may be stamped. Matched on the SET clauses, not on the
     # bare word UPDATE -- that appears in the claim's own `FOR UPDATE SKIP LOCKED`.
