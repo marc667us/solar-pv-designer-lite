@@ -15813,7 +15813,25 @@ def _mp_cache_set(key, html):
         _MARKETPLACE_CACHE.popitem(last=False)
 
 def _mp_cache_invalidate():
-    """Called after any supplier / admin write to the catalogue."""
+    """Clear the anonymous /marketplace HTML cache.
+
+    HAS NO CALLERS, AND THAT IS A DELIBERATE CHOICE, NOT AN OVERSIGHT (2026-07-19).
+    The docstring here used to claim "called after any supplier / admin write to the
+    catalogue", which was simply untrue -- nothing has ever called it -- and a comment
+    that asserts a guarantee the code does not provide is worse than no comment.
+
+    Why it is not wired: there are ~90 ad-hoc catalogue writes (41 in web_app.py, 49
+    across new_*.py), plus migrations and manual psql that never enter this process at
+    all. Wiring 90 call sites by byte-patch would carry real regression risk to shave a
+    staleness window that _MARKETPLACE_CACHE_TTL (60s) already bounds -- and it would
+    STILL miss every write that happens outside the app. The absence of a write
+    chokepoint is the actual finding, and it is why the queued CDC work specifies
+    capture IN THE DATABASE rather than an app-level event bus.
+
+    Kept, not deleted, because CDC will need exactly this entry point: cache
+    invalidation must fire in EVERY process, so it becomes the handler a database
+    notification calls. Until then the 60s TTL is the whole invalidation story.
+    """
     _MARKETPLACE_CACHE.clear()
 
 
