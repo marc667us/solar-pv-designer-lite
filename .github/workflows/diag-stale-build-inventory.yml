@@ -206,6 +206,42 @@ jobs:
                       AND NOT EXISTS (SELECT 1 FROM product_categories pc WHERE pc.id = ec.category_id);" \
           || echo "  (a marketplace column is missing -- see error above; that itself is a finding)"
 
+      # RECENT LIVE ERRORS -- evidence instead of guessing.
+      # The owner reports "market admin there is an issue there" with no symptom, and one
+      # blind hunt already produced a false positive (a "bug" that db_adapter was already
+      # translating). If something genuinely fails for an admin on live, the app records it.
+      #
+      # PATHS AND ERROR TYPES ONLY -- never a message body, stack trace, user or parameter.
+      # These Actions logs are PUBLIC and this repo leaked five live secrets for 35 days in
+      # July 2026; a stack trace is exactly the shape of thing that carries a token or an id.
+      - name: Recent live errors (paths + counts only)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE r record; n bigint;
+          BEGIN
+              IF to_regclass('public.error_logs') IS NULL THEN
+                  RAISE NOTICE '  error_logs table ABSENT'; RETURN;
+              END IF;
+              SELECT count(*) INTO n FROM public.error_logs
+               WHERE created_at > (NOW() - INTERVAL '30 days');
+              RAISE NOTICE '  errors logged in the last 30 days: %', n;
+              RAISE NOTICE '  --- by path (admin surfaces first) ---';
+              FOR r IN
+                  SELECT COALESCE(NULLIF(route,''),'(none)') AS route,
+                         COALESCE(NULLIF(error_type,''),'(none)') AS etype,
+                         count(*) AS c, max(created_at)::date AS last_seen
+                    FROM public.error_logs
+                   WHERE created_at > (NOW() - INTERVAL '30 days')
+                   GROUP BY 1,2 ORDER BY (route LIKE '/admin%') DESC, c DESC LIMIT 25
+              LOOP
+                  RAISE NOTICE '  % x % [%] last %', lpad(r.c::text,5), r.route, r.etype, r.last_seen;
+              END LOOP;
+          END \$\$;" || echo "  (error_logs missing expected columns -- itself a finding)"
+
       - name: Read the numbers before deleting anything
         run: |
           echo "================================================================"
