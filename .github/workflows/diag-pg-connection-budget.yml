@@ -1,0 +1,96 @@
+# Read-only: what IS the Postgres connection budget on this instance?
+#
+# WHY THIS EXISTS. CDC slice 4 adds a LONG-LIVED dedicated connection per gunicorn worker to
+# hold a `LISTEN`. Before adding a permanent connection to a free-tier database it is worth
+# knowing how many there are -- and as of 2026-07-19 that number is documented NOWHERE in this
+# repo. Grepping for max_connections / pg_settings / "too many connections" returns nothing.
+#
+# It matters more than one extra socket suggests, because `get_db()` opens a BRAND-NEW
+# connection on every call and never explicitly closes it -- db_adapter's __exit__ deliberately
+# leaves the socket to CPython refcounting. So the steady-state count is not something the code
+# controls, and the headroom for a permanent connection is exactly what is unknown.
+#
+# Read-only. No confirm gate, because it writes nothing.
+
+name: Diag PG Connection Budget
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # No usernames, no client addresses, no query text -- Actions logs here are PUBLIC.
+      # Counts and settings only.
+      - name: The budget
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT 'max_connections        : ' || setting FROM pg_settings
+             WHERE name='max_connections'
+            UNION ALL
+            SELECT 'superuser_reserved     : ' || setting FROM pg_settings
+             WHERE name='superuser_reserved_connections'
+            UNION ALL
+            SELECT 'currently in use (all) : ' || count(*)::text FROM pg_stat_activity
+            UNION ALL
+            SELECT 'active                 : ' || count(*)::text FROM pg_stat_activity
+             WHERE state='active'
+            UNION ALL
+            SELECT 'idle                   : ' || count(*)::text FROM pg_stat_activity
+             WHERE state='idle'
+            UNION ALL
+            SELECT 'idle in transaction    : ' || count(*)::text FROM pg_stat_activity
+             WHERE state='idle in transaction';"
+
+          echo ""
+          echo "--- headroom for a permanent LISTEN connection ---"
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -c "
+            SELECT 'free slots now: ' ||
+                   ((SELECT setting::int FROM pg_settings WHERE name='max_connections')
+                    - (SELECT count(*) FROM pg_stat_activity))::text;"
