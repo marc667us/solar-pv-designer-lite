@@ -13512,11 +13512,27 @@ def admin_ops_logs_archive():
 
 
 def _table_exists(conn, table_name):
-    """SQLite-specific helper: check if a table exists. Returns False on
-    Postgres (where the caller should use information_schema). For the
-    security report this is best-effort; missing audit_logs table just
-    yields None for that field."""
+    """Does `table_name` exist? Works on BOTH backends.
+
+    Input:  an open connection and a bare table name.
+    Output: True/False. Never raises.
+
+    It used to query sqlite_master only and return False on any error. That did not
+    crash, but it meant this returned False for EVERY table on Postgres -- so every
+    feature guarded by it was silently switched off on live rather than merely
+    unavailable. `db_adapter` does not translate sqlite_master (it covers datetime(),
+    strftime() and last_insert_rowid()), so the dialect split has to be handled here.
+
+    BRANCHES on the backend rather than trying SQLite first and falling back: a failed
+    statement poisons the surrounding Postgres transaction, and InFailedSqlTransaction
+    already appears in this app's live error log. A probe that breaks the caller's
+    transaction is worse than the missing feature it was checking for.
+    """
     try:
+        if _inbox_is_pg():
+            row = conn.execute(
+                "SELECT to_regclass(?)", ("public." + str(table_name),)).fetchone()
+            return bool(row and row[0])
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
             (table_name,)
@@ -16850,9 +16866,7 @@ def admin_marketplace_dashboard():
             "FROM marketplace_audit_log mal "
             "LEFT JOIN users u ON u.id=mal.user_id "
             "ORDER BY mal.created_at DESC LIMIT 20"
-        ).fetchall() if c.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='marketplace_audit_log'"
-        ).fetchone() else []
+        ).fetchall() if _table_exists(c, "marketplace_audit_log") else []
     return render_template(
         "admin_marketplace.html",
         user=current_user(),
