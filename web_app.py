@@ -26700,6 +26700,20 @@ def marketplace_product_doc_redirect(pid, kind):
         return redirect(url)
     # Nothing usable found -> a filetype:pdf search so the user still lands
     # somewhere useful rather than a dead end.
+    # MANUFACTURER DOCUMENTATION LIBRARY -- tried before a web search.
+    # The automated finder cannot resolve these (see brand_doc_library.py: DuckDuckGo
+    # answers the scraper with HTTP 202, and Bing returns redirect wrappers whose
+    # decoded targets are unrelated ads), so without this ~93% of products go straight
+    # to a search box. The brand's own documentation site is a TRUE statement about
+    # where the document lives, which a guessed PDF is not -- and a wrong datasheet on
+    # an electrical component is something a person could specify or install from.
+    try:
+        from brand_doc_library import library_for as _brand_lib
+        _lib = _brand_lib(row.get("brand") or "")
+    except Exception:
+        _lib = ""
+    if _lib:
+        return redirect(_lib)
     import urllib.parse as _up
     kind_terms = "brochure literature" if kind == "literature" else "datasheet specification"
     terms = ("%s %s %s filetype:pdf" % (
