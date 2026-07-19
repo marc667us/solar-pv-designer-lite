@@ -12208,16 +12208,43 @@ def api_health_storage():
 @limiter.exempt
 def api_health_ai():
     """AI service configuration health check."""
-    services = {
-        "anthropic":   "configured" if os.environ.get("ANTHROPIC_API_KEY") else "not_configured",
-        "openrouter":  "configured" if os.environ.get("OPENROUTER_API_KEY") else "not_configured",
-        "ollama":      "configured" if os.environ.get("OLLAMA_URL") else "not_configured",
-        "github_models": "configured" if os.environ.get("GITHUB_MODELS_TOKEN") else "not_configured",
-    }
+    # SINGLE SOURCE OF TRUTH: ask the AI client itself.
+    # This used to hand-roll its own os.environ check and it had DRIFTED -- it tested
+    # GITHUB_MODELS_TOKEN while api_manager reads GITHUB_TOKEN, so github_models would
+    # have reported "not_configured" forever no matter how correctly it was set up. It
+    # also read os.environ directly, bypassing the secrets broker that serves these keys.
+    # Any second opinion about "is this provider configured" eventually disagrees with
+    # the first; the fix is to not have one.
+    _health_error = ""
+    try:
+        from api_manager import api as _api
+        _provs = _api.status().get("providers", {})
+    except Exception as _e:
+        # Do NOT let this look like "nothing is configured". A failure to READ the
+        # provider state is a different fault from the providers being absent, and
+        # reporting the second when the first happened sends ops to fix the wrong thing.
+        app.logger.warning("health/ai: api.status() failed: %s", _e)
+        _provs = {}
+        _health_error = "api_status_unavailable"
+    _names = ("anthropic", "openrouter", "ollama", "github_models")
+    # `claude` is this app's name for the anthropic provider in status().
+    _alias = {"anthropic": "claude"}
+    services, health = {}, {}
+    for _n in _names:
+        _p = _provs.get(_alias.get(_n, _n), {})
+        services[_n] = "configured" if _p.get("configured") else "not_configured"
+        # not_configured | untried | failing | degraded | working -- derived from the
+        # last 24h of recorded calls, so it costs no upstream request to read.
+        health[_n] = _p.get("health", "unknown")
     any_ok = any(v == "configured" for v in services.values())
+    # A provider that is configured but has ONLY ever errored is not healthy, and saying
+    # "ok" because a key exists is what hid the github_models outage.
+    _live = any(h in ("working", "degraded", "untried") for h in health.values())
     return jsonify({
-        "status": "ok" if any_ok else "degraded",
+        "status": "ok" if (any_ok and _live) else "degraded",
         "services": services,
+        "health": health,
+        **({"health_error": _health_error} if _health_error else {}),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }), 200
 
