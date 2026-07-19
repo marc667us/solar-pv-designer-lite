@@ -1,0 +1,225 @@
+# Apply migration 037 -- CDC slice 2: the FIRST trigger, on equipment_catalog only.
+#
+# Slice 1 (036) is applied and dark. This attaches capture to exactly one table. No consumer
+# reads the outbox yet -- capture is proven before anything is allowed to act on it.
+#
+# WHAT MAKES THIS WORKFLOW DIFFERENT FROM 036's
+# ---------------------------------------------
+# 036's dry-run proved the DDL PARSES. That is not enough here. 036 changed no write path;
+# this one puts a trigger in front of every catalogue INSERT/UPDATE/DELETE on a LIVE table,
+# so "it parses" says nothing about the thing that could actually hurt: a capture function
+# that raises would abort the user's write and take the marketplace down.
+#
+# So the dry-run here is a BEHAVIOURAL REHEARSAL. Inside a single transaction against the
+# REAL live database it: applies the migration, INSERTs a throwaway catalogue row, UPDATEs it,
+# UPDATEs it again with identical values, DELETEs it, and asserts the outbox received exactly
+# the events it should have -- then ROLLS BACK, so none of it persists. There is no local
+# Postgres on this project (no psycopg2, no Docker, no psql), so the rehearsal IS the test;
+# this is the same pattern used by scripts/backfill_onboarding_owner_roles.py --rehearse.
+#
+# The no-op UPDATE is the most important assertion. It is the only thing that proves the
+# `WHEN (OLD.* IS DISTINCT FROM NEW.*)` clause is doing its job, and that clause is the
+# difference between an outbox that records changes and one that records writes.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=APPLY_037.
+#
+# ABSOLUTE psql PATH, NOT bare `psql` -- installing postgresql-client-18 does not stop PATH
+# resolving to Ubuntu's 16.x. That trap broke `Clear Enterprise Phase-1 Data` three times.
+# The major version is ASSERTED, because echoing a version is not a check.
+
+name: Apply Migration 037 (CDC Trigger -- equipment_catalog)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type APPLY_037 to attach the triggers on live."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLY_037" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- CDC triggers will be attached to equipment_catalog on live ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- full behavioural rehearsal, then ROLLBACK. Nothing persists. ==="
+            echo "Re-run with -f confirm=APPLY_037 to commit."
+          fi
+
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          echo "  psql major: $PSQL_MAJOR"
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # The source files declare three different equipment_catalog schemas and none of them is
+      # authoritative -- live has been extended by runtime ALTER ... ADD COLUMN IF NOT EXISTS.
+      # Print what actually exists, so the allowlist is checked against reality rather than
+      # against whichever CREATE TABLE was read last. Column names only; no row data.
+      - name: What equipment_catalog actually looks like on live (read-only)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- live columns ---"
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT column_name || ' : ' || data_type
+              FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='equipment_catalog'
+             ORDER BY ordinal_position;"
+          echo "--- row count ---"
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -c "
+            SELECT count(*) FROM equipment_catalog;"
+
+      - name: State before
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT 'cdc triggers attached (any table): ' || count(*)::text
+              FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+             WHERE p.proname = 'cdc_capture' AND NOT t.tgisinternal;"
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -c "
+            SELECT 'cdc_outbox rows: ' || count(*)::text FROM cdc_outbox;"
+
+      # ── THE REHEARSAL ────────────────────────────────────────────────────────────────────
+      # Applies the migration AND exercises it against the real table, then rolls everything
+      # back. Runs in BOTH modes: in apply mode it is the gate that must pass before the real
+      # apply is allowed to run.
+      - name: Rehearse -- apply, exercise the trigger, assert, ROLLBACK
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          # BEGIN -> attach the triggers -> exercise them against the real table -> ROLLBACK.
+          # The rehearsal assertions live in their own .sql file so this stays readable and
+          # so the test is diffable on its own; see that file's header for what it proves.
+          {
+            echo "BEGIN;"
+            cat migrations/037_cdc_trigger_equipment_catalog.sql
+            cat migrations/037_cdc_trigger_equipment_catalog_rehearsal.sql
+            echo "ROLLBACK;"
+          } > /tmp/037_rehearse.sql
+
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/037_rehearse.sql
+          echo "  REHEARSAL PASSED -- trigger behaves correctly on the real table, and was rolled back."
+
+      # Nothing persisted above, so prove the rehearsal really did leave no trace.
+      - name: Prove the rehearsal left nothing behind
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE n int;
+          BEGIN
+              SELECT count(*) INTO n FROM equipment_catalog WHERE category = '__cdc_rehearsal__';
+              IF n <> 0 THEN
+                  RAISE EXCEPTION 'rehearsal row survived the rollback -- % left behind', n;
+              END IF;
+              RAISE NOTICE '  no rehearsal rows left in equipment_catalog';
+
+              SELECT count(*) INTO n FROM cdc_outbox WHERE source_table = 'equipment_catalog';
+              RAISE NOTICE '  cdc_outbox rows for equipment_catalog: % (0 until 037 is applied)', n;
+          END \$\$;"
+
+      - name: Dry-run stops here
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The triggers are valid, behave correctly against the"
+          echo "  real live table, and were rolled back. Nothing was changed."
+          echo "  Re-run with -f confirm=APPLY_037 to attach them for real."
+          echo "================================================================"
+
+      - name: Apply
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/037_cdc_trigger_equipment_catalog.sql
+          echo "  migration 037 applied"
+
+      - name: Verify
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE n int;
+          BEGIN
+              SELECT count(*) INTO n FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+               WHERE p.proname='cdc_capture' AND NOT t.tgisinternal
+                 AND t.tgrelid = 'public.equipment_catalog'::regclass;
+              IF n <> 2 THEN
+                  RAISE EXCEPTION 'expected 2 cdc triggers on equipment_catalog, found %', n;
+              END IF;
+              RAISE NOTICE '  equipment_catalog: 2 cdc triggers attached';
+
+              -- THE SLICE-2 CONTRACT: one table, and only one.
+              SELECT count(*) INTO n FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+               WHERE p.proname='cdc_capture' AND NOT t.tgisinternal
+                 AND t.tgrelid <> 'public.equipment_catalog'::regclass;
+              IF n > 0 THEN
+                  RAISE EXCEPTION 'SLICE-2 VIOLATION: % cdc trigger(s) on other tables', n;
+              END IF;
+              RAISE NOTICE '  no cdc triggers on any other table (correct)';
+          END \$\$;"
+          echo ""
+          echo "  CAPTURE IS NOW LIVE FOR equipment_catalog. No consumer reads the outbox yet."
+          echo "  Watch depth with the 'CDC Outbox Retention' workflow (read-only by default)."
+          echo "  rollback:"
+          echo "    DROP TRIGGER IF EXISTS trg_cdc_equipment_catalog_ins_del ON equipment_catalog;"
+          echo "    DROP TRIGGER IF EXISTS trg_cdc_equipment_catalog_upd     ON equipment_catalog;"
