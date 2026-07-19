@@ -1,0 +1,76 @@
+# Read-only: what did POST /cdc/outbox/drain actually raise?
+#
+# THE METHOD THIS EXISTS TO ENFORCE (learned 2026-07-19): read the live `error_logs` table
+# instead of grepping call sites and guessing. Blind grepping produced a false positive that
+# had to be reverted the same day; one query of the error table produced the exact route,
+# error type and date.
+#
+# SCOPE IS DELIBERATELY NARROW. Actions logs on this repo are PUBLIC, so the standing rule is
+# "routes and error types only -- no message bodies, no stack traces". This workflow prints a
+# TRUNCATED message as well, and that exception to the rule is justified only because it is
+# filtered to `route LIKE '/cdc%'` -- a brand-new endpoint that touches one internal table and
+# whose errors are SQL diagnostics about cdc_outbox. It must NOT be widened to other routes,
+# where a message can carry user data. The stack trace is never printed.
+
+name: Diag CDC Drain Error
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: What did /cdc raise?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT error_type || '  |  ' || left(coalesce(error_message,''), 240)
+              FROM error_logs
+             WHERE route LIKE '/cdc%'
+             ORDER BY id DESC
+             LIMIT 5;"
