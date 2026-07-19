@@ -1,0 +1,170 @@
+# CDC outbox: report depth, and prune consumed history.
+#
+# WHY THIS EXISTS BEFORE ANY TRIGGER IS ATTACHED.
+# Migration 036 created `cdc_outbox` but attaches no trigger, so it is empty and stays empty.
+# The moment slice 2 attaches the first trigger, EVERY captured write becomes a row -- on a
+# table nothing deletes from. `equipment_catalog` alone has ~90 ad-hoc write sites, and the
+# free-tier Postgres has finite storage. An append-only table with no retention is a slow
+# outage with a delivery date.
+#
+# Retention has to exist BEFORE the thing that fills the table, not after. Building it after
+# would mean the first person to discover the gap is whoever is paged for a full disk.
+#
+# WHAT IT DELETES: only rows that are BOTH consumed (consumed_at IS NOT NULL) AND older than
+# the retention window. An unconsumed row is pending work and is NEVER deleted regardless of
+# age -- deleting one would silently drop a side effect that was supposed to happen, which is
+# the one failure an outbox exists to prevent.
+#
+# A row that is old AND unconsumed is a STUCK row, not garbage. Those get reported loudly
+# instead: they mean a drainer died or a consumer is failing, and quietly deleting them would
+# erase the evidence.
+#
+# DEFAULT IS DRY-RUN (counts only). Pruning needs -f confirm=PRUNE.
+# Reporting is always safe, which is why the schedule runs the read-only path.
+
+name: CDC Outbox Retention
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default (counts only). Type PRUNE to delete consumed rows."
+        required: false
+        default: ""
+      retain_days:
+        description: "Keep consumed rows for this many days (default 7)."
+        required: false
+        default: "7"
+  schedule:
+    # Daily, read-only. It reports; it does not delete on a timer. An automated DELETE against
+    # production on a schedule is a much bigger promise than an automated SELECT, and the
+    # table is empty until slice 2 anyway.
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+      RETAIN_DAYS:    ${{ inputs.retain_days || '7' }}
+    steps:
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "PRUNE" ]; then
+            echo "MODE=prune" >> $GITHUB_ENV
+            echo "=== PRUNE -- consumed rows older than ${RETAIN_DAYS}d WILL be deleted ==="
+          else
+            echo "MODE=report" >> $GITHUB_ENV
+            echo "=== REPORT ONLY -- nothing will be deleted ==="
+          fi
+          case "${RETAIN_DAYS}" in
+            ''|*[!0-9]*) echo "::error::retain_days must be a whole number"; exit 1 ;;
+          esac
+
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          M=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$M" = "18" ] || { echo "::error::psql major is $M, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # COUNTS AND AGES ONLY -- never a payload. cdc_outbox.payload holds captured row data,
+      # which is exactly the thing that must not reach a PUBLIC Actions log.
+      - name: Report outbox health
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -v retain="${RETAIN_DAYS}" -c "
+          DO \$\$
+          DECLARE total bigint; pending bigint; consumed bigint; stuck bigint;
+                  prunable bigint; oldest_pending timestamptz; retain int := :retain;
+          BEGIN
+              IF to_regclass('public.cdc_outbox') IS NULL THEN
+                  RAISE NOTICE '  cdc_outbox ABSENT -- migration 036 has not been applied';
+                  RETURN;
+              END IF;
+              SELECT count(*) INTO total    FROM public.cdc_outbox;
+              SELECT count(*) INTO pending  FROM public.cdc_outbox WHERE consumed_at IS NULL;
+              SELECT count(*) INTO consumed FROM public.cdc_outbox WHERE consumed_at IS NOT NULL;
+              SELECT min(changed_at) INTO oldest_pending
+                FROM public.cdc_outbox WHERE consumed_at IS NULL;
+              -- STUCK: unconsumed and older than an hour. A drainer died, or a consumer keeps
+              -- failing. Never deleted -- that would erase the evidence of the failure.
+              SELECT count(*) INTO stuck FROM public.cdc_outbox
+               WHERE consumed_at IS NULL AND changed_at < NOW() - INTERVAL '1 hour';
+              SELECT count(*) INTO prunable FROM public.cdc_outbox
+               WHERE consumed_at IS NOT NULL
+                 AND consumed_at < NOW() - (retain || ' days')::interval;
+
+              RAISE NOTICE '  total rows      : %', total;
+              RAISE NOTICE '  pending (unconsumed) : %', pending;
+              RAISE NOTICE '  consumed             : %', consumed;
+              RAISE NOTICE '  oldest pending       : %', COALESCE(oldest_pending::text, '(none)');
+              RAISE NOTICE '  prunable (consumed, older than % days): %', retain, prunable;
+              IF stuck > 0 THEN
+                  RAISE WARNING '  STUCK: % row(s) unconsumed for over an hour -- a drainer is not running or a consumer is failing', stuck;
+              ELSE
+                  RAISE NOTICE '  stuck rows      : 0';
+              END IF;
+          END \$\$;"
+
+      - name: Prune consumed history
+        if: env.MODE == 'prune'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
+            -v retain="${RETAIN_DAYS}" -c "
+            DELETE FROM public.cdc_outbox
+             WHERE consumed_at IS NOT NULL
+               AND consumed_at < NOW() - (:'retain' || ' days')::interval;"
+          echo "  pruned (consumed rows older than ${RETAIN_DAYS}d)"
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -c "
+            SELECT '  rows remaining: ' || count(*)::text FROM public.cdc_outbox;"
+
+      - name: Report-only notice
+        if: env.MODE == 'report'
+        run: |
+          echo "================================================================"
+          echo "  REPORT ONLY. Nothing was deleted."
+          echo "  Re-run with -f confirm=PRUNE to delete consumed rows older than"
+          echo "  ${RETAIN_DAYS} days. Unconsumed rows are NEVER deleted at any age --"
+          echo "  they are pending work, and a stuck one is evidence, not garbage."
+          echo "================================================================"
