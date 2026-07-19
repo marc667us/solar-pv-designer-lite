@@ -33,13 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
     steps:
       - name: Guard
         run: |
           set -e
-          [ -n "$DATABASE_URL" ] || { echo "::error::DATABASE_URL secret is empty"; exit 1; }
-          echo "  DATABASE_URL present (length ${#DATABASE_URL}) -- value never printed"
+          [ -n "$RENDER_API_KEY" ] || { echo "::error::RENDER_API_KEY secret is empty"; exit 1; }
+          echo "  RENDER_API_KEY present (length ${#RENDER_API_KEY}) -- value never printed"
 
       # psql 18 to match the live server (upgraded 2026-07-10). psql tolerates a version gap
       # but pinning avoids surprises; pg_dump does NOT tolerate it, which is what broke the
@@ -69,7 +69,36 @@ jobs:
       # NAMES ARE NOT PRINTED FOR THE RESIDUE CHECK -- see the classified step below. These
       # table names are already public in migrations/ in this repo, so listing them here
       # discloses nothing new; the doc_type VALUES are business data and are not.
+      # There is no DATABASE_URL secret in this repo. The connection string is resolved at
+      # runtime from the Render API and MASKED -- the same pattern the clear workflow uses.
+      # Reusing it rather than adding a second way to reach the database (Directive §3): a
+      # stored copy would be one more secret to rotate and one more thing to drift.
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string returned"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+          echo "  resolved (value masked)"
+
       - name: Per-table row counts (old build vs current build)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
           /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -v ON_ERROR_STOP=1 -c "
@@ -117,6 +146,8 @@ jobs:
       # CLASSIFIED COUNTERS ONLY -- no doc_type values, no dates. doc_type strings are
       # business/workflow names and these Actions logs are PUBLIC. (Codex CRITICAL.)
       - name: Stale residue INSIDE the current build (classified, no names)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
           /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -v ON_ERROR_STOP=1 -c "
@@ -144,6 +175,8 @@ jobs:
 
       # MARKETPLACE -- the owner also reports an issue in market admin. Counts only.
       - name: Marketplace inventory
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
           /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -A -F' | ' -c "
