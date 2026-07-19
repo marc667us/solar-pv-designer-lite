@@ -1370,6 +1370,18 @@ class APIManager:
         call, so reading the health page costs neither latency nor a slice of a free-tier
         allowance. A provider nothing has exercised yet is "untried", which is honestly
         different from one that has been tried and failed.
+
+        SCOPE, SO THIS IS NOT OVER-READ: `_Store` is a local SQLite file (`_db_path()`,
+        default `solar.db`) and Render's free-tier filesystem is EPHEMERAL, so `api_logs` is
+        wiped on every deploy. This therefore reports "since this container started", NOT a
+        true rolling 24h -- every provider reads "untried" immediately after a deploy, which
+        is why "untried" is a distinct answer rather than being folded into "working".
+
+        That is still enough for the job it was added for: a provider that fails when the
+        operator actually uses it reads "failing" from that moment on, instead of the
+        "configured" that hid a 100%-failing provider for months. It is NOT enough to answer
+        "has this been reliable this week" -- that would need the log in Postgres alongside
+        the app's real data, which is a bigger change than this one.
         """
         if not configured:
             return "not_configured"
