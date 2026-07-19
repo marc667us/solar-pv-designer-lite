@@ -106,6 +106,34 @@ jobs:
           python3 - <<'PY'
           import json
           d = json.load(open("/tmp/cdc.json"))
+
+          # THE LISTENER BLOCK IS PRINTED EVERY TICK, INCLUDING WHEN THERE IS NOTHING TO
+          # DRAIN. Render's free tier hides runtime logs, so this cron output is the only
+          # routine window onto the slice-4 broadcast listener. Printing it only on a busy
+          # tick would mean a listener that died during a quiet period stayed invisible
+          # until something happened to notice it -- which is the silent failure the status
+          # block exists to prevent.
+          lst = d.get("listener") or {}
+          if lst:
+              print("  listener: supported=%s enabled=%s alive=%s connected=%s"
+                    % (lst.get("supported"), lst.get("enabled"),
+                       lst.get("thread_alive"), lst.get("connected")))
+              print("            notifications=%s invalidations=%s reconnects=%s"
+                    % (lst.get("notifications"), lst.get("invalidations"),
+                       lst.get("reconnects")))
+              if lst.get("last_error"):
+                  print("            last_error=%s" % lst["last_error"][:160])
+              # Enabled but not connected is the shape of a listener that cannot reach the
+              # database. Staleness is bounded by the 60s cache TTL, so it is degraded
+              # rather than broken -- but it should not pass silently.
+              if lst.get("enabled") and not lst.get("connected"):
+                  print("::warning::CDC listener is enabled but NOT connected -- cache "
+                        "invalidation is not broadcasting (bounded by the 60s cache TTL)")
+              if lst.get("supported") and lst.get("thread_alive") is False:
+                  print("::warning::CDC listener thread is NOT alive")
+          else:
+              print("  listener: (no status -- build predates slice 4)")
+
           claimed  = d.get("claimed", 0)
           consumed = d.get("consumed", 0)
           if not claimed:
