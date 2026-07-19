@@ -114,6 +114,11 @@ jobs:
           # until something happened to notice it -- which is the silent failure the status
           # block exists to prevent.
           lst = d.get("listener") or {}
+          # Full block too: the formatted summary below is for reading at a glance, but when
+          # something is wrong the fields it omits (last_error, started_at, counters) are
+          # exactly the ones needed, and a second deploy just to widen a print is a poor way
+          # to find out. Contains no secrets -- counters, booleans and an error string.
+          print("  listener(raw): %s" % json.dumps(lst, sort_keys=True, default=str))
           if lst:
               print("  listener: supported=%s enabled=%s alive=%s connected=%s"
                     % (lst.get("supported"), lst.get("enabled"),
