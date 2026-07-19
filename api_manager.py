@@ -201,7 +201,8 @@ class _Store:
 class _AIClient:
     """
     Single entry point for all AI chat.
-    Fallback chain: Claude → OpenRouter → Ollama → GitHub Models → rule-based
+    Fallback chain: Claude → OpenRouter → GitHub Models → Ollama → rule-based
+    (github moved ahead of ollama 2026-07-19 -- see the comment in `chat`.)
     """
 
     def __init__(self, store: _Store):
@@ -234,6 +235,17 @@ class _AIClient:
         self.ollama_model     = os.environ.get("OLLAMA_MODEL", "mistral")
         self.github_token     = os.environ.get("GITHUB_TOKEN", "")
         self.github_model     = os.environ.get("GITHUB_MODEL", "openai/gpt-4.1-mini")
+        # GitHub Models has TWO endpoints and they disagree about model NAMING:
+        #   models.github.ai/inference      -> wants the PUBLISHER PREFIX ("openai/gpt-4.1-mini")
+        #   models.inference.ai.azure.com   -> wants the BARE name  ("gpt-4.1-mini")
+        # Until 2026-07-19 the default was the azure URL paired with the PREFIXED model, which is
+        # the one combination that cannot work: measured live, it returns
+        #   HTTP 400 {"code":"unknown_model","message":"Unknown model: openai/gpt-4.1-mini"}
+        # on EVERY call. So this provider has never answered once in its life -- the broad
+        # `except` in _github swallowed the 400 into a log line nobody reads, and /api/health/ai
+        # only ever reported whether the TOKEN was present, never whether the provider WORKS.
+        # Same failure shape as the 2026-07-14 "agent was dead" bug: configured != working.
+        self.github_url = self._safe_github_url(os.environ.get("GITHUB_MODELS_URL", ""))
 
     # Free models on OpenRouter, verified live against https://openrouter.ai/api/v1/models on
     # 2026-07-14, best prose first. These write governance-document sections, so the order is
@@ -249,12 +261,21 @@ class _AIClient:
     # winner is tomorrow's 429. `_ordered_models` below promotes whichever model actually
     # answered last, so the chain corrects itself rather than waiting for someone to re-measure
     # and edit this tuple.
+    # RE-VERIFIED LIVE 2026-07-19 against https://openrouter.ai/api/v1/models.
+    # THREE OF THE FIVE IDS BELOW HAD BEEN RETIRED and every call to them 404s:
+    #   meta-llama/llama-3.3-70b-instruct:free
+    #   qwen/qwen3-next-80b-a3b-instruct:free
+    #   meta-llama/llama-3.2-3b-instruct:free
+    # So the primary provider was spending most of its attempts on models that no longer
+    # exist -- on top of the 50/day account ceiling. `tests/test_openrouter_free_models.py`
+    # is the canary that caught it; it queries the live catalogue, so it will go red again
+    # the next time this list rots. When it does, REPLACE THE IDS -- do not skip the test.
     OPENROUTER_FREE_FALLBACKS = (
-        "nvidia/nemotron-3-super-120b-a12b:free",   # the only one answering on 2026-07-18
-        "meta-llama/llama-3.3-70b-instruct:free",   # best prose when it is available
-        "qwen/qwen3-next-80b-a3b-instruct:free",
-        "google/gemma-4-31b-it:free",
-        "meta-llama/llama-3.2-3b-instruct:free",    # small and fast: a short section still lands
+        "nvidia/nemotron-3-super-120b-a12b:free",   # the one proven to answer, 2026-07-18
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # largest available; best prose when free
+        "google/gemma-4-31b-it:free",               # survived the 07-19 cull
+        "google/gemma-4-26b-a4b-it:free",
+        "openai/gpt-oss-20b:free",                  # small and fast: a short section still lands
     )
 
     # The model that most recently ANSWERED, promoted to the front of the next attempt.
@@ -363,8 +384,14 @@ class _AIClient:
         reply, provider = (
             self._claude(messages, system, model, max_tokens)
             or self._openrouter(messages, system, max_tokens, deadline)
-            or self._ollama(messages, system, max_tokens)
+            # github BEFORE ollama since 2026-07-19. Ollama is a tunnel to the owner's own box:
+            # when that tunnel is stale the URL still resolves, so the socket hangs for the full
+            # 60s timeout before we fall through -- per call. GitHub Models is a hosted endpoint
+            # on a 30s timeout with its own free allowance, so it is both likelier to answer and
+            # cheaper to be wrong about. Ollama stays last: it is the only provider that keeps
+            # working with no internet at all, which is exactly what a last resort is for.
             or self._github(messages, system, max_tokens)
+            or self._ollama(messages, system, max_tokens)
             or ("I'm having trouble connecting to AI services right now. Please try again in a moment.", "rule_based")
         )
 
@@ -611,16 +638,92 @@ class _AIClient:
             logger.warning("ollama failed: %s", e)
             return None
 
+    # The only hosts the GitHub Models bearer token may ever be sent to.
+    GITHUB_MODELS_HOSTS = ("models.github.ai", "models.inference.ai.azure.com")
+    GITHUB_MODELS_DEFAULT_URL = "https://models.github.ai/inference/chat/completions"
+
+    @classmethod
+    def _safe_github_url(cls, url):
+        """Resolve GITHUB_MODELS_URL, refusing to send the token anywhere unexpected.
+
+        Input:  the raw env value (may be empty, malformed, or hostile)
+        Output: that URL if it is HTTPS on a known GitHub Models host, else the default.
+
+        WHY THIS IS NOT JUST `os.environ.get(...)`: the endpoint used to be a hard-coded
+        string. Making it configurable is what the bug fix needed, but it also means a typo'd
+        -- or tampered -- env var would send `Authorization: Bearer <GITHUB_TOKEN>` to a host
+        of someone else's choosing, on every AI call, silently. This repo leaked five live
+        secrets into PUBLIC logs for 35 days in July 2026; a config knob that can exfiltrate a
+        credential is not one to ship unguarded.
+
+        Falls back rather than raising: an operator typo must not take the AI chain down, and
+        the default is always a working endpoint. `http://` is refused even on a valid host --
+        the token must never cross the wire in clear text.
+        """
+        from urllib.parse import urlparse
+        try:
+            p = urlparse((url or "").strip())
+        except Exception:
+            return cls.GITHUB_MODELS_DEFAULT_URL
+        host = (p.hostname or "").lower()
+        if p.scheme == "https" and host in cls.GITHUB_MODELS_HOSTS:
+            return url.strip()
+        if url and url.strip():
+            logger.warning(
+                "GITHUB_MODELS_URL %r is not an https URL on a known GitHub Models host; "
+                "using the default endpoint instead", url)
+        return cls.GITHUB_MODELS_DEFAULT_URL
+
+    @staticmethod
+    def _github_model_for(url, model):
+        """Match the model id to the endpoint's naming convention.
+
+        Input:  url   -- the GitHub Models chat-completions URL actually being called
+                model -- the configured model id, with or without a publisher prefix
+        Output: the same model, prefixed or bare, as THAT endpoint requires.
+
+        WHY: the two endpoints reject each other's naming with HTTP 400 unknown_model. Making
+        this derived rather than configured means an operator cannot set GITHUB_MODEL and
+        GITHUB_MODELS_URL to a pair that cannot work -- which is precisely the state this app
+        shipped in until 2026-07-19.
+        """
+        # Hostname-exact, lowercased -- not a substring scan of the whole URL. A URL that
+        # merely differed in case (Models.Inference.AI.Azure.com) would otherwise be read as
+        # the modern endpoint and sent a prefixed model, recreating the very 400 this fixes.
+        # (Codex LOW, 2026-07-19.)
+        from urllib.parse import urlparse
+        host = (urlparse(url or "").hostname or "").lower()
+        if host == "models.inference.ai.azure.com":
+            # `or model` guards a trailing-slash config ("openai/"): splitting that yields an
+            # empty string, and an empty model id is a 400 that reads like an outage rather
+            # than the typo it is.
+            return (model.split("/", 1)[1] or model) if "/" in model else model
+        if "/" in model:
+            return model
+        # Only OpenAI's own families get an assumed publisher. GitHub Models also hosts Phi,
+        # Mistral, Llama and others, and "Phi-4" -> "openai/Phi-4" would be a confident lie
+        # about who publishes it. Anything unrecognised is passed through UNCHANGED rather
+        # than guessed at or rejected: a bare name may be wrong, but the endpoint says so in
+        # one 400 that `_github` already logs and classifies, whereas raising here would turn
+        # a config typo into a crash in a provider whose whole job is to degrade quietly.
+        # (Codex MEDIUM, 2026-07-19.)
+        return f"openai/{model}" if model.startswith(("gpt-", "o1", "o3", "o4")) else model
+
     def _github(self, messages, system, max_tokens):
         if not self.github_token:
             return None
         t = time.time()
+        # Resolved BEFORE the try so the failure path can always name the model that was
+        # actually sent. Computed inside, it would be unbound whenever the failure happened
+        # earlier than its own assignment -- turning a handled provider error into a NameError
+        # inside the handler. Same trap `_ai_write_many` documents for its `_api` import.
+        _model = self._github_model_for(self.github_url, self.github_model)
         try:
             import urllib.request as _ur, json as _j
             msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
-            payload = _j.dumps({"model": self.github_model, "messages": msgs,
+            payload = _j.dumps({"model": _model, "messages": msgs,
                                  "max_tokens": max_tokens, "temperature": 0.7}).encode()
-            req = _ur.Request("https://models.inference.ai.azure.com/chat/completions",
+            req = _ur.Request(self.github_url,
                               data=payload,
                               headers={"Authorization": f"Bearer {self.github_token}",
                                        "Content-Type": "application/json",
@@ -628,10 +731,13 @@ class _AIClient:
                                        "User-Agent": "solarpro/1.0"})
             with _ur.urlopen(req, timeout=30) as r:
                 reply = _j.loads(r.read())["choices"][0]["message"]["content"]
-            self._s.log("github_models", self.github_model, "ok", (time.time()-t)*1000)
+            # Log the model actually SENT, not the one configured. They differ on the legacy
+            # endpoint, and a stats page naming a model that never went over the wire sends
+            # whoever debugs the next model-specific failure to the wrong place.
+            self._s.log("github_models", _model, "ok", (time.time()-t)*1000)
             return reply, "github_models"
         except Exception as e:
-            self._s.log("github_models", self.github_model, "error", (time.time()-t)*1000,
+            self._s.log("github_models", _model, "error", (time.time()-t)*1000,
                         self.classify_ai_failure(e))
             logger.warning("github_models failed: %s", e)
             return None
@@ -1215,22 +1321,51 @@ class APIManager:
         self.payment.reload()
         logger.info("APIManager: all keys reloaded")
 
+    @staticmethod
+    def _provider_health(configured, s):
+        """Turn 24-h call counts into a word about whether the provider actually WORKS.
+
+        Input:  configured -- is a key/URL present at all
+                s          -- that provider's {"ok": n, "error": n} counts for the last 24 h
+        Output: "not_configured" | "untried" | "failing" | "degraded" | "working"
+
+        WHY: `configured` answers "is a key set", which is NOT the question anyone asks of a
+        health page. github_models reported "configured" for months while returning HTTP 400 on
+        every single call, because a present token was the only thing being measured. A
+        provider that has only ever errored is FAILING, and the dashboard must say so.
+
+        Derived purely from counts already recorded by `_Store.log` -- it makes no upstream
+        call, so reading the health page costs neither latency nor a slice of a free-tier
+        allowance. A provider nothing has exercised yet is "untried", which is honestly
+        different from one that has been tried and failed.
+        """
+        if not configured:
+            return "not_configured"
+        ok, err = int(s.get("ok", 0) or 0), int(s.get("error", 0) or 0)
+        if ok == 0 and err == 0:
+            return "untried"
+        if ok == 0:
+            return "failing"
+        return "degraded" if err > ok else "working"
+
     def status(self):
         """
         Return dict of provider availability and 24-h call stats.
         Safe to expose on an admin dashboard.
         """
         stats = self._store.stats()
+
+        def _p(configured, key):
+            s = stats.get(key, {})
+            return {"configured": bool(configured),
+                    "health": self._provider_health(bool(configured), s), **s}
+
         return {
             "providers": {
-                "claude":        {"configured": bool(self.ai.anthropic_key),
-                                  **stats.get("anthropic", {})},
-                "openrouter":    {"configured": bool(self.ai.openrouter_key),
-                                  **stats.get("openrouter", {})},
-                "ollama":        {"configured": bool(self.ai.ollama_url),
-                                  **stats.get("ollama", {})},
-                "github_models": {"configured": bool(self.ai.github_token),
-                                  **stats.get("github_models", {})},
+                "claude":        _p(self.ai.anthropic_key,   "anthropic"),
+                "openrouter":    _p(self.ai.openrouter_key,  "openrouter"),
+                "ollama":        _p(self.ai.ollama_url,      "ollama"),
+                "github_models": _p(self.ai.github_token,    "github_models"),
                 "resend":        {"configured": bool(self.email.resend_key),
                                   **stats.get("resend", {})},
                 "smtp":          {"configured": bool(self.email.smtp_host

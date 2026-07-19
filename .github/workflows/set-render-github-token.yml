@@ -1,0 +1,167 @@
+# Push the GitHub Models token to the live Render service as GITHUB_TOKEN.
+#
+# WHY: `github_models` is a FREE provider slot that has sat unused while the whole platform
+# rested on ONE OpenRouter free account with a 50-request/DAY ceiling. `_github()` has been
+# implemented in api_manager.py the whole time -- it was simply never configured, AND it
+# carried a bug that made it fail 100% of the time even when a token was present (the legacy
+# azure endpoint was paired with a publisher-prefixed model id, which that endpoint rejects
+# with HTTP 400 unknown_model; fixed 2026-07-19).
+#
+# With this token set, an exhausted OpenRouter allowance degrades to a second free provider
+# instead of taking the document writer down.
+#
+# ── THE SECRET IS **NOT** NAMED GITHUB_TOKEN ──────────────────────────────────────────────
+# GitHub REFUSES to create any repository secret whose name begins with `GITHUB_`, and
+# `secrets.GITHUB_TOKEN` is the auto-injected Actions token, which has NO models:read access.
+# Using it here would push a token that cannot call GitHub Models -- and, because the app only
+# ever checked whether the variable was non-empty, it would look configured while failing every
+# call. That is precisely the trap this whole change exists to close.
+#
+# So: the repo secret is `GH_MODELS_TOKEN`; it is written to Render under the key the app
+# actually reads, `GITHUB_TOKEN`.
+#
+#   owner, once:  https://github.com/settings/personal-access-tokens/new
+#                 fine-grained token, NO repository access, Account permissions -> Models: Read
+#                 gh secret set GH_MODELS_TOKEN -b "<that token>"
+#   then:         gh workflow run "Set Render GITHUB_TOKEN" -f confirm=SET_GITHUB_TOKEN
+#
+# A fine-grained Models-only token is the right credential here. Do NOT reuse a broad personal
+# OAuth token (e.g. the one `gh auth token` prints): it carries repo and workflow scope, and
+# copying it into a third-party host's environment turns an AI fallback into a full repo
+# compromise if that environment leaks. This repo leaked five live secrets into PUBLIC Actions
+# logs for 35 days on 2026-07-10 -- assume env values escape eventually and scope accordingly.
+#
+# NON-DESTRUCTIVE: per-key PUT /v1/services/{id}/env-vars/GITHUB_TOKEN, never the bulk replace
+# endpoint (which would wipe every other variable).
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=SET_GITHUB_TOKEN.
+# THE TOKEN IS NEVER PRINTED -- only its length reaches the log.
+
+name: Set Render GITHUB_TOKEN
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type SET_GITHUB_TOKEN to write it to Render."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      GH_MODELS_TOKEN:   ${{ secrets.GH_MODELS_TOKEN }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SET_GITHUB_TOKEN" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- GITHUB_TOKEN will be written to the Render service ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=SET_GITHUB_TOKEN to commit."
+          fi
+
+      - name: Verify the inputs exist (without revealing them)
+        run: |
+          set -e
+          for v in RENDER_API_KEY RENDER_SERVICE_ID GH_MODELS_TOKEN; do
+            eval "val=\$$v"
+            if [ -z "$val" ]; then
+              echo "::error::$v is not set as a repository secret."
+              if [ "$v" = "GH_MODELS_TOKEN" ]; then
+                echo "::error::Create a fine-grained token with Account -> Models: Read at"
+                echo "::error::https://github.com/settings/personal-access-tokens/new then run:"
+                echo "::error::  gh secret set GH_MODELS_TOKEN -b \"<token>\""
+              fi
+              exit 1
+            fi
+            echo "  $v present (length ${#val})"
+          done
+
+      # PROVE THE TOKEN ACTUALLY ANSWERS BEFORE WRITING IT.
+      # "Configured" is not "working" -- that conflation is the entire bug being fixed here, and
+      # it is the same lesson as 2026-07-14, when the enterprise agent had never once run while
+      # every dashboard reported it healthy. A token that cannot complete a chat is not written.
+      - name: Prove the token actually answers GitHub Models
+        run: |
+          set -e
+          CODE=$(curl -s -o /tmp/r.json -w "%{http_code}" \
+            -X POST https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GH_MODELS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"model":"openai/gpt-4.1-mini",
+                 "messages":[{"role":"user","content":"Say OK."}],"max_tokens":20}')
+          echo "  HTTP $CODE from GitHub Models"
+          case "$CODE" in
+            200) echo "  the token WORKS against the model the app is configured to use" ;;
+            401|403) echo "::error::token rejected (auth). It most likely lacks the"
+                     echo "::error::'Models: Read' account permission. Not writing it."; exit 1 ;;
+            429) echo "::error::rate-limited right now. Not writing it -- an unverified token"
+                 echo "::error::would look identical to the outage being fixed."; exit 1 ;;
+            400) echo "::error::HTTP 400 -- the model id was rejected. Check GITHUB_MODEL vs"
+                 echo "::error::GITHUB_MODELS_URL naming (prefixed vs bare)."; exit 1 ;;
+            *)   echo "::error::unexpected HTTP $CODE. Not writing it."; exit 1 ;;
+          esac
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The token is valid and WOULD be written to Render"
+          echo "  under the key GITHUB_TOKEN."
+          echo "  Re-run with -f confirm=SET_GITHUB_TOKEN to commit."
+          echo "================================================================"
+
+      - name: Write it to Render (per-key, non-destructive)
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          # Body built into a FILE, never inlined: an inlined secret shows up in `set -x`
+          # traces and in process listings.
+          python3 -c "import json,os;open('/tmp/body.json','w').write(json.dumps({'value':os.environ['GH_MODELS_TOKEN']}))"
+          CODE=$(curl -s -o /tmp/put.json -w "%{http_code}" \
+            -X PUT "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/GITHUB_TOKEN" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/body.json)
+          rm -f /tmp/body.json
+          if [ "$CODE" != "200" ] && [ "$CODE" != "201" ]; then
+            echo "::error::Render returned HTTP $CODE writing the env var"; exit 1
+          fi
+          echo "  written (HTTP $CODE)"
+
+      - name: Verify what landed
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            -o /tmp/envs.json
+          printf '%s\n' \
+            'import json, os' \
+            'want = os.environ["GH_MODELS_TOKEN"]' \
+            'data = json.load(open("/tmp/envs.json"))' \
+            'rows = data if isinstance(data, list) else data.get("envVars", [])' \
+            'for item in rows:' \
+            '    ev = item.get("envVar", item)' \
+            '    if ev.get("key") == "GITHUB_TOKEN":' \
+            '        got = ev.get("value", "")' \
+            '        print("  present on Render, length", len(got))' \
+            '        print("  matches the tested token:", got == want)' \
+            '        raise SystemExit(0 if got == want else 1)' \
+            'raise SystemExit("GITHUB_TOKEN not found after writing it")' \
+            > /tmp/verify.py
+          python3 /tmp/verify.py
+          rm -f /tmp/verify.py /tmp/envs.json
+          echo "  a redeploy is needed for the running process to pick it up."
+          echo "  then: curl -sS https://solarpro.aiappinvent.com/api/health/ai"

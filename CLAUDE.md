@@ -335,14 +335,41 @@ D3.js v7 canvas-based rotating orthographic globe.
 ## AI Stack
 
 ### Helpline (floating chat, `/api/assistant/chat`)
-Chain: Claude `claude-opus-4-7` → OpenRouter (free Llama/Gemma) → Ollama → GitHub Models `gpt-4.1-mini` → rule-based fallback.
+Chain: Claude `claude-opus-4-7` → OpenRouter (free models) → **GitHub Models** → Ollama → rule-based fallback.
+(GitHub Models moved ahead of Ollama on 2026-07-19: Ollama is a tunnel to the owner's box, so a
+stale tunnel still resolves and hangs for its full 60s timeout *per call* before falling
+through. Ollama stays last because it is the only provider that works with no internet at all.)
 CSRF via `X-CSRF-Token` header. `[ESCALATE]` tag → high-priority ticket.
 
 ### Prospecting Agent (`/admin/agent/run`)
 Chain: OpenRouter (4 free models) → Ollama → GitHub Models → Claude (last resort).
 Sequential `if raw is None` blocks (NOT `elif`).
 
-**GitHub Models endpoint**: `https://models.inference.ai.azure.com/chat/completions`, model `gpt-4.1-mini` (NOT `openai/gpt-4.1-mini`).
+### GitHub Models (corrected 2026-07-19 — the old note here described a broken pairing)
+
+There are **two** endpoints and they disagree about model naming. Get this pair wrong and every
+call returns `HTTP 400 unknown_model`:
+
+| Endpoint | Model id form | Example |
+|---|---|---|
+| `https://models.github.ai/inference/chat/completions` **(default)** | publisher-**prefixed** | `openai/gpt-4.1-mini` |
+| `https://models.inference.ai.azure.com/chat/completions` (legacy) | **bare** | `gpt-4.1-mini` |
+
+`api_manager._AIClient._github_model_for(url, model)` now **derives** the id from the endpoint,
+so the two env vars (`GITHUB_MODELS_URL`, `GITHUB_MODEL`) can no longer be set to a pair that
+cannot work. Until 2026-07-19 the shipped default was the legacy URL + the *prefixed* id — the
+one combination that always 400s — so this provider had never answered a single call. The
+broad `except` in `_github` logged it and moved on, and `/api/health/ai` only ever checked that
+the token variable was non-empty. **Configured is not working** (cf. the 2026-07-14 dead-agent
+bug); `APIManager.status()` now reports a derived `health` of
+`not_configured|untried|failing|degraded|working` from recorded call counts, at no extra cost.
+
+**Credential:** the app reads `GITHUB_TOKEN`, but a *repository secret* may not be named
+`GITHUB_*` (GitHub reserves that prefix, and `secrets.GITHUB_TOKEN` is the Actions token, which
+has no Models access). The secret is therefore `GH_MODELS_TOKEN`, written to Render as
+`GITHUB_TOKEN` by `Set Render GITHUB_TOKEN` (dry-run default; proves the token completes a real
+chat before writing it). Use a **fine-grained token with only Account → Models: Read** — never a
+broad `gh auth token`, which carries repo scope.
 
 ---
 
