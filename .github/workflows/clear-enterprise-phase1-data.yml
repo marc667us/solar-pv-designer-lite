@@ -82,8 +82,21 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-18
-          echo "psql:     $(psql --version)"
-          echo "pg_dump:  $(pg_dump --version)"
+          echo "psql:     $(/usr/lib/postgresql/18/bin/psql --version)"
+          echo "pg_dump:  $(/usr/lib/postgresql/18/bin/pg_dump --version)"
+          # ASSERT the major version rather than trusting the install step.
+          # Installing postgresql-client-18 is NOT enough: bare `pg_dump` on PATH
+          # still resolves to Ubuntu's 16.x, and pg_dump REFUSES to dump a server
+          # newer than itself ("aborting because of server version mismatch"). psql
+          # tolerates the gap, so the failure only surfaced at the backup step --
+          # which is why this workflow has never once completed (2026-07-12 x2,
+          # 2026-07-19). Every call is now absolute; this asserts it stays that way.
+          PGD_MAJOR=$(/usr/lib/postgresql/18/bin/pg_dump --version | grep -oE "[0-9]+" | head -1)
+          if [ "$PGD_MAJOR" != "18" ]; then
+            echo "::error::pg_dump major is $PGD_MAJOR, expected 18 -- it cannot dump an 18.x server"
+            exit 1
+          fi
+          echo "  pg_dump major $PGD_MAJOR matches the live server"
 
       - name: Resolve mode
         run: |
@@ -126,7 +139,7 @@ jobs:
         run: |
           set -e
           echo "=================== PHASE-1 ENTERPRISE DATA ===================="
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             SELECT 'enterprise_organisations'          AS tbl, count(*) FROM enterprise_organisations
             UNION ALL SELECT 'enterprise_memberships',            count(*) FROM enterprise_memberships
             UNION ALL SELECT 'enterprise_programmes',             count(*) FROM enterprise_programmes
@@ -138,18 +151,18 @@ jobs:
             ORDER BY 1;"
           echo ""
           echo "=================== THE PROGRAMMES THEMSELVES =================="
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             SELECT id, name, status, created_at FROM enterprise_programmes ORDER BY id;"
           echo ""
           echo "======= PROJECTS THESE LINK TO (these are NOT deleted) ========="
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             SELECT project_kind, project_id, count(*) AS links
               FROM enterprise_programme_project_links
              GROUP BY 1,2 ORDER BY 1,2;"
           echo ""
           echo "PROOF the user's own projects are untouched by this workflow --"
           echo "counts BEFORE (they must be identical AFTER):"
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             SELECT 'projects' AS tbl, count(*) FROM projects
             UNION ALL SELECT 'capital_investment_projects', count(*)
               FROM capital_investment_projects;"
@@ -189,7 +202,7 @@ jobs:
         run: |
           set -e
           mkdir -p /tmp/backup
-          pg_dump "$DATABASE_URL" --data-only --column-inserts \
+          /usr/lib/postgresql/18/bin/pg_dump "$DATABASE_URL" --data-only --column-inserts \
             -t enterprise_organisations \
             -t enterprise_memberships \
             -t enterprise_programmes \
@@ -229,7 +242,7 @@ jobs:
           #
           # RLS: migration 024's policies are ENABLE (not FORCE) and this connection
           # is the table owner, so the owner bypasses them. The DELETEs see every row.
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
           BEGIN;
 
           DELETE FROM enterprise_programme_audit;
@@ -252,7 +265,7 @@ jobs:
         run: |
           set -e
           echo "=== enterprise_* must all be 0 ==="
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             SELECT 'enterprise_organisations'          AS tbl, count(*) FROM enterprise_organisations
             UNION ALL SELECT 'enterprise_memberships',            count(*) FROM enterprise_memberships
             UNION ALL SELECT 'enterprise_programmes',             count(*) FROM enterprise_programmes
@@ -264,7 +277,7 @@ jobs:
             ORDER BY 1;"
           echo ""
           echo "=== the user's OWN projects -- must match the BEFORE counts ==="
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             SELECT 'projects' AS tbl, count(*) FROM projects
             UNION ALL SELECT 'capital_investment_projects', count(*)
               FROM capital_investment_projects;"
