@@ -12312,13 +12312,7 @@ def admin_operations():
         projects = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         failed_logins = c.execute(
             "SELECT COUNT(*) FROM audit_logs WHERE action='failed_login' "
-            # datetime() is SQLite-only; Postgres raises "function datetime(unknown,
-            # unknown) does not exist" and this whole page 500s on live. Three other
-            # call sites in this file already branch on the backend -- this one never
-            # did. Same helper as those, so there is one answer to "is this Postgres".
-            + ("AND created_at >= (NOW() - INTERVAL '24 hours')"
-               if _inbox_is_pg() else
-               "AND created_at >= datetime('now', '-24 hours')")
+            "AND created_at >= datetime('now', '-24 hours')"
         ).fetchone()[0] if _table_exists(c, "audit_logs") else 0
         db_path = DB_PATH
         db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
