@@ -1,0 +1,182 @@
+# Apply migration 036 -- CDC slice 1 (the mechanism, DARK).
+#
+# Owner asked for CDC 2026-07-13: "implement database cdc and make when database change
+# everything else is alerted and updated -- for the app."
+#
+# WHAT THIS APPLIES: a `cdc_outbox` table, a `cdc_capture()` trigger function, RLS policies,
+# and a REVOKE. It attaches NO TRIGGER to any table, so after this runs the database behaves
+# exactly as before -- nothing is captured, nothing is notified, no write path changes.
+# Attaching triggers is slice 2, one table at a time, each rehearsed.
+#
+# ADDITIVE AND REVERSIBLE. Every statement is CREATE ... IF NOT EXISTS / CREATE OR REPLACE /
+# DROP POLICY IF EXISTS + CREATE POLICY. It drops no data and alters no existing table.
+# Rollback is `DROP TABLE cdc_outbox; DROP FUNCTION cdc_capture();`.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=APPLY_036.
+#
+# ABSOLUTE psql PATH, NOT bare `psql`. Installing postgresql-client-18 is not enough: bare
+# `psql`/`pg_dump` on PATH still resolve to Ubuntu's 16.x. That exact trap made
+# `Clear Enterprise Phase-1 Data` fail three times (2026-07-12 x2, 2026-07-19) -- psql
+# tolerates a version gap so it hid until the pg_dump step. Every call here is absolute and
+# the major version is ASSERTED, because the install step merely ECHOING a version is not a
+# check.
+
+name: Apply Migration 036 (CDC Outbox)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type APPLY_036 to run the migration against live."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLY_036" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- migration 036 will run against live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=APPLY_036 to commit."
+          fi
+
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          echo "  psql major: $PSQL_MAJOR"
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # State BEFORE, so "it was already there" and "we just made it" are distinguishable.
+      - name: State before
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT 'cdc_outbox table: ' ||
+                   CASE WHEN to_regclass('public.cdc_outbox') IS NULL
+                        THEN 'ABSENT' ELSE 'present' END;"
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -c "
+            SELECT 'cdc_capture function: ' || count(*)::text FROM pg_proc
+             WHERE proname = 'cdc_capture';"
+
+      # THE MIGRATION MUST PARSE BEFORE IT RUNS. A syntax error halfway through DDL leaves
+      # the schema half-built, which is worse than not starting.
+      - name: Dry-run -- parse the migration without committing
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- migrations/036_cdc_outbox.sql: $(wc -l < migrations/036_cdc_outbox.sql) lines ---"
+          # Run inside a transaction that is ROLLED BACK: real parsing and real permission
+          # checks against the real server, then nothing persists.
+          ( echo "BEGIN;"; cat migrations/036_cdc_outbox.sql; echo "ROLLBACK;" ) \
+            > /tmp/036_rehearse.sql
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/036_rehearse.sql
+          echo "  REHEARSAL PASSED -- the migration applies cleanly and was rolled back."
+
+      - name: Dry-run stops here
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The migration is valid and WOULD be applied."
+          echo "  Re-run with -f confirm=APPLY_036 to commit."
+          echo "================================================================"
+
+      - name: Apply
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/036_cdc_outbox.sql
+          echo "  migration 036 applied"
+
+      # VERIFY WHAT LANDED -- including the thing that must NOT have happened.
+      - name: Verify
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE n int;
+          BEGIN
+              IF to_regclass('public.cdc_outbox') IS NULL THEN
+                  RAISE EXCEPTION 'cdc_outbox was not created';
+              END IF;
+              RAISE NOTICE '  cdc_outbox: present';
+
+              SELECT count(*) INTO n FROM pg_proc WHERE proname='cdc_capture';
+              IF n = 0 THEN RAISE EXCEPTION 'cdc_capture() was not created'; END IF;
+              RAISE NOTICE '  cdc_capture(): present';
+
+              SELECT count(*) INTO n FROM pg_class
+               WHERE relname='cdc_outbox' AND relrowsecurity;
+              RAISE NOTICE '  RLS enabled on cdc_outbox: %', (n > 0);
+
+              SELECT count(*) INTO n FROM pg_policies WHERE tablename='cdc_outbox';
+              RAISE NOTICE '  policies on cdc_outbox: %', n;
+
+              -- THE SLICE-1 CONTRACT: the mechanism ships DARK. If a trigger exists, this
+              -- migration did more than it claimed and the change is NOT what was reviewed.
+              SELECT count(*) INTO n FROM pg_trigger t
+                JOIN pg_proc p ON p.oid = t.tgfoid
+               WHERE p.proname = 'cdc_capture' AND NOT t.tgisinternal;
+              IF n > 0 THEN
+                  RAISE EXCEPTION 'SLICE-1 VIOLATION: % trigger(s) attached to cdc_capture', n;
+              END IF;
+              RAISE NOTICE '  triggers attached: 0  (correct -- slice 1 is dark)';
+
+              SELECT count(*) INTO n FROM public.cdc_outbox;
+              RAISE NOTICE '  rows captured so far: %  (expected 0)', n;
+          END \$\$;"
+          echo "  rollback if ever needed: DROP TABLE cdc_outbox; DROP FUNCTION cdc_capture();"
