@@ -57,6 +57,10 @@ ALLOWED: frozenset[str] = frozenset({
     "CI_BANK_DSCR_MIN",
     "CI_BANK_DSCR_STRONG",
     "CI_BANK_IRR_MIN",
+    # Bearer secret for POST /cdc/outbox/drain (CDC slice 3). Written to the Render env by
+    # the `Set CDC Drain Token` workflow from the GH secret of the same name. Unset => the
+    # endpoint 404s, so a missing value degrades the change feed, it never opens it.
+    "CDC_DRAIN_TOKEN",
     "CI_BANK_IRR_STRONG",
     "CI_MAX_AUTOBUILD_FLOORS",
     "CI_MAX_ITEMS_PER_FLOOR",

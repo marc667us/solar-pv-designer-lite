@@ -88,5 +88,29 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "Ops support surface failed to register (app still serving): %s", _e
     )
 
+# --- CDC outbox drainer (change-data-capture, slice 3) ------------------------
+# The first consumer of the change feed that migrations 036/037 set up. Drained by a
+# scheduled GitHub Action, exactly like the enterprise job queue and for the same reason:
+# Render's free tier gives this account one instance, so there is no worker process.
+#
+# Registered HERE for the same reason as the modules above: web_app.py is CRLF + mojibake and
+# must never be edited. Wrapped in its own try/except because a fault in an OBSERVABILITY
+# surface must never stop the app serving -- the feed exists to report on the app, so it
+# taking the app down would invert its whole purpose.
+try:
+    from new_cdc_drain_routes import register_cdc_drain
+    import web_app as _wa3
+
+    register_cdc_drain(
+        app,
+        get_db=_wa3.get_db,
+        admin_notify=_wa3._admin_notify,
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "CDC drain surface failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()

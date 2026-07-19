@@ -1,0 +1,153 @@
+# Write CDC_DRAIN_TOKEN into the Render service env.
+#
+# WHY IT MATTERS
+#   POST /cdc/outbox/drain is the consumer for the change feed built by migrations 036/037.
+#   There is no worker PROCESS and there cannot be one -- Render's free tier caps this account
+#   at a single instance -- so the outbox is drained by an authenticated POST from a scheduled
+#   GitHub Action (see drain-cdc-outbox.yml).
+#
+#   That endpoint is guarded by a shared bearer secret, compared in constant time, and an
+#   UNSET secret makes it a 404 rather than an open door (new_cdc_drain_routes.py). Which is
+#   correct -- and also means that while the secret is unset the cron gets a 404 and
+#   CAPTURED CHANGES PILE UP UNREAD FOREVER. The token must exist in BOTH places or the
+#   consumer is silently dead:
+#     * the GH secret  -> so the cron can present it
+#     * the Render env -> so the app can compare against it
+#
+#   The failure is quieter than the enterprise one: nothing user-facing breaks, the outbox
+#   just grows. `CDC Outbox Retention` is the workflow that would surface it.
+#
+# SINGLE-KEY PUT, NOT A MERGED ENV BLOB. Render's PUT /env-vars (plural) REPLACES the whole
+# env. A workflow that built that blob is exactly what dumped five live secrets into public
+# Actions logs on 2026-07-10. This touches ONE key and nothing else.
+#
+# BOOTSTRAP (one-time, by the owner -- this workflow does not mint the secret):
+#   python -c "import secrets; print(secrets.token_hex(32))"
+#   gh secret set CDC_DRAIN_TOKEN --body "<that hex>"
+#   gh workflow run "Set CDC Drain Token" -f confirm=SET_CDC_DRAIN_TOKEN
+#
+# DEFAULT IS DRY-RUN. See feedback_workflow_dry_run_gate.
+
+name: Set CDC Drain Token
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type SET_CDC_DRAIN_TOKEN to write it to Render."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      CDC_DRAIN_TOKEN:   ${{ secrets.CDC_DRAIN_TOKEN }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SET_CDC_DRAIN_TOKEN" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- CDC_DRAIN_TOKEN will be written to the Render env ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=SET_CDC_DRAIN_TOKEN to commit."
+          fi
+
+      - name: The GH secret must exist first
+        run: |
+          if [ -z "$CDC_DRAIN_TOKEN" ]; then
+            echo "::error::CDC_DRAIN_TOKEN GH secret is not set."
+            echo ""
+            echo "One-time bootstrap (the owner must run this -- a workflow must never mint"
+            echo "its own auth secret):"
+            echo "  python -c \"import secrets; print(secrets.token_hex(32))\""
+            echo "  gh secret set CDC_DRAIN_TOKEN --body \"<that hex>\""
+            echo ""
+            echo "Then re-run this workflow."
+            exit 1
+          fi
+          LEN=${#CDC_DRAIN_TOKEN}
+          echo "OK: GH secret present (length=$LEN)."
+          if [ "$LEN" -lt 32 ]; then
+            echo "::error::token is only $LEN chars. This is the ONLY thing standing between a"
+            echo "stranger and the change feed. Use >= 64 (32 hex bytes)."
+            exit 1
+          fi
+
+      - name: Verify Render credentials
+        run: |
+          [ -n "$RENDER_API_KEY" ]    || { echo "::error::RENDER_API_KEY not set"; exit 1; }
+          [ -n "$RENDER_SERVICE_ID" ] || { echo "::error::RENDER_SERVICE_ID not set"; exit 1; }
+          echo "OK: Render API key + service id present."
+
+      - name: Pre-flight -- is it already on Render?
+        run: |
+          set -e
+          STATUS=$(curl -s -o /tmp/pre.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/CDC_DRAIN_TOKEN")
+          echo "GET /env-vars/CDC_DRAIN_TOKEN -> HTTP $STATUS"
+          case "$STATUS" in
+            200) echo "  Pre-state: already set on Render (it will be OVERWRITTEN)." ;;
+            404) echo "  Pre-state: not present -- this will CREATE it." ;;
+            *)   echo "::warning::unexpected pre-flight status $STATUS; continuing." ;;
+          esac
+
+      - name: Dry-run preview
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "=================================================================="
+          echo "  DRY-RUN. The single-key PUT would be:"
+          echo "    PUT /v1/services/$RENDER_SERVICE_ID/env-vars/CDC_DRAIN_TOKEN"
+          echo "    body: {\"value\": <redacted>}  (length=${#CDC_DRAIN_TOKEN})"
+          echo "  No other env var is read, written or echoed."
+          echo "=================================================================="
+
+      - name: Apply -- single-key PUT
+        if: env.MODE == 'apply'
+        run: |
+          # pipefail matters now that the body is PIPED: without it the pipeline's status is
+          # curl's alone, so a jq failure producing an empty body would sail through as
+          # success and write nothing while reporting OK.
+          set -eo pipefail
+          # jq builds the body so there are no shell-escaping bugs, AND the body is piped
+          # to curl on STDIN via `-d @-` rather than passed as `-d "$BODY"`.
+          #
+          # That difference is the whole point (Codex MED, 2026-07-19): `-d "$BODY"` puts the
+          # secret in curl's argv, where any other process on the box can read it from
+          # /proc/<pid>/cmdline. The enterprise token workflow this was copied from carries
+          # the same "no ps-aux leakage" comment while doing exactly that -- the comment was
+          # true of the jq part and false of the curl part. Piping makes it true of both.
+          # (The pre-existing set-enterprise-job-token.yml still has the argv form; it is a
+          # separate file and not in this change's scope, but it should get the same fix.)
+          jq -nc --arg v "$CDC_DRAIN_TOKEN" '{value: $v}' \
+          | curl -fsS -X PUT \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/CDC_DRAIN_TOKEN" \
+              -d @- -o /tmp/put.json
+          echo "OK: CDC_DRAIN_TOKEN written to the Render env."
+
+      - name: Redeploy so the app reads it
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' -o /tmp/deploy.json
+          echo "Deploy triggered. The env is only read at boot."
+          echo ""
+          echo "VERIFY once it is live -- the drain endpoint should stop being a 404:"
+          echo "  an UNAUTHENTICATED POST must now return 401 (it exists, and it refused you),"
+          echo "  not 404 (it does not exist). Run: gh workflow run \"Drain CDC Outbox\""

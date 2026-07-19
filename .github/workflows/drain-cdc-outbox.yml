@@ -1,0 +1,129 @@
+# Drain the CDC outbox -- the consumer half of the change feed (slice 3).
+#
+# Migrations 036/037 capture every equipment_catalog change into `cdc_outbox`. Nothing read
+# those rows until this existed. This cron calls the drainer, which claims a batch, raises ONE
+# aggregated admin notification per pass, and stamps the rows consumed.
+#
+# There is no worker PROCESS and there cannot be one -- Render's free tier caps this account
+# at a single instance -- so, exactly like Drain Enterprise Jobs, the queue is drained by an
+# authenticated POST from a schedule.
+#
+# A FAILURE HERE IS QUIET, WHICH IS WHY THE DIAGNOSTICS ARE LOUD. If this stops working
+# nothing user-facing breaks: the app carries on, the triggers carry on capturing, and the
+# outbox simply grows unread. That is a slow problem with no symptom, so every distinguishable
+# failure below prints what it means and what to run. `CDC Outbox Retention` is the other
+# watchdog -- it reports depth and STUCK rows read-only.
+
+name: Drain CDC Outbox
+
+on:
+  schedule:
+    # Every 15 minutes, matching Drain Enterprise Jobs. The endpoint takes at most 200 rows
+    # per pass, so a large catalogue sweep drains over successive ticks rather than in one
+    # long request that would hit the gunicorn timeout.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two overlapping drains would fight over the same rows. `FOR UPDATE SKIP LOCKED` makes
+  # that safe at the database level -- unlike the enterprise drain, this one really does
+  # claim with a lock -- but there is no reason to spend the requests.
+  group: drain-cdc-outbox
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE:            https://solarpro.aiappinvent.com
+      CDC_DRAIN_TOKEN: ${{ secrets.CDC_DRAIN_TOKEN }}
+    steps:
+      - name: The token must exist
+        run: |
+          if [ -z "$CDC_DRAIN_TOKEN" ]; then
+            echo "::error::CDC_DRAIN_TOKEN is not set, so /cdc/outbox/drain is a 404 and"
+            echo "NOTHING IS READING THE CHANGE FEED. Captured rows will pile up unconsumed."
+            echo ""
+            echo "Fix:"
+            echo "  python -c \"import secrets; print(secrets.token_hex(32))\""
+            echo "  gh secret set CDC_DRAIN_TOKEN --body \"<that hex>\""
+            echo "  gh workflow run \"Set CDC Drain Token\" -f confirm=SET_CDC_DRAIN_TOKEN"
+            exit 1
+          fi
+          echo "OK: token present."
+
+      # The free tier sleeps. A cold app can take ~50s to answer, and a POST that times out
+      # looks identical to an outbox with nothing in it.
+      - name: Wake the app
+        run: |
+          curl -sS -o /dev/null -w "  /api/ping -> %{http_code} in %{time_total}s\n" \
+            --max-time 120 "$BASE/api/ping" || true
+
+      - name: Drain
+        run: |
+          set -e
+          STATUS=$(curl -sS -o /tmp/cdc.json -w "%{http_code}" \
+            --max-time 280 \
+            -X POST "$BASE/cdc/outbox/drain" \
+            -H "Authorization: Bearer $CDC_DRAIN_TOKEN")
+
+          echo "POST /cdc/outbox/drain -> HTTP $STATUS"
+
+          if [ "$STATUS" = "404" ]; then
+            echo "::error::404. The app has no CDC_DRAIN_TOKEN in its RENDER env (an unset"
+            echo "secret makes the endpoint a 404 by design). The GH secret alone is not enough:"
+            echo "  gh workflow run \"Set CDC Drain Token\" -f confirm=SET_CDC_DRAIN_TOKEN"
+            exit 1
+          fi
+          if [ "$STATUS" = "401" ]; then
+            echo "::error::401. The GH secret and the Render env value DISAGREE. Re-run"
+            echo "\"Set CDC Drain Token\" to push the GH secret into the Render env."
+            exit 1
+          fi
+          if [ "$STATUS" = "503" ]; then
+            echo "::error::503. The app says DATABASE_URL is not a postgres url. CDC is"
+            echo "Postgres-only (the outbox, the triggers and FOR UPDATE SKIP LOCKED all are)."
+            echo "Something has changed the database backend -- investigate before anything else."
+            exit 1
+          fi
+          if [ "$STATUS" = "500" ]; then
+            echo "::error::500. The drainer claimed rows but could not deliver the alert, so"
+            echo "it deliberately did NOT consume them -- they will be retried next tick."
+            echo "Read last_error via the 'CDC Outbox Retention' workflow."
+            head -c 600 /tmp/cdc.json || true
+            exit 1
+          fi
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::unexpected status $STATUS"
+            head -c 600 /tmp/cdc.json || true
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          d = json.load(open("/tmp/cdc.json"))
+          claimed  = d.get("claimed", 0)
+          consumed = d.get("consumed", 0)
+          if not claimed:
+              print("  outbox empty -- nothing to drain this tick.")
+          else:
+              print("  claimed  : %d" % claimed)
+              print("  consumed : %d" % consumed)
+              print("  notified : %s" % d.get("notified"))
+              print("  max id   : %s" % d.get("max_outbox_id"))
+              s = d.get("summary") or {}
+              if s:
+                  print("  ---")
+                  print("  %s" % s.get("title", ""))
+                  for line in (s.get("body") or "").splitlines():
+                      print("    %s" % line)
+              # Claimed but not consumed should have been a non-200 above; if it ever reaches
+              # here, say so rather than letting a partial pass read as a clean one.
+              if consumed != claimed:
+                  print("::warning::claimed %d but consumed %d -- rows were left for retry"
+                        % (claimed, consumed))
+          PY
