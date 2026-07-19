@@ -104,16 +104,23 @@ jobs:
 
       # COUNTS AND AGES ONLY -- never a payload. cdc_outbox.payload holds captured row data,
       # which is exactly the thing that must not reach a PUBLIC Actions log.
+      # RETAIN_DAYS is interpolated by the SHELL here, not by psql's -v. psql performs
+      # variable substitution on the SQL text but SKIPS dollar-quoted strings, so
+      # `:retain` inside DO $$ ... $$ reached the server literally and Postgres
+      # rejected it ("syntax error at or near :"). Safe to interpolate: 'Resolve mode'
+      # rejects any non-numeric retain_days before this step runs -- the validation was
+      # written first, which is what makes this substitution acceptable and not an
+      # injection. The DELETE below is NOT dollar-quoted, so :'retain' works there.
       - name: Report outbox health
         env:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
           /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
-            -v retain="${RETAIN_DAYS}" -c "
+            -c "
           DO \$\$
           DECLARE total bigint; pending bigint; consumed bigint; stuck bigint;
-                  prunable bigint; oldest_pending timestamptz; retain int := :retain;
+                  prunable bigint; oldest_pending timestamptz; retain int := ${RETAIN_DAYS};
           BEGIN
               IF to_regclass('public.cdc_outbox') IS NULL THEN
                   RAISE NOTICE '  cdc_outbox ABSENT -- migration 036 has not been applied';
