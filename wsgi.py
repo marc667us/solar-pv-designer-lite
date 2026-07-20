@@ -155,5 +155,37 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "CDC listener failed to start (app still serving): %s", _e
     )
 
+# --- API versioning: /api/v1 aliases (slice 1) -------------------------------
+# ADDITIVE ONLY. Every /api/v1 rule points at the SAME view function as its
+# unversioned twin, which keeps working unchanged and is NOT deprecated. This
+# repo previously had no API versioning at all.
+#
+# Registered HERE rather than spliced into web_app.py deliberately: a bad byte
+# splice into that file is an import-time crash, i.e. a total outage, and that
+# was named the single most dangerous step in this change. This path costs
+# nothing and risks nothing by comparison.
+#
+# SHIPS DARK: register() returns immediately unless API_V1_ENABLED is set, so
+# the first deploy proves only that the import is harmless. A second deploy
+# turns it on. register() is documented never to raise; the try/except is the
+# second belt, matching every block above.
+try:
+    import new_api_v1_routes
+
+    _v1_summary = new_api_v1_routes.register(app)
+    if _v1_summary["enabled"]:
+        import logging
+        logging.getLogger(__name__).info(
+            "api_v1: enabled=%s registered=%d missing=%s",
+            _v1_summary["enabled"],
+            len(_v1_summary["registered"]),
+            _v1_summary["missing"],
+        )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "api_v1 failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()

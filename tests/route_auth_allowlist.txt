@@ -99,6 +99,20 @@ GET /api/solar_data/<country>/<region>  # reason=public-by-design
 GET /api/purc-tariffs  # reason=public-by-design
 GET /api/demand-factors  # reason=public-by-design
 
+# --- /api/v1 aliases of the four above (new_api_v1_routes.py, 2026-07-20) ---
+# ADDITIVE: each points at the SAME view function as its unversioned twin, so
+# it is public for exactly the same reason. The unversioned paths above are
+# NOT deprecated and keep working.
+#
+# These are registered imperatively with a computed path, so no source scan
+# can see them; new_api_v1_routes.declared_paths() publishes them and
+# test_declared_dynamic_routes_are_allowlisted asserts they appear here.
+GET /api/v1  # reason=public-by-design
+GET /api/v1/solar-regions/<country>  # reason=public-by-design
+GET /api/v1/solar-data/<country>/<region>  # reason=public-by-design
+GET /api/v1/purc-tariffs  # reason=public-by-design
+GET /api/v1/demand-factors  # reason=public-by-design
+
 # --- Public guides / support content ---------------------------------------
 GET /guides/<slug>  # reason=public-by-design
 GET /guides/<slug>/pdf  # reason=public-by-design

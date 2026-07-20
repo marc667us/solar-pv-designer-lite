@@ -29,11 +29,14 @@ SCOPE -- READ THIS BEFORE TRUSTING A GREEN RUN
        scanner into app/** would put the ratchet in a position to demand
        changes to the auth flow, which is exactly what we must not do.
 
-    2. ``add_url_rule()`` registrations. The scanner matches decorators
-       only. As of 2026-07-20 the sole ``add_url_rule`` call in the tree is
-       in test_soc_slice1.py:39 (a test fixture), so there is no production
-       blind spot today -- but a future ``add_url_rule`` route would NOT be
-       seen. ``test_no_production_add_url_rule`` pins that assumption.
+    2. (CLOSED 2026-07-20) ``add_url_rule()`` registrations. This used to be
+       a blind spot -- the scanner matched decorators only. When the /api/v1
+       aliases introduced the first production ``add_url_rule`` calls, the
+       scanner was TAUGHT to parse them rather than the new module being
+       exempted from its own guard. Such routes are reported with no
+       decorators, because their authorisation lives on the view function
+       they alias; they must therefore be justified in the allowlist like
+       any other undecorated route.
 
     3. DUPLICATE KEYS (Codex, 2026-07-20 -- the ratchet's largest hole).
        The tests compare SETS of "<METHODS> <path>" keys. If a key is
@@ -70,6 +73,8 @@ _RE_STRING = re.compile(r"""\s*(['"])(?P<val>.*?)\1""")
 _RE_DECO = re.compile(r"^\s*@(?P<name>[\w.]+)")
 _RE_DEF = re.compile(r"^\s*(async\s+)?def\s")
 _RE_METHOD = re.compile(r"""['"](GET|POST|PUT|PATCH|DELETE)['"]""")
+# app.add_url_rule("/path", ...) -- the imperative registration form.
+_RE_ADD_URL_RULE = re.compile(r"^\s*\w+\.add_url_rule\(\s*(?P<args>.*)$")
 
 #: Decorators that constitute a real authn/authz gate. Adding a name here
 #: widens what counts as "protected", so it is deliberately explicit -- a
@@ -155,13 +160,36 @@ def _scan_file(path: str) -> list[dict]:
     raw = read_source(path)
     # Cheap pre-filter: ~40% of repo-root modules declare no routes at all,
     # and splitting a 2 MB file into 40k lines to find nothing is pure waste.
-    if ".route(" not in raw:
+    if ".route(" not in raw and ".add_url_rule(" not in raw:
         return []
 
     lines = raw.replace("\r\n", "\n").split("\n")
     found: list[dict] = []
 
     for i, line in enumerate(lines):
+        # Imperative registration: app.add_url_rule("/path", ..., methods=[...]).
+        # Reported with NO decorators, because authorisation lives on the view
+        # function being registered -- which this static scan cannot resolve.
+        # Such a route must therefore be justified in the allowlist, exactly
+        # like any other undecorated route.
+        rule = _RE_ADD_URL_RULE.match(line)
+        if rule:
+            args = rule.group("args")
+            # Pull methods from the following few lines too -- the call is
+            # usually wrapped across several.
+            window = "\n".join(lines[i:i + 8])
+            rule_path = _extract_path(args)
+            if rule_path and rule_path.startswith("/"):
+                found.append({
+                    "file": os.path.basename(path),
+                    "line": i + 1,
+                    "path": rule_path,
+                    "methods": sorted(set(_RE_METHOD.findall(window))) or ["GET"],
+                    "decorators": [],
+                    "protected": False,
+                })
+            continue
+
         head = _RE_ROUTE_HEAD.match(line)
         if not head:
             continue

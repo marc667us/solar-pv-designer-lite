@@ -183,8 +183,12 @@ def test_allowlist_has_no_stale_entries(unprot_keys, allowlist):
     An entry matching no unprotected route means the route was deleted or
     has since been protected. Either way the exemption is dead and must go,
     or it will silently pre-authorise a future route that reuses the path.
+
+    Declared dynamic routes count as live: they exist at runtime but cannot
+    appear in a source scan (computed paths), so excluding them here would
+    report every /api/v1 alias as stale.
     """
-    stale = sorted(set(allowlist) - unprot_keys)
+    stale = sorted(set(allowlist) - unprot_keys - _declared_dynamic_keys())
     assert not stale, (
         "Allowlist entries matching no unprotected route (route removed, or "
         "now protected -- drop these lines):\n\n"
@@ -230,28 +234,88 @@ def test_allowlist_reasons_are_valid(allowlist):
     )
 
 
-def test_no_production_add_url_rule():
-    """Pin the scanner's known blind spot.
+#: Modules that register routes IMPERATIVELY with a computed path, which no
+#: source-text scan can resolve. Each must PUBLISH its surface so the ratchet
+#: can check it: {module name: (import path, attribute holding the v1 paths)}.
+#:
+#: This is the honest answer to a real limit. new_api_v1_routes registers in a
+#: loop over its ALIASES table, so the add_url_rule call site contains a
+#: variable, not a literal. Regex-parsing it would be guesswork; reading the
+#: module's own declaration is exact.
+DYNAMIC_ROUTE_MODULES = {
+    "new_api_v1_routes.py": ("new_api_v1_routes", "declared_paths"),
+}
 
-    The scan matches @route DECORATORS. A route registered via
-    app.add_url_rule() is invisible to it. Today the only such call is a
-    test fixture, so there is no production hole -- this fails loudly if
-    that stops being true, rather than letting the ratchet go blind.
 
-    Uses the scanner's own iter_source_files so "what is a live source
-    file" has exactly one definition.
+def _declared_dynamic_keys() -> set[str]:
+    """Every route key published by a dynamic-registration module.
+
+    These exist at runtime but never in a source scan, so both the
+    stale-entry check and the sensitive-prefix check must treat them as
+    live routes rather than phantom allowlist entries.
     """
-    offenders = [
-        os.path.basename(p)
-        for p in iter_source_files(REPO_ROOT)
-        if "add_url_rule" in read_source(p)
-    ]
-    assert not offenders, (
-        "add_url_rule() found in production module(s): "
-        + ", ".join(offenders)
-        + "\nThese routes are INVISIBLE to the auth ratchet. Either register "
-        "them with @app.route, or teach tests/route_auth_scan.py to parse "
-        "add_url_rule before merging."
+    import importlib
+
+    keys: set[str] = set()
+    for mod_name, attr in DYNAMIC_ROUTE_MODULES.values():
+        try:
+            mod = importlib.import_module(mod_name)
+        except Exception:  # pragma: no cover - a broken module fails elsewhere
+            continue
+        keys.update(getattr(mod, attr)())
+    return keys
+
+
+def test_add_url_rule_routes_are_accounted_for(routes):
+    """No add_url_rule() registration may escape the ratchet.
+
+    Until 2026-07-20 this was a documented blind spot: the scan matched
+    decorators only. When the /api/v1 aliases introduced the first production
+    add_url_rule calls, the scanner was taught to parse the literal-path form
+    rather than the new module being exempted from its own guard.
+
+    A module registering with a COMPUTED path cannot be parsed, so it must
+    instead declare its routes via DYNAMIC_ROUTE_MODULES. Either way, every
+    imperatively-registered route is accounted for -- none is silently
+    invisible.
+    """
+    scanned_files = {r["file"] for r in routes}
+
+    for path in iter_source_files(REPO_ROOT):
+        name = os.path.basename(path)
+        src = read_source(path)
+        # A real call, not the word appearing in prose.
+        if not re.search(r"^\s*\w+\.add_url_rule\(", src, re.M):
+            continue
+        if name in scanned_files or name in DYNAMIC_ROUTE_MODULES:
+            continue
+        pytest.fail(
+            f"{name} registers routes with add_url_rule() but contributed "
+            "NOTHING to the scan and does not declare them.\n"
+            "Either use a literal path (which the scanner parses), or publish "
+            "the paths and add the module to DYNAMIC_ROUTE_MODULES -- "
+            "otherwise those routes are invisible to the ratchet."
+        )
+
+
+@pytest.mark.parametrize("module_file", sorted(DYNAMIC_ROUTE_MODULES))
+def test_declared_dynamic_routes_are_allowlisted(module_file, allowlist):
+    """Routes declared by a dynamic-registration module must be justified.
+
+    They carry no decorator (their authorisation lives on the view function
+    they alias), so they go through the allowlist like everything else.
+    """
+    import importlib
+
+    mod_name, attr = DYNAMIC_ROUTE_MODULES[module_file]
+    mod = importlib.import_module(mod_name)
+    declared = getattr(mod, attr)()
+
+    missing = sorted(set(declared) - set(allowlist))
+    assert not missing, (
+        f"{module_file} declares route(s) absent from the allowlist:\n\n"
+        + "\n".join(f"    {k}" for k in missing)
+        + "\n\nAdd them to tests/route_auth_allowlist.txt with a reason=."
     )
 
 
