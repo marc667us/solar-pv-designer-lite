@@ -119,6 +119,18 @@ def status():
     try:
         snap = dict(_state)
         snap["thread_alive"] = bool(_thread is not None and _thread.is_alive())
+        # DIAGNOSTICS, added 2026-07-20 after the first dark deploy reported started_at set,
+        # last_error empty, enabled null and thread_alive false -- i.e. the thread started and
+        # then vanished without ever reading the flag. Two hypotheses (fork, double-start)
+        # were both wrong on inspection, so these report the two facts that distinguish every
+        # remaining one instead of guessing a third time:
+        #   stop_set  -- was the loop's exit condition already true when it first checked?
+        #   threads   -- is a cdc-listener thread present in THIS process at all? (which also
+        #                shows whether the process serving this request is the one that ran
+        #                start(), and whether gunicorn recycled the worker underneath us)
+        snap["stop_set"] = bool(_stop.is_set())
+        snap["threads"] = sorted(t.name for t in threading.enumerate() if t.is_alive())
+        snap["pid"] = os.getpid()
         return snap
     except Exception:                                  # pragma: no cover - paranoia
         return {"error": "status unavailable"}
