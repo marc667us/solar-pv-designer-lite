@@ -137,16 +137,32 @@ BEGIN
     END IF;
     RAISE NOTICE '  DELETE  -> published, carrying the OLD row';
 
-    -- 5. Exactly one table in scope ------------------------------------------------------
+    -- 5. Scope: no cdc trigger on a table nobody deliberately attached -------------------
+    -- WIDENED 2026-07-20 (CDC slice 5). This assertion used to demand equipment_catalog and
+    -- NOTHING else, which was correct while it was the only attached table -- but that made
+    -- it fail the moment migration 038 attached `suppliers`, i.e. this re-runnable workflow
+    -- would have started reporting a correct schema as a violation.
+    --
+    -- The invariant that actually matters is not "exactly one table". It is "capture widens
+    -- one DELIBERATE table at a time, and nothing attaches itself by accident". So the check
+    -- is now against an explicit roster. Adding a table to CDC means adding it here, in the
+    -- same commit as its migration -- which is the deliberate act being enforced.
+    -- REGCLASS comparison, not rendered text: tgrelid::regclass::text is schema-qualified
+    -- or bare depending on search_path, so a text comparison would pass or fail for reasons
+    -- unrelated to the triggers. `suppliers` may or may not exist yet depending on whether
+    -- 038 has been applied, so to_regclass (which returns NULL instead of raising) is used
+    -- rather than a hard '...'::regclass cast.
     SELECT count(*) INTO _n
       FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
      WHERE p.proname = 'cdc_capture' AND NOT t.tgisinternal
-       AND t.tgrelid <> 'public.equipment_catalog'::regclass;
+       AND t.tgrelid IS DISTINCT FROM to_regclass('public.equipment_catalog')
+       AND t.tgrelid IS DISTINCT FROM to_regclass('public.suppliers');
     IF _n <> 0 THEN
         RAISE EXCEPTION
-            'SLICE-2 VIOLATION: % cdc trigger(s) on tables other than equipment_catalog', _n;
+            'CDC SCOPE VIOLATION: % cdc trigger(s) on a table outside the deliberate '
+            'roster [equipment_catalog, suppliers]', _n;
     END IF;
-    RAISE NOTICE '  scope -> equipment_catalog only, as the slice claims';
+    RAISE NOTICE '  scope -> within the deliberate roster, as the slice claims';
 
     RAISE NOTICE 'REHEARSAL PASSED';
 END $REH$;
