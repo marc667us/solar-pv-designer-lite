@@ -1,0 +1,143 @@
+# Turn the /api/v1 surface on or off, non-destructively.
+#
+# WHAT THIS FLIPS
+#   API_V1_ENABLED on the Render Solar service env. new_api_v1_routes.register()
+#   reads it at import (wsgi.py) and registers the /api/v1 aliases only when it
+#   is truthy. Routes register at IMPORT, so this needs a redeploy to take
+#   effect -- which this workflow triggers.
+#
+# WHY AN ENV VAR AND NOT A DB FLAG
+#   The enterprise/CDC flags live in admin_settings because they gate RUNTIME
+#   behaviour and must be flippable without a deploy. Route REGISTRATION cannot
+#   be flipped at runtime at all, so a DB flag would buy nothing -- and reading
+#   one on a public path would cost a fresh DB connection per request.
+#
+# NON-DESTRUCTIVE: uses the per-key PUT endpoint
+#   PUT /v1/services/{id}/env-vars/API_V1_ENABLED
+# NOT the bulk replace endpoint
+#   PUT /v1/services/{id}/env-vars   (would wipe every other var)
+#
+# Default mode is DRY-RUN. Re-run with `-f confirm=APPLY` to commit.
+#
+#   gh workflow run "Set API v1 Flag" -f value=1 -f confirm=APPLY   # enable
+#   gh workflow run "Set API v1 Flag" -f value=0 -f confirm=APPLY   # KILL SWITCH
+#
+# Turning it OFF is the kill switch: the next boot registers no /api/v1 rules.
+# Unversioned /api/* paths are untouched either way -- they do not depend on
+# this flag and never have.
+
+name: Set API v1 Flag
+
+on:
+  workflow_dispatch:
+    inputs:
+      value:
+        description: "1 to enable /api/v1, 0 to disable (kill switch)."
+        required: true
+        default: "0"
+      confirm:
+        description: "DRY-RUN by default. Type APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      VALUE:             ${{ inputs.value }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Validate the value
+        run: |
+          set -e
+          # Reject anything but 0/1 up front. The app treats "true"/"yes"/"on"
+          # as truthy too, but allowing free text here invites a typo like
+          # "ture" that silently reads as OFF.
+          case "$VALUE" in
+            0|1) echo "value=$VALUE";;
+            *) echo "ERROR: value must be exactly 0 or 1 (got '$VALUE')"; exit 1;;
+          esac
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- API_V1_ENABLED will be set to $VALUE ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be written ==="
+            echo "Would set API_V1_ENABLED=$VALUE, then redeploy."
+            echo "Re-run with -f confirm=APPLY to commit."
+          fi
+
+      - name: Show the CURRENT value before changing it
+        run: |
+          set -e
+          STATUS=$(curl -s -o /tmp/pre.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+          echo "GET env-vars -> HTTP $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            python3 - <<'PY'
+          import json
+          rows = json.load(open('/tmp/pre.json'))
+          cur = None
+          for r in rows:
+              ev = r.get('envVar', r)
+              if ev.get('key') == 'API_V1_ENABLED':
+                  cur = ev.get('value')
+          print(f"  current API_V1_ENABLED = {cur!r}" if cur is not None
+                else "  API_V1_ENABLED is NOT SET (app treats that as OFF)")
+          PY
+          else
+            echo "  (could not read current env; continuing)"
+          fi
+
+      - name: Apply -- single-key PUT
+        if: env.MODE == 'apply'
+        run: |
+          # pipefail: the body is PIPED, so without it the pipeline's status is
+          # curl's alone and a jq failure producing an empty body would sail
+          # through as success. Same reason as set-cdc-drain-token.yml.
+          set -eo pipefail
+
+          # Body piped on STDIN via -d @-. The value here is not a secret, but
+          # the piped form is used consistently so no workflow has to be
+          # exempted from tests/test_workflow_secret_argv.py.
+          jq -nc --arg v "$VALUE" '{value: $v}' \
+          | curl -fsS -X PUT \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/API_V1_ENABLED" \
+              -d @- -o /tmp/put.json
+          echo "OK: API_V1_ENABLED set to $VALUE on the Render env."
+
+      - name: Redeploy so the new value is read at import
+        if: env.MODE == 'apply'
+        run: |
+          set -eo pipefail
+          # Routes register at import, so the flag does nothing until the
+          # service restarts. clearCache=do_not_clear keeps the build fast.
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' -o /tmp/deploy.json
+          echo "Redeploy triggered. /api/v1 appears (or disappears) once it is live."
+
+      - name: How to verify
+        run: |
+          echo "After the deploy finishes:"
+          echo "  curl -sS https://solarpro.aiappinvent.com/api/v1"
+          echo "    value=1 -> 200 with the manifest"
+          echo "    value=0 -> 404 (routes not registered)"
+          echo ""
+          echo "And confirm the UNVERSIONED path is unaffected either way:"
+          echo "  curl -sS -o /dev/null -w '%{http_code}\\n' \\"
+          echo "    https://solarpro.aiappinvent.com/api/purc-tariffs   # always 200"
