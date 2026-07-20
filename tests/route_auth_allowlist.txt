@@ -150,10 +150,14 @@ POST /api/tutorial/event  # reason=public-by-design
 # not removed: it is the tool used to triage "twin scene broken" reports.
 GET /three-test  # reason=public-by-design
 
-# --- KNOWN GAP: tracked, scheduled, not yet fixed ---------------------------
-# Introduced undecorated in a8ed356 -- never had an auth decorator, so this
-# is an original omission, not a regression. It updates only the CALLER'S OWN
-# users.last_seen from their own session and redirects anonymous callers to
-# /login, so it leaks nothing and escalates nothing -- but it is a POST with
-# no CSRF check. Scheduled as Pack C item 1.
-POST /admin/users/refresh-online  # reason=known-gap
+# --- Guarded IN-BODY by the session, not by a decorator ---------------------
+# CSRF was ADDED here 2026-07-20 (web_app.py:29083). @admin_required was
+# tried and DELIBERATELY REVERTED: that decorator redirects when
+# session["user_id"] is missing (web_app.py:6594), which is the exact
+# Keycloak case this handler exists to serve -- a KC user whose
+# preferred_username does not resolve to a users row by exact case. Adding it
+# would have redirected the very users the route was written for and turned
+# its fallback into dead code. The handler is self-scoped (it updates only
+# the caller's own last_seen, from session, never from request input) and
+# redirects anonymous callers to /login.
+POST /admin/users/refresh-online  # reason=in-body-session ref=web_app.py:29084

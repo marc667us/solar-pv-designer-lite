@@ -29073,6 +29073,14 @@ def admin_users_refresh_online():
     didn't resolve to a SOLAR users row by exact case leave
     session["user_id"] empty -- fall back to KC preferred_username
     / email so the explicit refresh still works."""
+    # State-changing POST on an /admin/ path: reject a forged cross-site
+    # submission. templates/admin_users.html already posts the _csrf field,
+    # so this rejects only forgeries, never the real button.
+    #
+    # NOT @admin_required: that decorator redirects when session["user_id"]
+    # is missing, which is the exact KC case this handler exists to serve
+    # (see the docstring above). It would make the fallback dead code.
+    csrf_protect()
     uid = session.get("user_id")
     _kc_user = session.get("user") or {}
     kc_username = (_kc_user.get("preferred_username")

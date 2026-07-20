@@ -47,13 +47,21 @@ ALLOWLIST_PATH = os.path.join(REPO_ROOT, "tests", "route_auth_allowlist.txt")
 VALID_REASONS = frozenset({
     "public-by-design",
     "in-body-token",
+    "in-body-session",
     "webhook-hmac",
     "known-gap",
 })
 
 #: Reasons that assert a guard exists somewhere the scanner cannot see.
 #: These must name it, so a rename cannot leave a dangling justification.
-REASONS_REQUIRING_REF = frozenset({"in-body-token", "webhook-hmac"})
+#:
+#: `in-body-session` covers a handler that authorises from the SESSION rather
+#: than a decorator -- added 2026-07-20 for /admin/users/refresh-online, where
+#: @admin_required could not be used because it redirects on a missing
+#: session["user_id"], the exact Keycloak case that handler exists to serve.
+REASONS_REQUIRING_REF = frozenset({
+    "in-body-token", "in-body-session", "webhook-hmac",
+})
 
 _RE_ENTRY = re.compile(
     r"^(?P<key>[A-Z,]+ \S+)\s*#\s*reason=(?P<reason>[\w-]+)"
@@ -270,16 +278,29 @@ def test_auth_blueprint_is_out_of_scope_and_untouched(routes):
 
 @pytest.mark.parametrize("sensitive_prefix", ["/admin/", "/staff/", "/me/"])
 def test_sensitive_prefixes_are_protected(sensitive_prefix, unprot_keys, allowlist):
-    """No route under an operator-only prefix may be undecorated.
+    """No route under an operator-only prefix may be simply PUBLIC.
 
-    Stricter than the ratchet: these prefixes may NOT be exempted with an
-    ordinary public-by-design entry. The only tolerated exemption is an
-    explicit `reason=known-gap`, which is derived from the allowlist rather
-    than hardcoded here -- so when the gap is fixed and its line removed,
-    this test tightens automatically instead of keeping a stale exemption
-    alive in test code.
+    Stricter than the ratchet: under these prefixes, `public-by-design` is
+    never an acceptable justification. A route here must either carry an auth
+    decorator, or name the guard that protects it (in-body-token /
+    in-body-session / webhook-hmac, each of which requires a ref=), or be
+    tagged as an explicitly tracked `known-gap`.
+
+    The tolerated set is DERIVED from the allowlist rather than hardcoded, so
+    fixing a route and deleting its line tightens this test automatically
+    instead of leaving a stale exemption alive in test code.
+
+    Live example: /admin/users/refresh-online is tagged in-body-session. It
+    cannot take @admin_required, because that decorator redirects when
+    session["user_id"] is missing -- the exact Keycloak case the handler
+    exists to serve (web_app.py:6594 vs the handler docstring). Codex
+    independently confirmed that adding the decorator would redirect the very
+    users the route was written for. It authorises from the session instead.
     """
-    tolerated = {k for k, (r, _) in allowlist.items() if r == "known-gap"}
+    guarded_reasons = REASONS_REQUIRING_REF | {"known-gap"}
+    tolerated = {
+        k for k, (r, _) in allowlist.items() if r in guarded_reasons
+    }
 
     offenders = {
         k for k in unprot_keys
@@ -287,8 +308,11 @@ def test_sensitive_prefixes_are_protected(sensitive_prefix, unprot_keys, allowli
     } - tolerated
 
     assert not offenders, (
-        f"Undecorated route(s) under {sensitive_prefix} -- these may NOT be "
-        "allowlisted as public. Protect them, or if genuinely accepted for "
-        "now, tag the line reason=known-gap and schedule the fix:\n\n"
+        f"Undecorated route(s) under {sensitive_prefix}. A route here may NOT "
+        "be justified as reason=public-by-design. Either give it an auth "
+        "decorator, or -- if it authorises some other way the scanner cannot "
+        "see -- tag it with the guard that protects it "
+        f"({', '.join(sorted(REASONS_REQUIRING_REF))}) plus a ref=, or "
+        "reason=known-gap if it is a real gap you are tracking:\n\n"
         + "\n".join(f"    {k}" for k in sorted(offenders))
     )
