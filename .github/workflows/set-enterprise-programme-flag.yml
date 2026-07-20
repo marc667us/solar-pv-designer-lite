@@ -11,13 +11,21 @@
 # set_config('app.current_role','admin',true) inside the transaction is what makes
 # the write land, and the read-back below is what proves it did.
 #
-# Only the three enterprise_programme_* keys may be written. Anything else is
-# rejected -- this is not a general-purpose admin_settings editor.
+# ONLY THE ALLOWLISTED KEYS may be written -- the enterprise_programme_* flags plus
+# cdc_listener_enabled (the CDC slice-4 pg_notify listener, added 2026-07-20). Anything
+# else is rejected: this is not a general-purpose admin_settings editor, and it must not
+# become one. EXTENDED rather than duplicated into a second workflow, because two switches
+# writing the same RLS-protected table would be two places to get the admin GUC wrong.
 #
 # Default mode is DRY-RUN. Apply needs -f confirm=SET_FLAG.
 #
 # NOTE: the app caches the flag for 60s per process (module_enabled()), so a change
 # can take up to a minute to show up on the live site.
+#
+# cdc_listener_enabled is NOT cached that way -- the listener thread re-reads it on its own
+# 30s poll, so allow up to ~30s for it to pick up a change. Turning it OFF makes the
+# listener drop its Postgres connection at the next poll; it is a true kill switch and needs
+# no redeploy. Verify the effect via the `listener` block printed by `Drain CDC Outbox`.
 
 name: Set Enterprise Programme Flag
 
@@ -33,6 +41,7 @@ on:
           - enterprise_programme_enabled
           - enterprise_programme_jobs_enabled
           - enterprise_programme_ai_enabled
+          - cdc_listener_enabled
       value:
         description: "1 = on, 0 = off"
         required: true
@@ -69,7 +78,7 @@ jobs:
       - name: Validate inputs (allowlist)
         run: |
           case "$FLAG_KEY" in
-            enterprise_rebuild_enabled|enterprise_programme_enabled|enterprise_programme_jobs_enabled|enterprise_programme_ai_enabled) ;;
+            enterprise_rebuild_enabled|enterprise_programme_enabled|enterprise_programme_jobs_enabled|enterprise_programme_ai_enabled|cdc_listener_enabled) ;;
             *) echo "::error::refusing to write key '$FLAG_KEY'"; exit 1 ;;
           esac
           case "$FLAG_VALUE" in
