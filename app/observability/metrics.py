@@ -31,6 +31,7 @@ request (403) -- fail-closed because metrics carry sensitive telemetry
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import time
@@ -240,7 +241,7 @@ def refresh_gauges(get_db_fn: Optional[Callable] = None) -> None:
 # ── /metrics endpoint ──────────────────────────────────────────────────
 
 def _bearer_ok(auth_header: str) -> bool:
-    """Constant-time-ish compare against METRICS_BEARER env. Returns
+    """Constant-time compare against METRICS_BEARER env. Returns
     False when the env is unset (fail-closed: metrics carry sensitive
     counters)."""
     expected = (os.environ.get("METRICS_BEARER") or "").strip()
@@ -249,13 +250,14 @@ def _bearer_ok(auth_header: str) -> bool:
     if not auth_header or not auth_header.lower().startswith("bearer "):
         return False
     sent = auth_header[7:].strip()
-    # length-equal check then char-by-char to thwart timing oracle
-    if len(sent) != len(expected):
-        return False
-    diff = 0
-    for a, b in zip(sent, expected):
-        diff |= ord(a) ^ ord(b)
-    return diff == 0
+    # hmac.compare_digest is the stdlib constant-time primitive. It replaces a
+    # hand-rolled loop that early-returned on a length mismatch -- that early
+    # return was itself a timing oracle leaking the token LENGTH.
+    # Compare BYTES, not str: `sent` is attacker-controlled and WSGI decodes
+    # headers as latin-1, so a non-ASCII byte would make compare_digest raise
+    # TypeError on str inputs (turning a bad header into a 500). Encoding both
+    # sides makes a wrong token simply return False.
+    return hmac.compare_digest(sent.encode("utf-8"), expected.encode("utf-8"))
 
 
 def scrape_endpoint(app: Flask) -> None:
