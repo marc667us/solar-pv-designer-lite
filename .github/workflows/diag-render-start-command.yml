@@ -1,0 +1,44 @@
+# Read-only: what start command is Render ACTUALLY running?
+#
+# Two workflows in this repo can set it and they disagree (one sets gthread --threads 4, the
+# other bare sync), and the Dockerfile says --workers 2. Nothing records which ran last, so
+# the live value has been an assumption. CDC slice 4 starts a background thread at import,
+# and whether that thread survives depends entirely on --preload -- threads do not survive
+# fork(). So the live value has to be read, not assumed.
+
+name: Diag Render Start Command
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: The live start command
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" -o /tmp/svc.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("/tmp/svc.json"))
+          det = d.get("serviceDetails") or {}
+          env = det.get("envSpecificDetails") or {}
+          print("  runtime      :", det.get("runtime") or det.get("env"))
+          print("  startCommand :", env.get("startCommand") or "(none -- Procfile/Dockerfile applies)")
+          print("  buildCommand :", env.get("buildCommand") or "(none)")
+          print("  numInstances :", det.get("numInstances"))
+          sc = env.get("startCommand") or ""
+          print("")
+          print("  --preload present:", "--preload" in sc)
+          print("  (threads do NOT survive fork(); with --preload a thread started at import")
+          print("   runs in the arbiter and is absent from every worker)")
+          PY
