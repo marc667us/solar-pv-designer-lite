@@ -1,0 +1,171 @@
+# Read-only: did any real payment get DROPPED by the webhook fault?
+#
+# WHY THIS EXISTS
+#   On 2026-07-20, commit a301a67 made /paystack/webhook reachable for the
+#   first time since 86eadc2 by fixing a get_data(raw=True) TypeError. That
+#   exposed a deeper fault: _record_payment() ran INSIDE `with get_db()`,
+#   nesting a second connection. On SQLite that raises "database is locked",
+#   which the handler's `except Exception: pass` swallowed before returning
+#   200 -- telling the gateway "processed" while the customer was NOT
+#   upgraded and no payment row was written. A 200 also stops the gateway
+#   retrying, so such a payment is lost silently.
+#
+#   Fixed in 74dbf19 for both gateways. But the fault was only ever
+#   reproduced on SQLite; production is POSTGRES, where two connections to
+#   different tables would probably not deadlock. "Probably" is not good
+#   enough for a payment path, so this checks the live data directly.
+#
+#   Exposure window: a301a67 (~2026-07-20 13:00 UTC) to 74dbf19 (~14:30 UTC).
+#
+# PRIVACY -- THIS REPO'S ACTIONS LOGS ARE PUBLIC
+#   Every query below emits COUNTS AND DATES ONLY. No emails, no usernames,
+#   no payment references, no amounts tied to a person, no error message
+#   bodies. If a count comes back non-zero, investigate privately -- do NOT
+#   widen this workflow to print the rows.
+#
+# Read-only: SELECT statements exclusively. No confirm gate is needed
+# because nothing is written.
+
+name: Diag Payment Reconciliation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: 1. Has ANY gateway payment ever been recorded?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Counts by gateway/status. If paystack+stripe are both 0, no"
+          echo "gateway webhook or callback has ever booked a payment, and the"
+          echo "exposure window is moot."
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "
+            SELECT gateway, status, COUNT(*) AS rows,
+                   MIN(created_at)::date AS first_seen,
+                   MAX(created_at)::date AS last_seen
+              FROM payments
+             GROUP BY gateway, status
+             ORDER BY gateway, status;"
+
+      - name: 2. THE RECONCILIATION -- paid but NOT upgraded
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Users with a SUCCESSFUL gateway payment whose plan is still"
+          echo "'free'. That is the signature of a dropped upgrade: money"
+          echo "taken, plan not applied."
+          echo "EXPECT 0. Anything else needs manual reconciliation."
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+              FROM payments p
+              JOIN users u ON u.id = p.user_id
+             WHERE p.status = 'success'
+               AND p.gateway IN ('paystack','stripe')
+               AND p.amount_usd > 0
+               AND COALESCE(u.plan,'free') = 'free';"
+
+      - name: 3. Anything booked during the exposure window?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Gateway payments recorded 2026-07-20 (the day the webhook was"
+          echo "reachable-but-faulty). Counts only."
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "
+            SELECT gateway, status, COUNT(*) AS rows
+              FROM payments
+             WHERE created_at >= '2026-07-20'
+               AND gateway IN ('paystack','stripe')
+             GROUP BY gateway, status
+             ORDER BY gateway, status;"
+
+      - name: 4. Duplicate references (would mean dedupe was not holding)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "A reference appearing more than once means a retry was booked"
+          echo "twice -- double row AND double confirmation email. EXPECT 0."
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*) FROM (
+              SELECT reference
+                FROM payments
+               WHERE COALESCE(reference,'') <> ''
+               GROUP BY reference
+              HAVING COUNT(*) > 1
+            ) d;"
+
+      - name: 5. Did the webhooks raise anything? (routes + types only)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Route + error TYPE only -- never the message, which can carry"
+          echo "user data on a payment route."
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "
+            SELECT route, error_type, COUNT(*) AS n, MAX(created_at)::date AS last_seen
+              FROM error_logs
+             WHERE route LIKE '%webhook%' OR route LIKE '%paystack%'
+                OR route LIKE '%stripe%'
+             GROUP BY route, error_type
+             ORDER BY n DESC
+             LIMIT 20;" || echo "(error_logs unavailable or empty)"
+
+      - name: Verdict
+        run: |
+          echo "=================================================================="
+          echo "READ steps 2 and 4. Both must be 0."
+          echo "  step 2 > 0 -> someone paid and was not upgraded. Reconcile"
+          echo "                MANUALLY and privately; do not print rows here."
+          echo "  step 4 > 0 -> a retry was double-booked; check for duplicate"
+          echo "                confirmation emails to that customer."
+          echo "If step 1 shows zero paystack/stripe rows overall, no real"
+          echo "payment has ever flowed and the exposure window is moot."
+          echo "=================================================================="
