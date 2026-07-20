@@ -8191,7 +8191,12 @@ def paystack_webhook():
     if not PAYSTACK_SECRET:
         return "", 400
     sig  = request.headers.get("x-paystack-signature", "")
-    body = request.get_data(raw=True)
+    # get_data() takes (cache, as_text, parse_form_data) -- there is NO `raw`
+    # kwarg. `raw=True` raised TypeError on EVERY call, so this webhook returned
+    # 500 to Paystack from the day it was written (86eadc2) and no push event was
+    # ever processed. Bytes are required here because the HMAC is computed over
+    # the raw body, so as_text must stay False.
+    body = request.get_data(cache=False, as_text=False)
     expected = _hmac.new(PAYSTACK_SECRET.encode("utf-8"),
                          msg=body, digestmod=_hashlib.sha512).hexdigest()
     # COMPARE BYTES, NOT str. compare_digest RAISES TypeError on a str
