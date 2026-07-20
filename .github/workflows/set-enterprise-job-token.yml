@@ -112,15 +112,27 @@ jobs:
       - name: Apply -- single-key PUT
         if: env.MODE == 'apply'
         run: |
-          set -e
-          # jq builds the body so the secret never reaches the curl command line
-          # (no shell-escaping bugs, no ps-aux leakage).
-          BODY=$(jq -nc --arg v "$ENTERPRISE_JOB_TOKEN" '{value: $v}')
-          curl -fsS -X PUT \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Content-Type: application/json" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/ENTERPRISE_JOB_TOKEN" \
-            -d "$BODY" -o /tmp/put.json
+          # pipefail matters now that the body is PIPED: without it the pipeline's
+          # status is curl's alone, so a jq failure producing an empty body would
+          # sail through as success and write an EMPTY token to the Render env.
+          set -eo pipefail
+
+          # The body is PIPED to curl on STDIN via `-d @-`, not passed as
+          # `-d "$BODY"`.
+          #
+          # That difference is the whole point (Codex MED, 2026-07-19, fixed in
+          # set-cdc-drain-token.yml at the time; this workflow was missed).
+          # `-d "$BODY"` puts the secret in curl's ARGV, where any other process
+          # on the runner can read it from /proc/<pid>/cmdline or `ps aux`. The
+          # comment that used to sit here claimed the secret "never reaches the
+          # curl command line" -- that was true of the jq part and FALSE of the
+          # curl part. Piping makes it true of both.
+          jq -nc --arg v "$ENTERPRISE_JOB_TOKEN" '{value: $v}' \
+          | curl -fsS -X PUT \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/ENTERPRISE_JOB_TOKEN" \
+              -d @- -o /tmp/put.json
           echo "OK: ENTERPRISE_JOB_TOKEN written to the Render env."
 
       - name: Redeploy so the app reads it
