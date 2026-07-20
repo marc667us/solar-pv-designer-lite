@@ -103,6 +103,11 @@ _state = {
     "last_error": "",
     "last_event_at": None,  # epoch seconds
     "started_at": None,
+    # Set by the _loop wrapper. Distinguishes "never ran" from "ran and died", which the
+    # first dark deploy could not tell apart.
+    "loop_entered": False,
+    "loop_exit": None,          # None=still running | "clean" | "died"
+    "loop_exited_at": None,
 }
 
 
@@ -216,6 +221,34 @@ def _connect():
 
 
 def _loop(flag_is_on, invalidate, notify_admin):
+    """Thread entry point. Records WHY the loop ever stops.
+
+    Added 2026-07-20 because the dark deploy produced a thread that started
+    (`started_at` set, `last_error` empty) and then vanished before its first statement --
+    `stop_set` false and no `cdc-listener` in the live thread list. The loop below is written
+    not to raise, so something was escaping it, and Python prints unhandled THREAD exceptions
+    to stderr, which Render's free tier HIDES. So the death is captured here instead of being
+    inferred: `except BaseException` because whatever escaped was evidently not caught by the
+    inner `except Exception`.
+
+    This wrapper is the difference between "the thread is gone" and "the thread is gone
+    BECAUSE x". Only the latter is actionable.
+    """
+    _state["loop_entered"] = True
+    try:
+        _loop_body(flag_is_on, invalidate, notify_admin)
+        _state["loop_exit"] = "clean"
+    except BaseException as e:                         # noqa: BLE001 - see docstring
+        _state["loop_exit"] = "died"
+        _state["last_error"] = (
+            "loop died: %s: %s" % (type(e).__name__, e))[:300]
+        _log.error("cdc listener loop died: %s: %s", type(e).__name__, e)
+    finally:
+        _state["loop_exited_at"] = time.time()
+        _state["connected"] = False
+
+
+def _loop_body(flag_is_on, invalidate, notify_admin):
     """The listener. Runs until _stop is set. Must never raise out of this frame."""
     backoff = _BACKOFF_START
     last_flag_check = 0.0
