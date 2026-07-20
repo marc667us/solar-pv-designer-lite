@@ -35,16 +35,14 @@ from werkzeug.wrappers import Request
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: Known-broken call sites, accepted for now and tracked. Each entry is
-#: "<file>:<the offending kwarg>". These are the ONLY tolerated failures --
-#: fixing one means deleting its line here, which tightens the test.
+#: "<file>:<function>". These are the ONLY tolerated failures -- fixing one
+#: means deleting its line here, which tightens the test.
 #:
-#: stripe_webhook still passes raw=True. It cannot simply be switched on:
-#: unlike the Paystack handler it has NO `SELECT ... WHERE reference=?`
-#: dedupe, so Stripe's automatic retries could double-record a payment.
-#: It needs that guard added at the same time -- tracked as a follow-up.
-KNOWN_BROKEN = {
-    "web_app.py:stripe_webhook",
-}
+#: EMPTY as of 2026-07-20. stripe_webhook was the last entry: it was fixed
+#: together with the reference-dedupe guard it was waiting on, and
+#: test_known_broken_entries_are_still_real then FAILED and forced this
+#: exemption to be deleted rather than left to rot.
+KNOWN_BROKEN: set[str] = set()
 
 
 def _valid_kwargs() -> set[str]:

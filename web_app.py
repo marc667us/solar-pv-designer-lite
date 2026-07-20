@@ -8157,25 +8157,71 @@ def stripe_webhook():
         import stripe as _stripe
         _stripe.api_key = STRIPE_SECRET
         sig = request.headers.get("Stripe-Signature", "")
-        event = _stripe.Webhook.construct_event(
-            request.get_data(raw=True), sig, STRIPE_WEBHOOK)
+        # get_data() takes (cache, as_text, parse_form_data) -- there is NO
+        # `raw` kwarg. `raw=True` raised TypeError on EVERY call, and the
+        # except-clause below turned that into a silent 400, so Stripe has
+        # never had an event processed since 86eadc2. Bytes are required: the
+        # signature is computed over the raw body.
+        raw_body = request.get_data(cache=False, as_text=False)
+
+        # VERIFY the signature with the SDK -- this still raises on a bad or
+        # missing signature, which the except-clause turns into a 400.
+        _stripe.Webhook.construct_event(raw_body, sig, STRIPE_WEBHOOK)
+
+        # ...then read the ALREADY-VERIFIED body as plain JSON. construct_event
+        # returns StripeObjects, and in stripe 15.x StripeObject is NOT a dict
+        # subclass: its __getattr__ maps attribute lookups to KEYS, so
+        # obj.get("metadata", {}) looks up a key literally named "get", misses,
+        # and raises AttributeError. Every metadata read below uses .get(), so
+        # parsing to plain dicts is what makes them work. Parsing AFTER
+        # verification is safe; parsing before it would not be.
+        event = json.loads(raw_body)
+
         if event["type"] == "checkout.session.completed":
             obj  = event["data"]["object"]
             plan = obj.get("metadata", {}).get("plan", "")
             uid  = int(obj.get("metadata", {}).get("user_id", 0))
+            ref  = obj.get("id", "")
             if plan and uid:
+                # DEDUPE. Stripe RETRIES until it gets a 2xx, and this handler
+                # returns 400 on any exception -- so a fault after the UPDATE
+                # would be retried and would record the payment twice, and
+                # _record_payment emails the customer on success.
+                #
+                # `ref` is the checkout Session id -- the SAME value
+                # /upgrade/success records -- so this also dedupes against the
+                # browser-callback path, exactly as the Paystack webhook does.
+                #
+                # _record_payment() opens its OWN connection, so it must run
+                # AFTER this one closes. Calling it INSIDE the `with` nests a
+                # second connection on the same database and SQLite answers
+                # "database is locked" -- proven against this handler locally.
                 with get_db() as c:
-                    c.execute("UPDATE users SET plan=? WHERE id=?", (plan, uid))
-                _record_payment(uid, "stripe", plan,
-                                PLAN_PRICES.get(plan, {}).get("usd", 0),
-                                reference=obj.get("id", ""))
+                    dup = c.execute("SELECT id FROM payments WHERE reference=?",
+                                    (ref,)).fetchone() if ref else None
+                    if not dup:
+                        c.execute("UPDATE users SET plan=? WHERE id=?", (plan, uid))
+                if not dup:
+                    _record_payment(uid, "stripe", plan,
+                                    PLAN_PRICES.get(plan, {}).get("usd", 0),
+                                    reference=ref)
         elif event["type"] in ("customer.subscription.deleted",
                                "invoice.payment_failed"):
             uid = int(event["data"]["object"].get("metadata", {}).get("user_id", 0))
+            # This branch has no natural reference, so key on the Stripe EVENT
+            # id (evt_...), which is unique per event and is the canonical
+            # Stripe idempotency key. It previously passed no reference at all,
+            # which made dedupe impossible and left retries free to pile up rows.
+            ref = event.get("id", "")
             if uid:
                 with get_db() as c:
-                    c.execute("UPDATE users SET plan='free' WHERE id=?", (uid,))
-                _record_payment(uid, "stripe", "free", 0, status="cancelled")
+                    dup = c.execute("SELECT id FROM payments WHERE reference=?",
+                                    (ref,)).fetchone() if ref else None
+                    if not dup:
+                        c.execute("UPDATE users SET plan='free' WHERE id=?", (uid,))
+                if not dup:
+                    _record_payment(uid, "stripe", "free", 0,
+                                    reference=ref, status="cancelled")
     except Exception:
         return "", 400
     return "", 200
@@ -8217,13 +8263,21 @@ def paystack_webhook():
             plan    = meta.get("plan", "")
             amount  = data.get("amount", 0) / 100   # kobo â†' USD
             if uid and plan and ref:
+                # _record_payment() opens its OWN connection, so it must run
+                # AFTER this one closes. Calling it INSIDE the `with` nests a
+                # second connection on the same database; SQLite answers
+                # "database is locked", the except-clause below swallows it,
+                # and the handler returns 200 -- telling Paystack the event was
+                # processed while the upgrade silently did not happen. A 200
+                # also stops Paystack retrying, so the payment is lost for good.
                 with get_db() as c:
                     # Reject duplicate references
                     dup = c.execute("SELECT id FROM payments WHERE reference=?",
                                     (ref,)).fetchone()
                     if not dup:
                         c.execute("UPDATE users SET plan=? WHERE id=?", (plan, uid))
-                        _record_payment(uid, "paystack", plan, amount, reference=ref)
+                if not dup:
+                    _record_payment(uid, "paystack", plan, amount, reference=ref)
     except Exception:
         pass
     return "", 200
