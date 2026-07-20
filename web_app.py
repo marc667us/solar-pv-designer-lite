@@ -8194,7 +8194,13 @@ def paystack_webhook():
     body = request.get_data(raw=True)
     expected = _hmac.new(PAYSTACK_SECRET.encode("utf-8"),
                          msg=body, digestmod=_hashlib.sha512).hexdigest()
-    if not _hmac.compare_digest(sig, expected):
+    # COMPARE BYTES, NOT str. compare_digest RAISES TypeError on a str
+    # holding non-ASCII, and `sig` is attacker-controlled (WSGI decodes
+    # headers latin-1, so any byte 0x80-0xFF arrives non-ASCII). Comparing
+    # str turns a garbage X-Paystack-Signature header into an unhandled
+    # 500 instead of the intended 400.
+    if not _hmac.compare_digest(sig.encode("utf-8"),
+                                expected.encode("utf-8")):
         return "", 400  # reject unsigned / tampered requests
     try:
         event = json.loads(body)
@@ -40070,7 +40076,11 @@ def _soc_ingest_authorized():
     if not got:
         return False
     # constant-time compare — never leak length/prefix via early-exit timing.
-    return _soc_hmac.compare_digest(got, want)
+    # COMPARE BYTES, NOT str: compare_digest RAISES TypeError on non-ASCII
+    # str, and `got` is attacker-controlled via the Authorization header.
+    # Comparing str turns a garbage header into an unhandled 500, not a 401.
+    return _soc_hmac.compare_digest(got.encode("utf-8"),
+                                    want.encode("utf-8"))
 
 
 @app.route("/api/soc/ingest", methods=["POST"])

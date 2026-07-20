@@ -2474,7 +2474,16 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         presented = request.headers.get("Authorization") or ""
         if not presented.startswith("Bearer "):
             abort(401)
-        if not hmac.compare_digest(presented[7:], secret):
+        # COMPARE BYTES, NOT str. `hmac.compare_digest` RAISES TypeError on a
+        # str containing non-ASCII, and the presented half comes straight from
+        # an attacker-controlled header (WSGI decodes headers latin-1, so any
+        # byte 0x80-0xFF arrives as a non-ASCII char). Comparing str therefore
+        # turns a garbage Authorization header into an unhandled 500 instead of
+        # an honest 401. Encoding both sides makes a wrong token return False.
+        # Same fault that took out the CDC drain via a BOM -- see
+        # new_cdc_drain_routes.py:192.
+        if not hmac.compare_digest(presented[7:].encode("utf-8"),
+                                   secret.encode("utf-8")):
             abort(401)
 
         drained = []

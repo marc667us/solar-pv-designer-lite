@@ -202,7 +202,11 @@ def _soc_ingest_authorized():
     if not got:
         return False
     # constant-time compare — never leak length/prefix via early-exit timing.
-    return _soc_hmac.compare_digest(got, want)
+    # COMPARE BYTES, NOT str: compare_digest RAISES TypeError on non-ASCII str,
+    # and `got` is attacker-controlled (WSGI decodes headers latin-1, so any
+    # byte 0x80-0xFF arrives as a non-ASCII char). Comparing str turns a
+    # garbage Authorization header into an unhandled 500 instead of a 401.
+    return _soc_hmac.compare_digest(got.encode("utf-8"), want.encode("utf-8"))
 
 
 @app.route("/api/soc/ingest", methods=["POST"])
