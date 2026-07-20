@@ -1,0 +1,294 @@
+"""
+Route-auth RATCHET.
+
+CONTRACT
+    Every route declaration with no recognised auth decorator must appear in
+    tests/route_auth_allowlist.txt with a reason. Adding a new unprotected
+    route fails this test until someone writes down why it is public.
+
+WHY A RATCHET AND NOT A FIX
+    This repo has 800+ route declarations and NO global before_request auth
+    or CSRF hook -- enforcement is per-route. Retrofitting a blanket hook
+    onto a live app would break working AJAX/webhook/cron flows, so the safe
+    first move is to stop the surface from growing, then fix specific routes
+    in small reviewed packs.
+
+WHY STATIC
+    Importing web_app raises SystemExit("Set SOLARPRO_ADMIN_PASSWORD")
+    during collection without production env, which makes the whole suite
+    report "no tests ran". See tests/route_auth_scan.py SCOPE for the full
+    rationale and the two documented blind spots.
+
+ZERO RUNTIME IMPACT
+    This file and route_auth_scan.py are test-only. They import nothing from
+    the application and change no application behaviour.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+
+import pytest
+
+from tests.route_auth_scan import (
+    AUTH_DECORATORS,
+    iter_source_files,
+    read_source,
+    route_key,
+    scan_repo,
+)
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ALLOWLIST_PATH = os.path.join(REPO_ROOT, "tests", "route_auth_allowlist.txt")
+
+#: Closed vocabulary for the `reason=` field. Kept here rather than in the
+#: scanner because it is a property of the allowlist policy, not of parsing.
+VALID_REASONS = frozenset({
+    "public-by-design",
+    "in-body-token",
+    "webhook-hmac",
+    "known-gap",
+})
+
+#: Reasons that assert a guard exists somewhere the scanner cannot see.
+#: These must name it, so a rename cannot leave a dangling justification.
+REASONS_REQUIRING_REF = frozenset({"in-body-token", "webhook-hmac"})
+
+_RE_ENTRY = re.compile(
+    r"^(?P<key>[A-Z,]+ \S+)\s*#\s*reason=(?P<reason>[\w-]+)"
+    r"(?:\s+ref=(?P<ref>\S+))?\s*$"
+)
+
+
+# ---------------------------------------------------------------------------
+# Module-scoped fixtures.
+#
+# The scan reads ~5 MB across 138 files, including the 2 MB web_app.py.
+# Seven tests need it; scanning per-test re-read and re-parsed the repo seven
+# times (~30 MB of redundant I/O). Scanning once per module cuts this file's
+# runtime by roughly 80%.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def routes():
+    return scan_repo(REPO_ROOT)
+
+
+@pytest.fixture(scope="module")
+def unprot_keys(routes):
+    return {route_key(r) for r in routes if not r["protected"]}
+
+
+@pytest.fixture(scope="module")
+def allowlist():
+    """Parse the allowlist into {key: (reason, ref)}."""
+    entries: dict[str, tuple[str, str | None]] = {}
+    malformed: list[str] = []
+    with open(ALLOWLIST_PATH, "r", encoding="utf-8") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = _RE_ENTRY.match(line)
+            if not m:
+                malformed.append(line)
+                continue
+            entries[m.group("key")] = (m.group("reason"), m.group("ref"))
+
+    assert not malformed, (
+        "Malformed allowlist line(s) -- expected "
+        "'<METHODS> <path>  # reason=<tag> [ref=<file:line>]':\n\n"
+        + "\n".join(f"    {x}" for x in malformed)
+    )
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+def test_scanner_finds_routes(routes):
+    """Guard against the scanner silently matching nothing.
+
+    Without this, a regex break would empty the scan and the ratchet would
+    pass vacuously -- the classic tautological green.
+    """
+    assert len(routes) > 500, (
+        f"scanner found only {len(routes)} routes; expected 500+. "
+        "The route regex has probably broken."
+    )
+    assert any(r["protected"] for r in routes), "no protected routes detected"
+    assert any(not r["protected"] for r in routes), (
+        "every route classified as protected -- the classifier is not "
+        "discriminating, so the ratchet cannot fail"
+    )
+
+
+def test_auth_decorators_all_exist():
+    """Every name in AUTH_DECORATORS must resolve to a real `def`.
+
+    AUTH_DECORATORS is hand-maintained, so a typo or an aspirational entry
+    would silently widen what counts as protected and could mark a route
+    safe that is not. This caught three phantoms on 2026-07-20
+    (paid_only, staff_required, owner_required -- none ever existed).
+    """
+    sources = [read_source(p) for p in iter_source_files(REPO_ROOT)]
+    # The Keycloak decorators live in app/security/, outside the scan scope.
+    kc = os.path.join(REPO_ROOT, "app", "security", "decorators.py")
+    if os.path.exists(kc):
+        sources.append(read_source(kc))
+    blob = "\n".join(sources)
+
+    missing = sorted(
+        name for name in AUTH_DECORATORS
+        if not re.search(rf"^\s*def {re.escape(name)}\b", blob, re.M)
+    )
+    assert not missing, (
+        "AUTH_DECORATORS names with no `def` anywhere: "
+        + ", ".join(missing)
+        + "\nRemove them, or fix the typo. An entry that matches nothing "
+        "makes the set look authoritative while protecting nothing."
+    )
+
+
+def test_no_new_unprotected_routes(unprot_keys, allowlist):
+    """THE RATCHET: every undecorated route must be in the allowlist."""
+    new = sorted(unprot_keys - set(allowlist))
+    assert not new, (
+        "New route(s) with NO auth decorator detected:\n\n"
+        + "\n".join(f"    {k}" for k in new)
+        + "\n\nMOST LIKELY: this route IS guarded, but by a decorator the "
+        "scanner does not know about -- add that decorator's name to "
+        "AUTH_DECORATORS in tests/route_auth_scan.py.\n"
+        "OR: protect it with one of:\n    "
+        + ", ".join(sorted(AUTH_DECORATORS))
+        + "\nONLY IF it is genuinely public by design, add it to\n"
+        "    tests/route_auth_allowlist.txt\n"
+        "with a reason= tag explaining why."
+    )
+
+
+def test_allowlist_has_no_stale_entries(unprot_keys, allowlist):
+    """Keep the allowlist honest.
+
+    An entry matching no unprotected route means the route was deleted or
+    has since been protected. Either way the exemption is dead and must go,
+    or it will silently pre-authorise a future route that reuses the path.
+    """
+    stale = sorted(set(allowlist) - unprot_keys)
+    assert not stale, (
+        "Allowlist entries matching no unprotected route (route removed, or "
+        "now protected -- drop these lines):\n\n"
+        + "\n".join(f"    {k}" for k in stale)
+    )
+
+
+def test_allowlist_reasons_are_valid(allowlist):
+    """Every entry carries a reason from the closed vocabulary, and any
+    entry claiming an invisible guard names where that guard lives."""
+    bad_reason = sorted(
+        f"{k} (reason={r})"
+        for k, (r, _) in allowlist.items()
+        if r not in VALID_REASONS
+    )
+    assert not bad_reason, (
+        "Unknown reason= tag(s); allowed: "
+        + ", ".join(sorted(VALID_REASONS))
+        + "\n\n" + "\n".join(f"    {x}" for x in bad_reason)
+    )
+
+    missing_ref = sorted(
+        f"{k} (reason={r})"
+        for k, (r, ref) in allowlist.items()
+        if r in REASONS_REQUIRING_REF and not ref
+    )
+    assert not missing_ref, (
+        "These claim a guard the scanner cannot see, so they must name it "
+        "with ref=<file:line>:\n\n"
+        + "\n".join(f"    {x}" for x in missing_ref)
+    )
+
+    dangling = []
+    for key, (reason, ref) in allowlist.items():
+        if not ref:
+            continue
+        fname = ref.split(":")[0]
+        if not os.path.exists(os.path.join(REPO_ROOT, fname)):
+            dangling.append(f"{key} -> {ref}")
+    assert not dangling, (
+        "ref= points at a file that does not exist (renamed or deleted?):\n\n"
+        + "\n".join(f"    {x}" for x in sorted(dangling))
+    )
+
+
+def test_no_production_add_url_rule():
+    """Pin the scanner's known blind spot.
+
+    The scan matches @route DECORATORS. A route registered via
+    app.add_url_rule() is invisible to it. Today the only such call is a
+    test fixture, so there is no production hole -- this fails loudly if
+    that stops being true, rather than letting the ratchet go blind.
+
+    Uses the scanner's own iter_source_files so "what is a live source
+    file" has exactly one definition.
+    """
+    offenders = [
+        os.path.basename(p)
+        for p in iter_source_files(REPO_ROOT)
+        if "add_url_rule" in read_source(p)
+    ]
+    assert not offenders, (
+        "add_url_rule() found in production module(s): "
+        + ", ".join(offenders)
+        + "\nThese routes are INVISIBLE to the auth ratchet. Either register "
+        "them with @app.route, or teach tests/route_auth_scan.py to parse "
+        "add_url_rule before merging."
+    )
+
+
+def test_auth_blueprint_is_out_of_scope_and_untouched(routes):
+    """Document, executably, that the OIDC Blueprint is NOT covered.
+
+    A green ratchet must not be mistaken for "the Keycloak routes are
+    verified". They are deliberately excluded (owner instruction
+    2026-07-20: do not touch the auth flow, especially KC). If someone
+    later moves those routes to repo root -- which WOULD pull them into the
+    ratchet's scope and into the blast radius of an auth change -- this
+    fails and forces the conversation.
+    """
+    oidc = os.path.join(REPO_ROOT, "app", "auth", "oidc_routes.py")
+    assert os.path.exists(oidc), (
+        "app/auth/oidc_routes.py has moved. The ratchet's scope assumption "
+        "no longer holds -- re-read SCOPE in tests/route_auth_scan.py."
+    )
+    assert "oidc_routes.py" not in {r["file"] for r in routes}, (
+        "The OIDC Blueprint is now inside the ratchet's scan scope. That is "
+        "a deliberate boundary -- see SCOPE in tests/route_auth_scan.py."
+    )
+
+
+@pytest.mark.parametrize("sensitive_prefix", ["/admin/", "/staff/", "/me/"])
+def test_sensitive_prefixes_are_protected(sensitive_prefix, unprot_keys, allowlist):
+    """No route under an operator-only prefix may be undecorated.
+
+    Stricter than the ratchet: these prefixes may NOT be exempted with an
+    ordinary public-by-design entry. The only tolerated exemption is an
+    explicit `reason=known-gap`, which is derived from the allowlist rather
+    than hardcoded here -- so when the gap is fixed and its line removed,
+    this test tightens automatically instead of keeping a stale exemption
+    alive in test code.
+    """
+    tolerated = {k for k, (r, _) in allowlist.items() if r == "known-gap"}
+
+    offenders = {
+        k for k in unprot_keys
+        if k.split(" ", 1)[1].startswith(sensitive_prefix)
+    } - tolerated
+
+    assert not offenders, (
+        f"Undecorated route(s) under {sensitive_prefix} -- these may NOT be "
+        "allowlisted as public. Protect them, or if genuinely accepted for "
+        "now, tag the line reason=known-gap and schedule the fix:\n\n"
+        + "\n".join(f"    {k}" for k in sorted(offenders))
+    )

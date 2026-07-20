@@ -1,0 +1,159 @@
+# Route-auth allowlist -- routes intentionally reachable without an auth
+# DECORATOR. Consumed by tests/test_route_auth_ratchet.py.
+#
+# THE POINT OF THIS FILE
+#   The ratchet asserts: every route with no auth decorator appears here.
+#   Adding a new unprotected route FAILS CI until someone writes down why it
+#   is public. It is a speed bump against accidental exposure, not a claim
+#   that everything below is safe.
+#
+# FORMAT
+#   <METHODS> <path>  # reason=<tag> [ref=<file:line>]
+#
+#   Methods are comma-separated, no spaces, and are PART OF THE KEY on
+#   purpose: adding a POST to a GET-only public route trips the ratchet
+#   instead of inheriting its exemption.
+#
+#   reason= is a CLOSED vocabulary, enforced by the tests:
+#     public-by-design  anonymous access is the intended product behaviour
+#     in-body-token     guarded by a bearer/shared-secret check INSIDE the
+#                       handler, which a decorator scan cannot see.
+#                       REQUIRES ref= naming where the check lives.
+#     webhook-hmac      guarded by provider signature verification.
+#                       REQUIRES ref=.
+#     known-gap         a real gap, accepted for now and scheduled. These
+#                       are the ONLY entries the sensitive-prefix test
+#                       tolerates -- see test_sensitive_prefixes_are_protected.
+#
+#   ref= files are asserted to exist, so a rename cannot leave a dangling
+#   justification behind.
+#
+# Baseline 2026-07-20 against HEAD d1b1965. Duplicate route declarations
+# exist in source because new_*.py modules are byte-spliced into web_app.py;
+# they collapse to one key here and one rule at runtime.
+
+# --- Public site + marketing -----------------------------------------------
+GET /  # reason=public-by-design
+GET /platform  # reason=public-by-design
+GET /privacy  # reason=public-by-design
+GET /terms  # reason=public-by-design
+GET /data-protection  # reason=public-by-design
+GET /favicon.ico  # reason=public-by-design
+GET /robots.txt  # reason=public-by-design
+GET /sitemap.xml  # reason=public-by-design
+GET /news  # reason=public-by-design
+GET /news.rss  # reason=public-by-design
+GET /news/<int:post_id>  # reason=public-by-design
+GET /newsfeed  # reason=public-by-design
+GET /opportunities  # reason=public-by-design
+GET /opportunities.rss  # reason=public-by-design
+GET /r/<code>  # reason=public-by-design
+GET /s/<slug>  # reason=public-by-design
+POST /contact  # reason=public-by-design
+POST /newsletter/subscribe  # reason=public-by-design
+POST /beta-signup  # reason=public-by-design
+
+# --- Authentication entry points -------------------------------------------
+# Cannot require a session to reach. OFF-LIMITS this session per owner
+# instruction: do not touch the auth flow, especially Keycloak.
+GET,POST /login  # reason=public-by-design
+GET,POST /register  # reason=public-by-design
+GET /logout  # reason=public-by-design
+GET,POST /forgot-password  # reason=public-by-design
+GET,POST /reset-password/<token>  # reason=public-by-design
+GET /verify-email/<token>  # reason=public-by-design
+
+# --- Self-service registration funnels -------------------------------------
+GET,POST /assess  # reason=public-by-design
+POST /assess/quick  # reason=public-by-design
+GET,POST /installer/register  # reason=public-by-design
+GET,POST /supplier/register  # reason=public-by-design
+
+# --- Health / ops probes ---------------------------------------------------
+# Must answer before auth is available; polled by Render, Uptime Kuma and
+# keep-warm.yml. /api/ping is Render's healthCheckPath and deliberately
+# touches no database, so a DB outage cannot trigger a restart loop.
+GET /api/ping  # reason=public-by-design
+GET /api/version  # reason=public-by-design
+GET /api/health  # reason=public-by-design
+GET /api/health/ai  # reason=public-by-design
+GET /api/health/boot  # reason=public-by-design
+GET /api/health/database  # reason=public-by-design
+GET /api/health/queue  # reason=public-by-design
+GET /api/health/redis  # reason=public-by-design
+GET /api/health/storage  # reason=public-by-design
+GET /metrics  # reason=public-by-design
+
+# --- Public marketplace catalogue ------------------------------------------
+# The user-acquisition magnet: anyone may browse pricing; signup unlocks
+# RFQ/BOM/BOQ.
+GET /marketplace  # reason=public-by-design
+GET /marketplace/action/<string:action>  # reason=public-by-design
+GET /marketplace/product/<int:pid>  # reason=public-by-design
+GET /marketplace/product/<int:pid>/docs  # reason=public-by-design
+GET /marketplace/product/<int:pid>/doc/<kind>  # reason=public-by-design
+
+# --- Public reference data (static lookup tables, no user data) ------------
+GET /api/solar_regions/<country>  # reason=public-by-design
+GET /api/solar_data/<country>/<region>  # reason=public-by-design
+GET /api/purc-tariffs  # reason=public-by-design
+GET /api/demand-factors  # reason=public-by-design
+
+# --- Public guides / support content ---------------------------------------
+GET /guides/<slug>  # reason=public-by-design
+GET /guides/<slug>/pdf  # reason=public-by-design
+GET /support/user-guide  # reason=public-by-design
+GET /support/user-guide/pdf  # reason=public-by-design
+
+# --- Consumer lead-gen funnels ---------------------------------------------
+# Check-My-Bill + growth layer. Anonymous by design; each carries a
+# @limiter rate limit rather than an auth gate.
+GET /bill-check  # reason=public-by-design
+POST /bill-check/design  # reason=public-by-design
+POST /api/bill-check  # reason=public-by-design
+POST /api/bill-check/lead  # reason=public-by-design
+POST /api/bill-check/email  # reason=public-by-design
+POST /api/bill-check/invite  # reason=public-by-design
+POST /api/bill-check/report.pdf  # reason=public-by-design
+POST /api/assess/design  # reason=public-by-design
+POST /api/assistant/chat  # reason=public-by-design
+POST /api/growth/lead-capture  # reason=public-by-design
+POST /api/growth/referral/record  # reason=public-by-design
+POST /api/growth/share-assets/<int:aid>/event  # reason=public-by-design
+
+# --- Large-scale-solar landing/demo ----------------------------------------
+# Marketing surface. The real project routes under /large-scale-solar/<pid>
+# ARE guarded (_load_project filters WHERE id=? AND user_id=?).
+GET /large-scale-solar  # reason=public-by-design
+GET /large-scale-solar/demo  # reason=public-by-design
+GET /large-scale-solar/upgrade  # reason=public-by-design
+
+# --- Guarded IN-BODY, not by decorator -------------------------------------
+# The scanner matches decorators, so it cannot see these checks. Each was
+# read at source on 2026-07-20.
+POST /cdc/outbox/drain  # reason=in-body-token ref=new_cdc_drain_routes.py:188
+POST /enterprise/jobs/drain  # reason=in-body-token ref=enterprise_programme_routes.py:2450
+POST /api/soc/ingest  # reason=in-body-token ref=new_soc_slice1.py:199
+POST /api/keycloak/events  # reason=webhook-hmac ref=new_keycloak_events_route.py:21
+POST /paystack/webhook  # reason=webhook-hmac ref=web_app.py
+POST /stripe/webhook  # reason=webhook-hmac ref=web_app.py
+
+# --- Browser-reported telemetry --------------------------------------------
+# Posted by the browser with no session context.
+POST /api/csp-report  # reason=public-by-design
+GET /api/tutorial/config  # reason=public-by-design
+POST /api/tutorial/event  # reason=public-by-design
+
+# --- Diagnostic page --------------------------------------------------------
+# Added deliberately in 69594b8 ("add /three-test sanity page to isolate
+# WebGL issues"). Renders a static Three.js scene, reads no user data. Kept,
+# not removed: it is the tool used to triage "twin scene broken" reports.
+GET /three-test  # reason=public-by-design
+
+# --- KNOWN GAP: tracked, scheduled, not yet fixed ---------------------------
+# Introduced undecorated in a8ed356 -- never had an auth decorator, so this
+# is an original omission, not a regression. It updates only the CALLER'S OWN
+# users.last_seen from their own session and redirects anonymous callers to
+# /login, so it leaks nothing and escalates nothing -- but it is a POST with
+# no CSRF check. Scheduled as Pack C item 1.
+POST /admin/users/refresh-online  # reason=known-gap
