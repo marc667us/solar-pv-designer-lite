@@ -135,6 +135,20 @@ try:
         notify_admin=_wa4._admin_notify,
         read_flag=_read_flag,
     )
+
+    # THIS HOOK IS WHAT ACTUALLY MAKES THE LISTENER RUN, not the start() above.
+    #
+    # The first dark deploy showed the serving process holding a thread that had entered the
+    # loop, never unwound, and was gone from threading.enumerate() -- i.e. the process was
+    # forked after import, so it inherited the module's MEMORY but none of its THREADS.
+    # start() therefore cannot guarantee anything about the process that answers requests.
+    #
+    # ensure_running() is the guarantee: the serving process notices it has no live listener
+    # of its own (pid comparison -- the one check a forked child cannot pass by accident) and
+    # spawns one. Its fast path is two comparisons and a flag read, no I/O and no lock, so it
+    # is cheap enough for every request; respawns are rate-limited so a persistently failing
+    # spawn cannot busy-loop on the request path. It never raises.
+    app.before_request(lambda: cdc_listener.ensure_running())
 except Exception as _e:  # pragma: no cover - boot resilience path
     import logging
     logging.getLogger(__name__).error(

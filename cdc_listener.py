@@ -39,15 +39,24 @@ NOTHING HERE MAY EVER TAKE THE APP DOWN. The rules come from boot_state.py and w
     retrying when this starts, so the loop connects on its own schedule with backoff and
     never blocks import.
 
-WORKER TOPOLOGY. Render runs `--workers 1` with NO `--preload` (the latter is deliberate:
-threads do not survive fork()). Because each worker imports independently, starting the thread
-at import time is correct and it really does exist in the worker. One worker means one
-listener connection today; the single-start guard below keeps that true if the worker count
-ever rises, per process.
+WORKER TOPOLOGY -- AND WHY STARTING AT IMPORT IS NOT ENOUGH
+-----------------------------------------------------------
+Render runs `gunicorn --worker-class gthread --workers 1 --threads 4`, with NO `--preload`.
+The obvious conclusion is that each worker imports this module itself, so a thread started at
+import lives in the worker. THAT CONCLUSION IS WRONG HERE, and the first dark deploy proved it:
+the serving process reported a thread that had entered the loop, never unwound, and was absent
+from `threading.enumerate()` -- the signature of a process that was FORKED after import.
 
-Unlike `web_app._monitor_thread` -- which starts unconditionally at import with NO
-double-start guard and is safe only by accident of `--workers 1` -- this module refuses to
-start twice in one process.
+So the listener does not rely on the import-time thread surviving. `ensure_running()` is called
+from a `before_request` hook and re-spawns the thread whenever the serving process finds it has
+none -- detected by comparing `os.getpid()` against the pid that created it, which is the one
+check a forked child cannot pass by accident. The import-time `start()` remains, but its real
+job is to CAPTURE DEPENDENCIES; the guarantee comes from the request path.
+
+Unlike `web_app._monitor_thread` -- which starts unconditionally at import with NO double-start
+guard and is safe only by accident of `--workers 1` -- this module refuses to start twice in one
+process, and the guard is pid-aware so a fork gets its own listener rather than inheriting a
+dead one.
 """
 
 import logging
@@ -87,6 +96,37 @@ _lock = threading.Lock()
 _thread = None
 _stop = threading.Event()
 
+# THE PID THAT OWNS `_thread`.
+#
+# This is the fix for the fault the first dark deploy exposed, and it is worth stating plainly
+# because the evidence was initially misread. Live status showed `loop_entered: true` (a thread
+# really did enter the loop) with `loop_exit: null` and `loop_exited_at: null` (its `finally`
+# NEVER ran) and no `cdc-listener` in `threading.enumerate()`. A thread cannot both fail to
+# unwind and be absent -- unless the PROCESS was forked: the child inherits all of memory (so
+# `loop_entered` and `started_at` survive, and `_thread` is a stale Thread object whose
+# is_alive() is False) but inherits NO threads, so the `finally` never runs anywhere.
+#
+# I could not find the forker -- no gunicorn.conf.py, no --preload in the live start command,
+# nothing in this codebase calls os.fork. That question is left open ON PURPOSE, because the
+# fix must not depend on the answer: whether it is fork, a preload path, or gunicorn recycling
+# a worker, the requirement is the same -- THE PROCESS THAT SERVES REQUESTS MUST HAVE ITS OWN
+# LISTENER, and it must notice by itself when it does not.
+#
+# Comparing the recorded pid against os.getpid() is the canonical fork detector: after a fork
+# the child's pid differs, which is true even when the inherited Thread object still LOOKS
+# plausible. Relying on is_alive() alone would be subtler and would miss a child that inherited
+# a Thread object still marked alive.
+_owner_pid = None
+
+# Dependencies captured by start(), so ensure_running() can respawn without them being passed
+# again from the request path.
+_deps = {}
+
+# Respawn rate limit. If starting the thread keeps failing (memory pressure), retrying on
+# EVERY request would turn a degraded feature into a busy loop on the request path.
+_RESPAWN_MIN_INTERVAL = 30.0
+_last_spawn_attempt = 0.0
+
 # Observability. THIS IS NOT OPTIONAL DECORATION: Render's free tier hides runtime logs, so
 # without a readable status a dead listener is indistinguishable from an idle one -- the exact
 # silent failure this project keeps getting bitten by. Surfaced through the authenticated
@@ -108,6 +148,9 @@ _state = {
     "loop_entered": False,
     "loop_exit": None,          # None=still running | "clean" | "died"
     "loop_exited_at": None,
+    # Bumped by ensure_running() when it finds this process has no live listener -- e.g.
+    # after a fork. A steadily climbing value means something is repeatedly killing it.
+    "respawns": 0,
 }
 
 
@@ -381,14 +424,100 @@ def _loop_body(flag_is_on, invalidate, notify_admin):
     _state["connected"] = False
 
 
-def start(get_db=None, invalidate=None, notify_admin=None, read_flag=None):
-    """Start the listener thread. NEVER RAISES. Returns the status snapshot.
+def _spawn_locked():
+    """Create and start the listener thread. Caller MUST hold _lock. Never raises."""
+    global _thread, _owner_pid, _last_spawn_attempt
 
-    Called from wsgi.py at import. Every failure path here degrades the FEATURE and leaves
-    the app serving, because an exception escaping this call would stop gunicorn binding
-    $PORT -- which is how the 2026-07-09 Postgres expiry became a total outage.
+    _last_spawn_attempt = time.monotonic()
+
+    def _flag_is_on():
+        try:
+            return _deps["read_flag"](_deps["get_db"], FLAG_KEY, "0").strip() == "1"
+        except Exception:                            # noqa: BLE001
+            return False                             # FAIL CLOSED
+
+    # Reset the per-thread diagnostics so the NEW thread's fate is readable rather than
+    # showing the previous (or inherited) thread's.
+    _state["loop_entered"] = False
+    _state["loop_exit"] = None
+    _state["loop_exited_at"] = None
+
+    _stop.clear()
+    try:
+        # Creating or starting a Thread can itself raise -- see the module docstring.
+        t = threading.Thread(
+            target=_loop,
+            args=(_flag_is_on, _deps.get("invalidate"), _deps.get("notify_admin")),
+            name="cdc-listener",
+            daemon=True,                             # must never hold up interpreter shutdown
+        )
+        t.start()
+    except Exception as e:                           # noqa: BLE001
+        _state["last_error"] = ("spawn: " + str(e))[:200]
+        _log.error("cdc listener could not be spawned (app still serving): %s", e)
+        return
+
+    _thread = t
+    _owner_pid = os.getpid()
+    _state["started_at"] = time.time()
+
+
+def ensure_running():
+    """Make sure THIS process has a live listener. Cheap. Never raises.
+
+    Called from a before_request hook, so it runs on the request path and its fast path must
+    cost almost nothing: two comparisons and an is_alive() flag read, no I/O, no lock.
+
+    This is what actually makes the listener work. Starting a thread at import is not enough --
+    the process that imported the module is demonstrably not always the process that ends up
+    serving requests (see the _owner_pid note above). Rather than depend on a particular
+    gunicorn topology, the serving process notices it has no listener and starts one.
     """
-    global _thread
+    try:
+        if (_thread is not None
+                and _owner_pid == os.getpid()
+                and _thread.is_alive()):
+            return                                   # fast path: the overwhelmingly common one
+
+        if _state.get("supported") is False:
+            return                                   # SQLite / no driver: nothing to run
+
+        # Rate-limited, because a persistently failing spawn must not be retried per request.
+        if (time.monotonic() - _last_spawn_attempt) < _RESPAWN_MIN_INTERVAL:
+            return
+
+        with _lock:
+            # Re-check under the lock: several request threads can arrive here together
+            # (gthread runs 4), and without this they would each spawn a listener.
+            if (_thread is not None
+                    and _owner_pid == os.getpid()
+                    and _thread.is_alive()):
+                return
+            if (time.monotonic() - _last_spawn_attempt) < _RESPAWN_MIN_INTERVAL:
+                return
+            _state["respawns"] = _state.get("respawns", 0) + 1
+            _spawn_locked()
+    except Exception as e:                           # noqa: BLE001
+        # This runs on the request path. It must never turn a listener problem into a 500.
+        try:
+            _state["last_error"] = ("ensure: " + str(e))[:200]
+        except Exception:                            # noqa: BLE001
+            pass
+
+
+def start(get_db=None, invalidate=None, notify_admin=None, read_flag=None):
+    """Register the listener's dependencies and start it. NEVER RAISES. Returns status.
+
+    Called from wsgi.py at import. Every failure path degrades the FEATURE and leaves the app
+    serving, because an exception escaping this call would stop gunicorn binding $PORT --
+    which is how the 2026-07-09 Postgres expiry became a total outage.
+
+    NOTE THAT STARTING HERE IS NO LONGER LOAD-BEARING. The thread it starts may not survive
+    into the process that serves requests (see the _owner_pid note above), so the guarantee
+    comes from ensure_running() on the request path instead. What this call is genuinely for
+    is capturing the DEPENDENCIES, which are only available at import: ensure_running() is
+    called from a before_request hook that has no way to supply them.
+    """
     try:
         if not _is_postgres():
             # SQLite has no LISTEN/NOTIFY. Nothing to do, and saying so is better than a
@@ -403,32 +532,21 @@ def start(get_db=None, invalidate=None, notify_admin=None, read_flag=None):
             return status()
 
         _state["supported"] = True
+        _deps["get_db"] = get_db
+        _deps["invalidate"] = invalidate
+        _deps["notify_admin"] = notify_admin
+        _deps["read_flag"] = read_flag
 
         with _lock:
-            if _thread is not None and _thread.is_alive():
-                # Single-start guard. web_app._monitor_thread has none and is safe only by
-                # accident of --workers 1; a second listener would mean a second permanent
-                # connection and duplicated invalidations.
+            if (_thread is not None
+                    and _owner_pid == os.getpid()
+                    and _thread.is_alive()):
+                # Single-start guard, now pid-aware. web_app._monitor_thread has no guard at
+                # all and is safe only by accident of --workers 1; a second listener would
+                # mean a second permanent connection and duplicated invalidations.
                 return status()
-
-            def _flag_is_on():
-                try:
-                    return read_flag(get_db, FLAG_KEY, "0").strip() == "1"
-                except Exception:                # noqa: BLE001
-                    return False                 # FAIL CLOSED
-
-            _stop.clear()
-            # Creating or starting a Thread can itself raise under memory pressure. Caught
-            # here for the reason in this module's docstring.
-            _thread = threading.Thread(
-                target=_loop,
-                args=(_flag_is_on, invalidate, notify_admin),
-                name="cdc-listener",
-                daemon=True,                     # must never hold up interpreter shutdown
-            )
-            _thread.start()
-            _state["started_at"] = time.time()
-            return status()
+            _spawn_locked()
+        return status()
 
     except Exception as e:                       # noqa: BLE001 - see docstring
         _state["last_error"] = ("start: " + str(e))[:200]

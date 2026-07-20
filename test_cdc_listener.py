@@ -9,6 +9,7 @@ plumbing itself is proven live, in the dark-then-enable rollout.
 
 Run: python -m pytest test_cdc_listener.py -q
 """
+import os
 import threading
 import time
 
@@ -29,6 +30,9 @@ def _reset(monkeypatch):
     monkeypatch.setattr(cdc_listener, "_psycopg2_available", lambda: True)
     cdc_listener.stop()
     cdc_listener._thread = None
+    cdc_listener._owner_pid = None
+    cdc_listener._last_spawn_attempt = 0.0
+    cdc_listener._deps.clear()
     cdc_listener._stop.clear()
     for k, v in {
         "supported": None, "enabled": None, "connected": False,
@@ -246,4 +250,101 @@ def test_missing_psycopg2_is_unsupported_and_starts_no_thread(monkeypatch):
     st = cdc_listener.start(get_db=None, invalidate=None, read_flag=lambda *a, **k: "1")
     assert st["supported"] is False
     assert st["last_error"] == "psycopg2 unavailable"
+    assert cdc_listener._thread is None
+
+
+# ── ensure_running(): the actual fix for the fork problem ────────────────────────────────
+
+def test_ensure_running_respawns_when_the_pid_changed(monkeypatch):
+    """THE REGRESSION TEST FOR THE SLICE-4 FAULT (2026-07-20).
+
+    Live status showed loop_entered=true with loop_exit=null and no cdc-listener thread: the
+    process had been forked after import, inheriting the module's MEMORY (so `_thread` looked
+    plausible) but none of its THREADS. A pid comparison is the one check a forked child
+    cannot pass by accident.
+    """
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    monkeypatch.setattr(cdc_listener, "_FLAG_POLL_SECONDS", 0.05)
+    cdc_listener.start(get_db=None, invalidate=None, read_flag=lambda *a, **k: "0")
+    first = cdc_listener._thread
+    assert first is not None
+
+    # Simulate being the forked CHILD: same module state, different pid.
+    monkeypatch.setattr(cdc_listener, "_owner_pid", cdc_listener._owner_pid + 1)
+    cdc_listener._last_spawn_attempt = 0.0          # bypass the rate limit for the test
+
+    cdc_listener.ensure_running()
+
+    assert cdc_listener._thread is not first, "a forked child must spawn its OWN listener"
+    assert cdc_listener._thread.is_alive()
+    assert cdc_listener._owner_pid == os.getpid()
+
+
+def test_ensure_running_is_a_noop_when_the_listener_is_healthy(monkeypatch):
+    """It runs on EVERY request, so the common path must not respawn or take the lock."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    monkeypatch.setattr(cdc_listener, "_FLAG_POLL_SECONDS", 0.05)
+    cdc_listener.start(get_db=None, invalidate=None, read_flag=lambda *a, **k: "0")
+    first = cdc_listener._thread
+    before = cdc_listener._state.get("respawns", 0)
+
+    for _ in range(50):
+        cdc_listener.ensure_running()
+
+    assert cdc_listener._thread is first
+    assert cdc_listener._state.get("respawns", 0) == before
+
+
+def test_ensure_running_rate_limits_a_failing_spawn(monkeypatch):
+    """A spawn that keeps failing must not be retried on every request."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    cdc_listener._state["supported"] = True
+    cdc_listener._deps.update({"get_db": None, "read_flag": lambda *a, **k: "0",
+                               "invalidate": None, "notify_admin": None})
+    cdc_listener._thread = None
+    cdc_listener._owner_pid = None
+    cdc_listener._last_spawn_attempt = 0.0
+
+    attempts = []
+
+    class _DeadThread:
+        def __init__(self, *a, **k):
+            attempts.append(1)
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+        def is_alive(self):
+            return False
+
+    monkeypatch.setattr(threading, "Thread", _DeadThread)
+
+    for _ in range(20):
+        cdc_listener.ensure_running()
+
+    assert len(attempts) == 1, "a failing spawn must be rate-limited, not retried per request"
+
+
+def test_ensure_running_never_raises_into_the_request_path(monkeypatch):
+    """It is a before_request hook: a listener fault must never become a 500."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    cdc_listener._state["supported"] = True
+    cdc_listener._thread = None
+    cdc_listener._owner_pid = None
+    cdc_listener._last_spawn_attempt = 0.0
+
+    def _boom(*a, **k):
+        raise RuntimeError("everything is on fire")
+
+    monkeypatch.setattr(cdc_listener, "_spawn_locked", _boom)
+    cdc_listener.ensure_running()          # must not raise
+
+
+def test_ensure_running_does_nothing_when_unsupported(monkeypatch):
+    """On SQLite there is nothing to run; the hook must not spawn on every request."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///solar.db")
+    cdc_listener.start(get_db=None, invalidate=None, read_flag=lambda *a, **k: "1")
+    assert cdc_listener._state["supported"] is False
+    cdc_listener._last_spawn_attempt = 0.0
+    cdc_listener.ensure_running()
     assert cdc_listener._thread is None
