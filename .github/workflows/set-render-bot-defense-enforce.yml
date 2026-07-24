@@ -93,8 +93,11 @@ jobs:
         run: |
           if [ "$MODE" = "apply" ]; then
             echo "BOT_DEFENSE_ENFORCE=$VALUE is live on Render after the redeploy."
-            [ "$VALUE" = "1" ] && echo "Automation-UA bots are now BLOCKED on login/payment (honeypot already was)."
-            [ "$VALUE" = "0" ] && echo "Reverted to MONITOR mode (honeypot still blocks; UA bots recorded only)."
+            if [ "$VALUE" = "1" ]; then
+              echo "Automation-UA bots are now BLOCKED on login/payment (honeypot already was)."
+            else
+              echo "Reverted to MONITOR mode (honeypot still blocks; UA bots recorded only)."
+            fi
           else
             echo "DRY-RUN only -- no change. Re-run with -f confirm=APPLY."
           fi
