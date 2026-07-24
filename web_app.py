@@ -12375,9 +12375,13 @@ def admin_operations():
     with get_db() as c:
         users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         projects = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        # Dialect-safe 24h window: compute the cutoff in Python and bind it as a
+        # param. datetime('now', ...) is SQLite-only and 500s on Postgres
+        # (UndefinedFunction), which was breaking the whole Ops Center page.
+        _since_24h = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         failed_logins = c.execute(
             "SELECT COUNT(*) FROM audit_logs WHERE action='failed_login' "
-            "AND created_at >= datetime('now', '-24 hours')"
+            "AND created_at >= ?", (_since_24h,)
         ).fetchone()[0] if _table_exists(c, "audit_logs") else 0
         db_path = DB_PATH
         db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
