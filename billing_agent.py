@@ -206,40 +206,59 @@ def skill_dispute_sla(get_db, is_pg):
 
 
 def skill_stripe_compliance(get_db, is_pg, env, view_functions):
-    """A deterministic Stripe-compliance checklist over what the app can prove."""
-    checks = []
-    # 1. Signature verification: the handler is registered + the secret is set.
-    sig = ("stripe_webhook" in view_functions) and bool(env.get("STRIPE_WEBHOOK_SECRET"))
-    checks.append(("Webhook signature verification", sig))
-    # 2. PCI scope: we must NOT store card data. Prove the payments table has no
-    #    card/PAN/CVV columns. A read failure -> None -> reported as "unknown".
+    """A deterministic Stripe-compliance checklist.
+
+    GATEWAY-AWARE: you cannot be "non-compliant" with a gateway you do not use.
+    If Stripe is not configured on this deployment (no STRIPE_SECRET_KEY -- e.g.
+    Paystack is the active gateway), the Stripe-specific items are N/A and this
+    does NOT hard-fail; only the gateway-agnostic PCI (no-card-data) check still
+    applies. Stripe-specific compliance is only enforced when Stripe is active.
+    """
+    stripe_active = bool(env.get("STRIPE_SECRET_KEY"))
+
+    # PCI (gateway-agnostic): the payments table must store no card data.
+    # A read failure -> None -> reported as "could not verify" (never a false ok).
     try:
         with get_db() as c:
             cols = _columns(c, "payments", is_pg)
     except Exception:
         cols = None
-    if cols is None:
-        no_card = None
-    else:
-        no_card = (cols & {"card", "card_number", "pan", "cvv", "cvc", "number"}) == set()
-    checks.append(("No card data stored (PCI scope minimised)", no_card))
-    # 3. Idempotency (no duplicate charge) -- the deduping webhook handler.
-    checks.append(("Idempotent charge handling", "stripe_webhook" in view_functions))
-    # 4. Dispute/chargeback path -- the dispute-management ROUTE proves the
-    #    capability exists (the table is created lazily), so check the route.
-    checks.append(("Dispute / chargeback handling", "admin_disputes" in view_functions))
-    # 5. Receipts available.
-    checks.append(("Customer receipts / invoices", "account_invoice" in view_functions))
+    no_card = None if cols is None else (
+        (cols & {"card", "card_number", "pan", "cvv", "cvc", "number"}) == set())
 
+    if not stripe_active:
+        if no_card is False:
+            return _v("stripe_compliance", "Stripe compliance", "fail",
+                      "Stripe not configured (active gateway is Paystack) -- but the payments "
+                      "table stores card-like column(s), a PCI concern regardless of gateway.")
+        if no_card is None:
+            # The only always-relevant control here (PCI) could not be verified,
+            # so this is NOT an OK verdict even with Stripe off.
+            return _v("stripe_compliance", "Stripe compliance", "unknown",
+                      "Stripe is not configured (Paystack is the active gateway); Stripe-specific "
+                      "checks are N/A. PCI: could not verify the payments columns.")
+        return _v("stripe_compliance", "Stripe compliance", "ok",
+                  "Stripe is not configured on this deployment (Paystack is the active gateway); "
+                  "Stripe-specific checks are N/A. PCI: no card data stored.")
+
+    # Stripe IS active -- enforce the full checklist.
+    checks = [
+        ("Webhook signature verification",
+         ("stripe_webhook" in view_functions) and bool(env.get("STRIPE_WEBHOOK_SECRET"))),
+        ("No card data stored (PCI scope minimised)", no_card),
+        ("Idempotent charge handling", "stripe_webhook" in view_functions),
+        ("Dispute / chargeback handling", "admin_disputes" in view_functions),
+        ("Customer receipts / invoices", "account_invoice" in view_functions),
+    ]
     failed = [name for name, ok in checks if ok is False]
     unknown = [name for name, ok in checks if ok is None]
     detail = "; ".join("%s: %s" % (n, "ok" if ok else ("unknown" if ok is None else "MISSING"))
                        for n, ok in checks)
     if failed:
-        return _v("stripe_compliance", "Stripe compliance checklist", "fail", detail)
+        return _v("stripe_compliance", "Stripe compliance", "fail", detail)
     if unknown:
-        return _v("stripe_compliance", "Stripe compliance checklist", "warn", detail)
-    return _v("stripe_compliance", "Stripe compliance checklist", "ok", detail)
+        return _v("stripe_compliance", "Stripe compliance", "warn", detail)
+    return _v("stripe_compliance", "Stripe compliance", "ok", detail)
 
 
 def skill_workflow_protection(view_functions):

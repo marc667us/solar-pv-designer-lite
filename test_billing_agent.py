@@ -106,6 +106,49 @@ def test_pci_card_column_fails_stripe_compliance():
     assert "No card data stored" in sc["detail"]
 
 
+def test_stripe_not_configured_is_na_not_a_fail():
+    # Stripe is not the active gateway (no STRIPE_SECRET_KEY) -> Stripe-specific
+    # compliance is N/A, NOT a hard fail. You can't fail compliance with a
+    # gateway you don't use. (Paystack-only deployment.)
+    env = {"PAYSTACK_SECRET_KEY": "x"}   # no STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
+    r = ba.run_oversight(_db_with(), FULL_VIEWS, env, is_pg=False)
+    sc = next(s for s in r["skills"] if s["name"] == "stripe_compliance")
+    assert sc["status"] == "ok"
+    assert "not configured" in sc["detail"].lower()
+
+
+def test_stripe_active_but_missing_webhook_secret_fails():
+    # Stripe IS active but its webhook secret is missing -> a real compliance gap.
+    env = {"STRIPE_SECRET_KEY": "x", "PAYSTACK_SECRET_KEY": "x"}  # no STRIPE_WEBHOOK_SECRET
+    r = ba.run_oversight(_db_with(), FULL_VIEWS, env, is_pg=False)
+    sc = next(s for s in r["skills"] if s["name"] == "stripe_compliance")
+    assert sc["status"] == "fail"
+    assert "Webhook signature verification: MISSING" in sc["detail"]
+
+
+def test_no_card_stored_even_when_stripe_off_still_fails_pci():
+    # PCI is gateway-agnostic: card columns are a fail even with Stripe off.
+    env = {"PAYSTACK_SECRET_KEY": "x"}
+    r = ba.run_oversight(_db_with(cols_extra=", card_number TEXT"), FULL_VIEWS, env, is_pg=False)
+    sc = next(s for s in r["skills"] if s["name"] == "stripe_compliance")
+    assert sc["status"] == "fail"
+    assert "PCI" in sc["detail"]
+
+
+def test_stripe_off_but_pci_unverifiable_is_unknown_not_ok():
+    # Stripe off AND the card-column read fails -> the gateway-agnostic PCI
+    # control is unverifiable, so the verdict must NOT be a false 'ok' (Codex).
+    import contextlib
+
+    @contextlib.contextmanager
+    def broken_db():
+        raise RuntimeError("connection gone")
+        yield  # pragma: no cover
+
+    r = ba.skill_stripe_compliance(broken_db, False, {"PAYSTACK_SECRET_KEY": "x"}, FULL_VIEWS)
+    assert r["status"] == "unknown"
+
+
 def test_agent_never_claims_autonomous_money_actions():
     # Governance invariant: the forbidden actions must be declared.
     for a in ("issue_refund", "email_customer", "modify_terms", "modify_prices"):
