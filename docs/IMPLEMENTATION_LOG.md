@@ -2546,3 +2546,14 @@ Tests Added: 8 (schema idempotent, own-payment dispute, FOREIGN reference not li
 What Was Completed: full dispute lifecycle (open/under_review/resolved/rejected/refunded) + customer email on update + admin evidence view. Codex APPROVE after 1 HIGH (transaction poisoning -- fixed via own-connection schema ensure, same pattern as slice 1).
 Known Risks: none new. Paystack /verify dedupe follow-up still open (slice 1).
 Next Recommended Step: Slice 3 (billing center /billing) then Slice 5 (workflows).
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Payments-legal suite -- Slice 3 (user billing center) | Status: shipped
+Objective: let a user preview all their transactions with status + receipts + a refund/dispute path. (items 4, 5)
+Files Changed: new_billing_center.py (NEW: GET /billing); templates/billing.html (NEW); new_payment_disputes.py (account_disputes reads ?ref= -> prefill); templates/account_disputes.html (pre-select payment); templates/account.html (+All transactions / Dispute links); wsgi.py (boot-resilient register); test_billing_center.py (NEW, 4 tests).
+Database Changes: none (read-only view; merges payments + payment_disputes in Python).
+Security Changes: /billing is user-scoped (WHERE user_id=?); disputes-schema ensured on an ISOLATED connection; disputes read guarded; prefill_ref only compared not echoed; receipt link via account_invoice (id=? AND user_id=?).
+Tests Added: 4 (own-transactions-only, status derivation paid/disputed/refunded, total-paid-excludes-refunds, works-when-disputes-table-absent).
+What Was Completed: /billing transaction preview (Paid/Disputed/Dispute resolved/Refunded), receipt download per row, per-row refund/dispute link that pre-fills the slice-2 form via ?ref=. Codex APPROVE (no findings).
+Known Risks: none new.
+Next Recommended Step: Slice 5 (reconciliation + evidence-export + dispute-aging workflows; CDC capture on payments). Plus the slice-1 Paystack /verify dedupe follow-up.

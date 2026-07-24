@@ -232,5 +232,26 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "Payment disputes surface failed to register (app still serving): %s", _e
     )
 
+# --- Billing center (payments-legal suite, slice 3) ---------------------------
+# GET /billing -- full transaction preview (Paid/Disputed/Refunded), receipts,
+# per-row refund/dispute link. Boot-resilient like the blocks above.
+try:
+    import os as _os_bc
+    from new_billing_center import register_billing_center
+    import web_app as _wa_bc
+
+    register_billing_center(
+        app,
+        get_db=_wa_bc.get_db,
+        login_required=_wa_bc.login_required,
+        current_user=_wa_bc.current_user,
+        is_postgres=lambda: bool(_os_bc.environ.get("DATABASE_URL")),
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Billing center failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()

@@ -21,7 +21,7 @@
         <select name="reference" class="form-select">
           <option value="">— General billing complaint (no specific payment) —</option>
           {% for p in payments %}
-          <option value="{{ p['reference'] }}">
+          <option value="{{ p['reference'] }}" {% if p['reference'] == prefill_ref|default('') %}selected{% endif %}>
             {{ p['created_at'] }} · {{ p['gateway']|title }} · {{ p['plan']|title }} · {{ p['currency'] }} {{ p['amount_usd'] }}
           </option>
           {% endfor %}

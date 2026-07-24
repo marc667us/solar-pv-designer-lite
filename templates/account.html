@@ -363,6 +363,9 @@
           {% if payments %}
           <span class="text-secondary me-2" style="font-size:11px">{{ payments|length }} record{{ 's' if payments|length != 1 }}</span>
           {% endif %}
+          <a href="/billing" class="text-decoration-none me-2" style="font-size:11px;color:#22c55e">
+            <i class="bi bi-card-list me-1"></i>All transactions
+          </a>
           <a href="/account/disputes" class="text-decoration-none" style="font-size:11px;color:#f59e0b">
             <i class="bi bi-shield-exclamation me-1"></i>Dispute a charge
           </a>

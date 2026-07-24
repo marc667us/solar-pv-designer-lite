@@ -143,9 +143,10 @@ def register_payment_disputes(app, *, get_db, login_required, admin_required,
                     "SELECT reference, gateway, plan, amount_usd, currency, created_at "
                     "FROM payments WHERE user_id=? AND reference <> '' "
                     "ORDER BY id DESC LIMIT 50", (uid,)).fetchall()
+            prefill_ref = (request.args.get("ref") or "").strip()
             return render_template("account_disputes.html", user=current_user(),
                                    disputes=mine, payments=pays,
-                                   categories=CATEGORIES)
+                                   categories=CATEGORIES, prefill_ref=prefill_ref)
 
     if "account_dispute_new" not in app.view_functions:
         @app.route("/account/disputes/new", methods=["POST"])
