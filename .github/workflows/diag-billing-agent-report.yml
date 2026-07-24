@@ -1,0 +1,111 @@
+# Verify BOTH the Billing Agent's oversight report AND the tech-support agent's
+# health sweep, ON LIVE.
+#
+# Logs into prod as admin via the LEGACY /login form (same method the
+# agent-triage cron uses -- KEYCLOAK_ENABLED is off on live, so /login
+# authenticates against the users table), then:
+#   1. GET /admin/billing-agent          -> the Billing Agent health report
+#   2. GET /admin/ops/support/sweep       -> the tech-support agent's run of every
+#                                            check, each EXPLAINED (proves it works)
+#
+# SECURITY: both surfaces return VERDICTS + compliance/health statements only --
+# no secret values (webhook_protection reports "set"/"not set", never the secret),
+# no card data, no PII. Safe for this repo's public Actions logs.
+
+name: Diag Billing + Support Agents
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SOLAR_BASE: https://solarpro.aiappinvent.com
+      ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests beautifulsoup4
+
+      - name: Log in as admin + fetch the Billing Agent report
+        run: |
+          python3 <<'PY'
+          import os, re, sys
+          import requests
+          from bs4 import BeautifulSoup
+
+          BASE = os.environ["SOLAR_BASE"]
+          PW   = os.environ["ADMIN_PASSWORD"]
+          s = requests.Session()
+          s.headers["User-Agent"] = "Mozilla/5.0 (billing-agent-verify)"
+
+          def csrf(html):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+              return m.group(1) if m else ""
+
+          # warm + login
+          r = s.get(BASE + "/login", timeout=60)
+          r = s.post(BASE + "/login",
+                     data={"username": "admin", "password": PW, "_csrf": csrf(r.text)},
+                     timeout=60, allow_redirects=True)
+          if "/login" in r.url:
+              print(f"::error::admin login failed (landed at {r.url})"); sys.exit(2)
+          print("login OK ->", r.url)
+
+          r = s.get(BASE + "/admin/billing-agent", timeout=60)
+          if r.status_code != 200:
+              print(f"::error::/admin/billing-agent returned {r.status_code}"); sys.exit(3)
+          soup = BeautifulSoup(r.text, "html.parser")
+
+          # headline: the overall status badge + score
+          head = soup.find(string=re.compile("Overall billing health"))
+          print("\n=== BILLING AGENT REPORT (live) ===")
+          # score
+          m = re.search(r'(\d+)\s*<span[^>]*>/100', r.text)
+          if m: print("score:", m.group(1), "/100")
+
+          # the oversight skills table
+          rows_printed = 0
+          for tbl in soup.find_all("table"):
+              head_txt = tbl.find("thead")
+              if not head_txt or "Finding" not in head_txt.get_text():
+                  continue
+              for tr in tbl.find("tbody").find_all("tr"):
+                  tds = tr.find_all("td")
+                  if len(tds) >= 3:
+                      status = tds[0].get_text(strip=True)
+                      title  = tds[1].get_text(strip=True)
+                      detail = tds[2].get_text(" ", strip=True)
+                      print(f"  [{status:8}] {title}\n             {detail}")
+                      rows_printed += 1
+          if rows_printed == 0:
+              print("::warning::could not parse skills table; dumping title + any badges")
+              t = soup.find("title")
+              print("title:", t.get_text() if t else "?")
+              for b in soup.select("span.badge")[:12]:
+                  print("  badge:", b.get_text(strip=True))
+          print(f"\nparsed {rows_printed} skill row(s).")
+
+          # ── 2. Tech-support agent: run its health sweep (proves it functions) ──
+          print("\n=== TECH-SUPPORT AGENT SWEEP (live) ===")
+          try:
+              r2 = s.get(BASE + "/admin/ops/support/sweep", timeout=180)
+              if r2.status_code != 200:
+                  print(f"::error::/admin/ops/support/sweep returned {r2.status_code}")
+              else:
+                  body = r2.json()
+                  print("summary:", body.get("summary"))
+                  for res in body.get("results", []):
+                      sev = res.get("severity", "?")
+                      print(f"  [{sev:8}] {res.get('label')}: raw={res.get('raw')}  {(res.get('plain') or '')[:120]}")
+                  fa = body.get("fix_all", [])
+                  print("offered fixes:", [f.get("id") for f in fa] if fa else "none")
+                  print(f"\ntech-support agent ran {len(body.get('results', []))} check(s) and explained each -> functioning.")
+          except Exception as e:
+              print(f"::error::tech-support sweep failed: {type(e).__name__}: {e}")
+          PY
