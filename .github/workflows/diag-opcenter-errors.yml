@@ -1,0 +1,96 @@
+# Read-only: what is actually erroring on live, so the owner's reported
+# "agent or operation does not exist" opcenter error can be pinned to an
+# exact route + exception type instead of grepped/guessed.
+#
+# THE METHOD THIS ENFORCES (learned 2026-07-19): read the live `error_logs`
+# table rather than grepping call sites. Blind grepping produced a false
+# positive that had to be reverted the same day.
+#
+# SECURITY: Actions logs on this repo are PUBLIC. This workflow prints
+# ROUTE + METHOD + STATUS + ERROR_TYPE + COUNT ONLY -- never error_message,
+# never a stack trace -- because it spans many routes and a message body can
+# carry user data. Do NOT add error_message to the broad query.
+
+name: Diag Opcenter Errors
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Recent errors (routes + types + counts only)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+
+          echo "=== 1) Top erroring routes, last 3 days (route | method | status | type | count) ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT route, method, status, error_type, COUNT(*) AS n
+              FROM error_logs
+             WHERE created_at >= NOW() - INTERVAL '3 days'
+             GROUP BY route, method, status, error_type
+             ORDER BY n DESC
+             LIMIT 40;"
+
+          echo
+          echo "=== 2) admin / ops / agent routes only, last 14 days ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT route, method, status, error_type, COUNT(*) AS n,
+                   MAX(created_at) AS last_seen
+              FROM error_logs
+             WHERE created_at >= NOW() - INTERVAL '14 days'
+               AND (route LIKE '/admin%' OR route LIKE '%agent%' OR route LIKE '%ops%')
+             GROUP BY route, method, status, error_type
+             ORDER BY last_seen DESC
+             LIMIT 40;"
+
+          echo
+          echo "=== 3) total unresolved error rows ==="
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*) FROM error_logs WHERE resolved=0;"
