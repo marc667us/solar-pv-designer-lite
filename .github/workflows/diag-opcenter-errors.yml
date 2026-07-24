@@ -96,6 +96,17 @@ jobs:
             SELECT COUNT(*) FROM error_logs WHERE resolved = false;"
 
           echo
+          echo "=== 0) VERIFY FIX: the exact PG query the fixed opcenter now emits ==="
+          # Post-fix, admin_operations sends this (datetime('now',...) removed,
+          # cutoff bound as a param). If it returns a count instead of
+          # UndefinedFunction, the /admin/operations 500 is resolved.
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT 'failed_logins_24h=' || COUNT(*)
+              FROM audit_logs
+             WHERE action='failed_login'
+               AND created_at >= to_char(NOW() - INTERVAL '24 hours', 'YYYY-MM-DD HH24:MI:SS');"
+
+          echo
           echo "=== 4) EXACT message for /admin/operations only (function-name diagnostic) ==="
           # Route-scoped to a single admin dashboard query. Its error_message
           # is a Postgres 'function ... does not exist' diagnostic -- no user
