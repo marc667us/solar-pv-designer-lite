@@ -224,6 +224,7 @@
         {% elif stripe_key %}
         <form method="POST" action="{{ url_for('upgrade_checkout') }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <div aria-hidden="true" style="position:absolute!important;left:-9999px!important;height:0;width:0;overflow:hidden"><input type="text" name="company_website" tabindex="-1" autocomplete="off" value=""></div>
           <input type="hidden" name="plan" value="{{ plan_key }}">
           <input type="hidden" name="gateway" value="stripe">
           <button class="btn fw-bold w-100 py-2" style="background:{{ color }};color:#000;border-radius:10px">
@@ -234,6 +235,7 @@
         {% elif paystack_key %}
         <form method="POST" action="{{ url_for('upgrade_checkout') }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <div aria-hidden="true" style="position:absolute!important;left:-9999px!important;height:0;width:0;overflow:hidden"><input type="text" name="company_website" tabindex="-1" autocomplete="off" value=""></div>
           <input type="hidden" name="plan" value="{{ plan_key }}">
           <input type="hidden" name="gateway" value="paystack">
           <button class="btn fw-bold w-100 py-2" style="background:{{ color }};color:#000;border-radius:10px">

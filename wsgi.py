@@ -290,5 +290,28 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "PWA surface failed to register (app still serving): %s", _e
     )
 
+# --- Bot defense (login + payment abuse guard, revenue-leakage protection) ----
+# before_request hook that blocks unambiguous bots on sensitive POST endpoints
+# (honeypot / automation User-Agent) + GET /admin/bot-defense. FAIL-OPEN, so it
+# can never break a real login or payment. Boot-resilient like the blocks above.
+try:
+    import os as _os_bd
+    from new_bot_defense_routes import register_bot_defense
+    import web_app as _wa_bd
+
+    register_bot_defense(
+        app,
+        get_db=_wa_bd.get_db,
+        admin_required=_wa_bd.admin_required,
+        current_user=_wa_bd.current_user,
+        get_real_ip=_wa_bd._get_real_ip,
+        is_postgres=lambda: bool(_os_bd.environ.get("DATABASE_URL")),
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Bot defense failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()

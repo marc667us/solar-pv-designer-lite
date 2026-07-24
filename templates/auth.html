@@ -12,6 +12,11 @@
 
     <form method="POST">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {# Bot honeypot: invisible to humans, auto-filled by bots -> blocked server-side. #}
+      <div aria-hidden="true" style="position:absolute!important;left:-9999px!important;top:-9999px!important;height:0;width:0;overflow:hidden">
+        <label>Company website</label>
+        <input type="text" name="company_website" tabindex="-1" autocomplete="off" value="">
+      </div>
       {# Phase A escape hatch: if the GET came in with ?legacy=1, the page is
          rendered for the seed admin. Carry that signal through the POST as a
          hidden input so the Phase A guard (which also checks request.form)
