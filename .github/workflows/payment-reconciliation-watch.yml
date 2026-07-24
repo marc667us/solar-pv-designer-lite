@@ -1,0 +1,149 @@
+# Payment reconciliation + dispute-aging watch (payments-legal suite, slice 5).
+#
+# The app has no worker process (Render free tier = one instance), so payment
+# operations are wired into the automation layer as a scheduled GitHub Action --
+# the same pattern as the enterprise drain, CDC drain, and beta-monitor.
+#
+# WHAT IT WATCHES (read-only):
+#   * duplicate gateway references   -> must be 0 (slice-1 unique index)
+#   * paid-but-not-upgraded          -> a successful gateway payment whose user
+#                                       is still on the free plan (reconciliation)
+#   * disputes by status + AGING open disputes (an SLA signal for slice-2)
+#   * evidence-ledger health (slice-1 payment_events counts by type)
+#
+# SECURITY: Actions logs on this repo are PUBLIC, so this prints COUNTS and
+# aggregates ONLY -- never a reference, email, amount, or dispute text. Tables
+# that may not exist yet (payment_events, payment_disputes are created lazily)
+# are guarded with to_regclass so a fresh DB does not error the run.
+
+name: Payment Reconciliation Watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"   # daily 06:17 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Reconcile (counts only) + flag anomalies
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+
+          echo "=== payment reconciliation $(date -u +%FT%TZ) ==="
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT 'payments_total='       || COUNT(*)                     FROM payments;
+            SELECT 'gateway_payments='     || COUNT(*)                     FROM payments WHERE gateway IN ('paystack','stripe');
+            SELECT 'distinct_gw_refs='     || COUNT(DISTINCT reference)    FROM payments WHERE gateway IN ('paystack','stripe') AND reference <> '';"
+
+          # The anomaly counts feed a warning below. Kept in a DO block so tables
+          # that do not exist yet (payment_events/payment_disputes) don't error.
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE dup int; unup int;
+          BEGIN
+            SELECT COUNT(*) INTO dup FROM (
+              SELECT reference FROM payments
+               WHERE gateway IN ('paystack','stripe') AND reference <> ''
+               GROUP BY reference HAVING COUNT(*) > 1) d;
+            RAISE NOTICE 'duplicate_gateway_references=%', dup;
+
+            SELECT COUNT(*) INTO unup FROM payments p
+              JOIN users u ON u.id = p.user_id
+             WHERE p.gateway IN ('paystack','stripe') AND lower(p.status) IN ('success','paid','completed')
+               AND COALESCE(u.plan,'free') = 'free';
+            RAISE NOTICE 'paid_but_not_upgraded=%', unup;
+          END \$\$;"
+
+          echo "=== disputes (counts by status) ==="
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE r record; aging int := 0;
+          BEGIN
+            IF to_regclass('public.payment_disputes') IS NULL THEN
+              RAISE NOTICE 'payment_disputes: table not created yet (no disputes)';
+            ELSE
+              FOR r IN SELECT status, COUNT(*) n FROM payment_disputes GROUP BY status ORDER BY status LOOP
+                RAISE NOTICE 'disputes_%=%', r.status, r.n;
+              END LOOP;
+              SELECT COUNT(*) INTO aging FROM payment_disputes
+               WHERE status IN ('open','under_review')
+                 AND created_at <> '' AND created_at < to_char(NOW() - INTERVAL '7 days','YYYY-MM-DD HH24:MI:SS');
+              RAISE NOTICE 'disputes_open_older_than_7d=%', aging;
+              IF aging > 0 THEN
+                RAISE WARNING 'AGING DISPUTES: % open/under_review dispute(s) older than 7 days need a response', aging;
+              END IF;
+            END IF;
+          END \$\$;"
+
+          echo "=== evidence ledger (counts by event) ==="
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE r record;
+          BEGIN
+            IF to_regclass('public.payment_events') IS NULL THEN
+              RAISE NOTICE 'payment_events: table not created yet (no gateway payments/evidence)';
+            ELSE
+              FOR r IN SELECT event_type, COUNT(*) n FROM payment_events GROUP BY event_type ORDER BY event_type LOOP
+                RAISE NOTICE 'evidence_%=%', r.event_type, r.n;
+              END LOOP;
+            END IF;
+          END \$\$;"
+
+          # Hard anomaly gate: duplicate gateway references must be zero.
+          DUP=$("$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*) FROM (
+              SELECT reference FROM payments
+               WHERE gateway IN ('paystack','stripe') AND reference <> ''
+               GROUP BY reference HAVING COUNT(*) > 1) d;")
+          if [ "$DUP" != "0" ]; then
+            echo "::error::DUPLICATE PAYMENT REFERENCES DETECTED ($DUP) -- the no-double-payment invariant is broken"
+            exit 1
+          fi
+          echo "reconciliation OK -- no duplicate gateway references."

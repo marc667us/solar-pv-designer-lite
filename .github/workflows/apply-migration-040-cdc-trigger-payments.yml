@@ -1,0 +1,124 @@
+# Apply migration 040 -- CDC slice 6: attach capture triggers to `payments`.
+#
+# THIS IS THE PAYMENT PATH. The dry-run here is a BEHAVIOURAL REHEARSAL, not a
+# parse check: inside ONE transaction against the REAL live DB it attaches the
+# triggers, INSERTs a throwaway payment, UPDATEs it, UPDATEs it again with the
+# same value, DELETEs it, asserts the outbox received exactly the right events
+# (incl. the no-op UPDATE publishing nothing and `reference` NOT leaking), then
+# ROLLS BACK. Nothing persists. There is no local Postgres on this project, so
+# the rehearsal IS the test.
+#
+# DEFAULT IS DRY-RUN. Attaching for real needs -f confirm=APPLY_040. Read the
+# rehearsal output before applying -- a capture function that raised would abort
+# a real payment write.
+#
+# ABSOLUTE psql path + asserted major (installing pg-client-18 does not stop PATH
+# resolving to Ubuntu's 16.x).
+
+name: Apply Migration 040 (CDC Trigger -- payments)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN (behavioural rehearsal) by default. Type APPLY_040 to attach on live."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Rehearse (default) or apply
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+          MIG="migrations/040_cdc_trigger_payments.sql"
+          REH="migrations/040_cdc_trigger_payments_rehearsal.sql"
+
+          if [ "$CONFIRM" = "APPLY_040" ]; then
+            echo "=== APPLY -- CDC triggers will be attached to payments on live ==="
+            "$PSQL" "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$MIG"
+            echo "=== verify triggers present ==="
+            "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+              SELECT 'payments cdc triggers = ' || COUNT(*)
+                FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+               WHERE p.proname='cdc_capture' AND NOT t.tgisinternal
+                 AND t.tgrelid = to_regclass('public.payments');"
+            echo "APPLIED."
+          else
+            echo "=== DRY-RUN -- behavioural rehearsal, then ROLLBACK. Nothing persists. ==="
+            {
+              echo "BEGIN;"
+              cat "$MIG"
+              cat "$REH"
+              echo "ROLLBACK;"
+            } > /tmp/040_rehearse.sql
+            "$PSQL" "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f /tmp/040_rehearse.sql
+            echo "DRY-RUN complete -- nothing committed. Re-run with -f confirm=APPLY_040 to attach."
+          fi
+
+      - name: Prove the rehearsal left nothing behind
+        if: ${{ inputs.confirm != 'APPLY_040' }}
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE n int;
+          BEGIN
+            SELECT count(*) INTO n FROM payments WHERE gateway='__cdc_rehearsal__';
+            IF n <> 0 THEN RAISE EXCEPTION 'rehearsal payment row survived the rollback -- % left', n; END IF;
+            RAISE NOTICE 'no rehearsal rows left in payments';
+            SELECT count(*) INTO n FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+             WHERE p.proname='cdc_capture' AND NOT t.tgisinternal AND t.tgrelid = to_regclass('public.payments');
+            RAISE NOTICE 'payments cdc triggers now: % (0 until 040 is applied)', n;
+          END \$\$;"

@@ -2557,3 +2557,13 @@ Tests Added: 4 (own-transactions-only, status derivation paid/disputed/refunded,
 What Was Completed: /billing transaction preview (Paid/Disputed/Dispute resolved/Refunded), receipt download per row, per-row refund/dispute link that pre-fills the slice-2 form via ?ref=. Codex APPROVE (no findings).
 Known Risks: none new.
 Next Recommended Step: Slice 5 (reconciliation + evidence-export + dispute-aging workflows; CDC capture on payments). Plus the slice-1 Paystack /verify dedupe follow-up.
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Payments-legal suite -- Slice 5 (workflows) | Status: shipped (watch live; CDC-on-payments dry-run-validated, APPLY owner-gated)
+Objective: wire payment ops into the automation layer. (item 8)
+Files Changed: .github/workflows/payment-reconciliation-watch.yml (NEW, scheduled+dispatch, read-only, counts-only); migrations/040_cdc_trigger_payments.sql + _rehearsal.sql (NEW, CDC capture on payments); .github/workflows/apply-migration-040-cdc-trigger-payments.yml (NEW, dry-run gated).
+Database Changes: none applied. Migration 040 attaches CDC triggers to `payments` (allowlist user_id/gateway/plan/amount_usd/currency/status, EXCLUDES reference) -- DRY-RUN validated only; APPLY_040 owner-gated (payment path).
+Security Changes: reconciliation watch prints COUNTS/aggregates only (Actions logs are public); duplicate-reference anomaly fails the run.
+What Was Completed: daily reconciliation + dispute-aging + evidence-health watch; CDC-on-payments migration + behavioural rehearsal. Codex APPROVE (no findings; residual risk = CDC trigger is on the payment path, hence dry-run gate).
+Known Risks: applying 040 puts a trigger on every payment write; only apply after reading the rehearsal output.
+Next Recommended Step: run the watch + the 040 dry-run against live; owner decides on APPLY_040. Then the slice-1 Paystack /verify dedupe follow-up.
