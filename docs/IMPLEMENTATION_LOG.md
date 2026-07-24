@@ -2594,3 +2594,10 @@ Files Changed: new_pwa_routes.py (NEW: /manifest.json, /service-worker.js, /offl
 Safety (LIVE PAYMENTS app): the service worker is deliberately conservative -- GET-only (POST/auth/payment pass through untouched), NO_CACHE network-only for /api,/admin,/auth,/login,/paystack,/stripe,/upgrade,/billing,/enterprise,...; navigations network-FIRST (fallback only to a static /offline, never a cached auth page); only /static/* + /offline + manifest + icons are cached. Codex APPROVE (all 6 safety points confirmed).
 Tests Added: 5 (manifest valid+installable, SW headers+safety invariants, offline renders, icons correct sizes, idempotent registration).
 Next: Google Play via Bubblewrap TWA (needs a Google Play dev account ~$25); Apple needs a Capacitor native shell + Apple dev account.
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Re-enable legacy password reset (KC-off) + security hardening | Status: shipped
+Objective: legacy users (incl. the owner's lockout scare) had NO working password reset -- /forgot-password + /reset-password were neutered to a dead KC redirect. Re-enable when KC is off.
+Files Changed: web_app.py (forgot_password + reset_password: KC redirect now gated on KEYCLOAK_ENABLED; + security fixes) via patch_reenable_legacy_password_reset.py + patch_reset_security.py; tests/test_app.py (env-gated tests).
+Security (Codex-gated): fixed 3 findings -- (1) email enumeration + reset-URL-leak-on-SMTP-failure -> ONE generic message for all cases, send failure logged server-side only (never surfaces the URL); (2) reset_password now @limiter.limit("10 per hour"); (3) tests updated to env-gated behaviour. Codex APPROVE (re-review). 24 tests pass (2 forgot + 22 oidc).
+Note: does NOT durably help the 2 SEED accounts (admin, marc667us) -- their hashes are re-synced from the env secret on every boot (rotate the secret for those). Fixes reset for all OTHER users.

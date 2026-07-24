@@ -2381,9 +2381,12 @@ def logout():
 @app.route("/forgot-password", methods=["GET", "POST"])
 @limiter.limit("5 per hour")
 def forgot_password():
-    # SOC 2 M1.1 (2026-06-25): Keycloak owns password reset. Always redirect.
-    flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
-    return redirect(url_for("oidc.auth_login"))
+    # KC owns reset when enabled; when it is OFF the legacy email-token flow
+    # below serves again -- otherwise a legacy user who forgets their password
+    # has NO way to reset it (single point of lockout). Same env-aware rule as login().
+    if os.environ.get("KEYCLOAK_ENABLED", "").strip().lower() in ("1", "true", "yes"):
+        flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
+        return redirect(url_for("oidc.auth_login"))
     if request.method == "POST":
         csrf_protect()
         email = request.form.get("email", "").strip().lower()
@@ -2411,27 +2414,31 @@ def forgot_password():
                 )
                 ok, err = _send_system_email(
                     user["email"], "Reset your SolarPro password", body)
-                if ok:
-                    flash(
-                        "Reset link sent! Check your inbox (and spam folder).", "success")
-                else:
-                    # SMTP not configured — show link directly so admins can share it securely
-                    flash(
-                        f"SMTP not configured on the server. "
-                        f"Admin: share this link securely with the user â†' {reset_url}", "warning")
-            else:
-                # Always show the same message to avoid email enumeration
-                flash(
-                    "If that email address is registered, a reset link has been sent.", "info")
+                if not ok:
+                    # Do NOT expose the reset URL to the requester (account-
+                    # takeover risk); log server-side only. The same generic
+                    # message is shown to everyone below (Codex).
+                    try:
+                        app.logger.error("password reset email send failed uid=%s", user["id"])
+                    except Exception:
+                        pass
+        # Same message whether or not the email exists / the send succeeded --
+        # never leak account existence or the reset URL (Codex).
+        flash("If that email address is registered, a reset link has been sent. "
+              "Check your inbox and spam folder.", "info")
         return redirect(url_for("forgot_password"))
     return render_template("forgot_password.html")
 
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("10 per hour")
 def reset_password(token):
-    # SOC 2 M1.1 (2026-06-25): Keycloak owns password reset. Always redirect.
-    flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
-    return redirect(url_for("oidc.auth_login"))
+    # KC owns reset when enabled; when it is OFF the legacy email-token flow
+    # below serves again -- otherwise a legacy user who forgets their password
+    # has NO way to reset it (single point of lockout). Same env-aware rule as login().
+    if os.environ.get("KEYCLOAK_ENABLED", "").strip().lower() in ("1", "true", "yes"):
+        flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
+        return redirect(url_for("oidc.auth_login"))
     with get_db() as c:
         rec = c.execute(
             "SELECT * FROM password_reset_tokens WHERE token=? AND used=0",

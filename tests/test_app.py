@@ -216,9 +216,17 @@ class TestPublicPages:
         resp = app_client.get("/platform")
         assert resp.status_code == 200
 
-    def test_forgot_password_redirects_to_kc(self, app_client):
-        """SOC 2 M1.1: password reset is owned by Keycloak; the legacy
-        /forgot-password handler unconditionally 302s to /auth/login."""
+    def test_forgot_password_serves_legacy_form_when_kc_off(self, app_client, monkeypatch):
+        """KC off (the live default): /forgot-password serves the legacy reset
+        form so users are not locked out of password recovery. When KC is on it
+        still 302s to /auth/login (next test)."""
+        monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
+        resp = app_client.get("/forgot-password", follow_redirects=False)
+        assert resp.status_code == 200
+
+    def test_forgot_password_redirects_to_kc_when_enabled(self, app_client, monkeypatch):
+        """SOC 2 M1.1: with Keycloak ON, password reset is owned by KC."""
+        monkeypatch.setenv("KEYCLOAK_ENABLED", "true")
         resp = app_client.get("/forgot-password", follow_redirects=False)
         assert resp.status_code in (301, 302, 303)
         assert "/auth/login" in resp.headers.get("Location", "")
