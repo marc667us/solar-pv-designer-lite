@@ -359,9 +359,14 @@
         <span class="fw-bold" style="font-size:13px;color:#c0c0e0">
           <i class="bi bi-receipt me-2" style="color:#22c55e"></i>Payment History
         </span>
-        {% if payments %}
-        <span class="text-secondary" style="font-size:11px">{{ payments|length }} record{{ 's' if payments|length != 1 }}</span>
-        {% endif %}
+        <span>
+          {% if payments %}
+          <span class="text-secondary me-2" style="font-size:11px">{{ payments|length }} record{{ 's' if payments|length != 1 }}</span>
+          {% endif %}
+          <a href="/account/disputes" class="text-decoration-none" style="font-size:11px;color:#f59e0b">
+            <i class="bi bi-shield-exclamation me-1"></i>Dispute a charge
+          </a>
+        </span>
       </div>
 
       {% if payments %}

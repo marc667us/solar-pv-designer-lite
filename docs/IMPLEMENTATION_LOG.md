@@ -2535,3 +2535,14 @@ Tests Added: 9 (redaction incl. PII, gateway-scoped idempotency, non-gateway gra
 What Was Completed: idempotency + evidence + audit, Codex APPROVE (1 HIGH transaction-poisoning + 2 MEDIUM fixed).
 Known Risks: migration 039 APPLY still owner-gated (dry-run first). Code is self-sufficient (schema ensured lazily on first payment, isolated connection).
 Next Recommended Step: Slice 2 (payment_disputes table + user "raise dispute/complaint" + admin management).
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Payments-legal suite -- Slice 2 (disputes + billing complaints) | Status: shipped
+Objective: let a customer raise a dispute/complaint on a payment; admin manages it with slice-1 evidence attached. (items 6, 7)
+Files Changed: new_payment_disputes.py (NEW: payment_disputes table + user/admin routes); templates/account_disputes.html, admin_disputes.html, admin_dispute_detail.html (NEW); wsgi.py (boot-resilient register block); templates/account.html (+dispute link), templates/admin.html (+Disputes tile, literal href); test_payment_disputes.py (NEW, 8 tests).
+Database Changes: NEW payment_disputes (reference,user_id,gateway,amount_usd,currency,category,description,status,resolution_note,created_at,updated_at) -- provisioned lazily via ensure_disputes_schema on an ISOLATED connection (plain additive table, no risky index, so no migration/rehearsal needed).
+Security Changes: reference attachment tenant-scoped (payments WHERE reference=? AND user_id=?); amount/gateway DB-derived only (never from form); category/status allowlisted; CSRF on POSTs; admin routes admin_required. Every open/update writes an audit event + evidence row.
+Tests Added: 8 (schema idempotent, own-payment dispute, FOREIGN reference not linked/leaked, invalid category->other, empty desc rejected, admin update, invalid status rejected, admin list/detail data).
+What Was Completed: full dispute lifecycle (open/under_review/resolved/rejected/refunded) + customer email on update + admin evidence view. Codex APPROVE after 1 HIGH (transaction poisoning -- fixed via own-connection schema ensure, same pattern as slice 1).
+Known Risks: none new. Paystack /verify dedupe follow-up still open (slice 1).
+Next Recommended Step: Slice 3 (billing center /billing) then Slice 5 (workflows).

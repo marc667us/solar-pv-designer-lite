@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Dispute #{{ d['id'] }} — Admin{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h3 class="fw-black mb-0">Dispute #{{ d['id'] }}</h3>
+    <a href="{{ url_for('admin_disputes') }}" class="btn btn-sm btn-outline-secondary">← All disputes</a>
+  </div>
+
+  <div class="solar-card p-4 mb-4">
+    <div class="row g-2" style="font-size:14px">
+      <div class="col-md-6"><span class="text-muted">Customer:</span> {{ d['username'] or d['user_id'] }}
+        {% if d['email'] %}<span class="text-muted">({{ d['email'] }})</span>{% endif %}</div>
+      <div class="col-md-6"><span class="text-muted">Raised:</span> {{ d['created_at'] }}</div>
+      <div class="col-md-6"><span class="text-muted">Type:</span> {{ categories.get(d['category'], d['category']) }}</div>
+      <div class="col-md-6"><span class="text-muted">Status:</span>
+        {% set st = d['status'] %}
+        <span class="badge {% if st in ['resolved','refunded'] %}bg-success{% elif st=='rejected' %}bg-secondary{% elif st=='under_review' %}bg-info text-dark{% else %}bg-warning text-dark{% endif %}">{{ st|replace('_',' ')|title }}</span>
+      </div>
+      <div class="col-md-6"><span class="text-muted">Reference:</span> {{ d['reference'] or '—' }}</div>
+      <div class="col-md-6"><span class="text-muted">Amount:</span>
+        {% if d['amount_usd'] %}{{ d['currency'] }} {{ d['amount_usd'] }} ({{ d['gateway']|title }}){% else %}—{% endif %}</div>
+    </div>
+    <hr style="border-color:rgba(255,255,255,.08)">
+    <div><span class="text-muted">Customer's description:</span>
+      <div class="mt-1" style="background:#12122a;padding:12px;border-radius:8px;white-space:pre-wrap">{{ d['description'] }}</div>
+    </div>
+  </div>
+
+  <!-- Linked payment -->
+  <div class="solar-card p-4 mb-4">
+    <h5 class="fw-bold mb-3">Linked payment</h5>
+    {% if payment %}
+    <div class="row g-2" style="font-size:14px">
+      <div class="col-md-4"><span class="text-muted">Plan:</span> {{ payment['plan']|title }}</div>
+      <div class="col-md-4"><span class="text-muted">Status:</span> {{ payment['status'] }}</div>
+      <div class="col-md-4"><span class="text-muted">Recorded:</span> {{ payment['created_at'] }}</div>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No specific payment linked (general complaint), or the payment record was not found.</p>
+    {% endif %}
+  </div>
+
+  <!-- Evidence (slice 1 ledger) -->
+  <div class="solar-card p-4 mb-4">
+    <h5 class="fw-bold mb-3">Payment evidence <span class="text-muted" style="font-size:13px">(collected automatically)</span></h5>
+    {% if evidence %}
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr><th>When</th><th>Event</th><th>Signature verified</th><th>Client IP</th></tr></thead>
+        <tbody>
+        {% for e in evidence %}
+          <tr>
+            <td style="font-size:12px">{{ e['created_at'] }}</td>
+            <td>{{ e['event_type'] }}</td>
+            <td>{% if e['signature_verified'] %}<span class="text-success">yes</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td style="font-size:12px">{{ e['client_ip'] or '—' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No evidence rows for this reference yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Resolve -->
+  <div class="solar-card p-4">
+    <h5 class="fw-bold mb-3">Resolve / update</h5>
+    <form method="POST" action="{{ url_for('admin_dispute_update', did=d['id']) }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-select">
+          {% for s in statuses %}
+          <option value="{{ s }}" {% if s==d['status'] %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Resolution note <span class="text-muted">(emailed to the customer)</span></label>
+        <textarea name="resolution_note" class="form-control" rows="3">{{ d['resolution_note'] or '' }}</textarea>
+      </div>
+      <button type="submit" class="btn" style="background:#f59e0b;color:#000;font-weight:700">Update &amp; notify customer</button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

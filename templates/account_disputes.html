@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}My Billing Disputes — SolarPro{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h3 class="fw-black mb-0">Billing Disputes &amp; Complaints</h3>
+      <p class="text-muted mb-0">Report a problem with a charge — our billing team will respond by email.</p>
+    </div>
+    <a href="/account" class="btn btn-sm btn-outline-secondary">← Back to account</a>
+  </div>
+
+  <!-- Raise a new dispute -->
+  <div class="solar-card p-4 mb-4">
+    <h5 class="fw-bold mb-3">Report a billing problem</h5>
+    <form method="POST" action="{{ url_for('account_dispute_new') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label">Which payment? <span class="text-muted">(optional)</span></label>
+        <select name="reference" class="form-select">
+          <option value="">— General billing complaint (no specific payment) —</option>
+          {% for p in payments %}
+          <option value="{{ p['reference'] }}">
+            {{ p['created_at'] }} · {{ p['gateway']|title }} · {{ p['plan']|title }} · {{ p['currency'] }} {{ p['amount_usd'] }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Problem type</label>
+        <select name="category" class="form-select" required>
+          {% for code, label in categories.items() %}
+          <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Describe the problem</label>
+        <textarea name="description" class="form-control" rows="4" required
+                  placeholder="Tell us what happened — dates, amounts, and what you expected."></textarea>
+      </div>
+      <button type="submit" class="btn" style="background:#f59e0b;color:#000;font-weight:700">Submit dispute</button>
+      <p class="text-muted mt-2 mb-0" style="font-size:12px">
+        Tip: for a duplicate charge, please contact us before raising a bank chargeback — it is usually faster to resolve directly. See our <a href="/refund-policy">Refund Policy</a>.
+      </p>
+    </form>
+  </div>
+
+  <!-- My disputes -->
+  <div class="solar-card p-4">
+    <h5 class="fw-bold mb-3">My disputes</h5>
+    {% if disputes %}
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr>
+          <th>Date</th><th>Type</th><th>Reference</th><th>Amount</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+        {% for d in disputes %}
+          <tr>
+            <td style="font-size:12px">{{ d['created_at'] }}</td>
+            <td>{{ categories.get(d['category'], d['category']) }}</td>
+            <td style="font-size:12px">{{ d['reference'] or '—' }}</td>
+            <td>{% if d['amount_usd'] %}{{ d['currency'] }} {{ d['amount_usd'] }}{% else %}—{% endif %}</td>
+            <td>
+              {% set st = d['status'] %}
+              <span class="badge {% if st in ['resolved','refunded'] %}bg-success{% elif st=='rejected' %}bg-secondary{% elif st=='under_review' %}bg-info text-dark{% else %}bg-warning text-dark{% endif %}">
+                {{ st|replace('_',' ')|title }}
+              </span>
+              {% if d['resolution_note'] %}
+              <div class="text-muted mt-1" style="font-size:12px">{{ d['resolution_note'] }}</div>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">You have no disputes. If something looks wrong with a charge, use the form above.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

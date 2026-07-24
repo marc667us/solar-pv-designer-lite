@@ -201,5 +201,36 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "Payment-legal pages failed to register (app still serving): %s", _e
     )
 
+# --- Payment disputes + billing complaints (payments-legal suite, slice 2) ----
+# User raises a dispute/complaint on a payment; admin manages it with the slice-1
+# evidence ledger attached. Registered here (web_app.py is CRLF+mojibake) with
+# the same boot-resilient guard; a dispute surface failing to load must never
+# stop the app serving.
+try:
+    import os as _os_pd
+    from new_payment_disputes import register_payment_disputes
+    import new_payment_integrity as _pi_pd
+    import web_app as _wa_pd
+
+    register_payment_disputes(
+        app,
+        get_db=_wa_pd.get_db,
+        login_required=_wa_pd.login_required,
+        admin_required=_wa_pd.admin_required,
+        csrf_protect=_wa_pd.csrf_protect,
+        current_user=_wa_pd.current_user,
+        write_audit_event=_wa_pd._write_audit_event,
+        record_payment_event=_pi_pd.record_payment_event,
+        send_email=_wa_pd._send_email,
+        # _admin_notify is (source, severity, title, body); adapt to (title, body).
+        admin_notify=lambda title, body: _wa_pd._admin_notify("payments", "info", title, body),
+        is_postgres=lambda: bool(_os_pd.environ.get("DATABASE_URL")),
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Payment disputes surface failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()
