@@ -1,0 +1,74 @@
+# Verify the OWNER account (marc667us) can log in on live.
+#
+# Drives the legacy /login form with username=marc667us + the SOLARPRO_OWNER_PASSWORD
+# secret (KEYCLOAK_ENABLED is off on live, so /login authenticates against the
+# users table). Reports PASS/FAIL + the landing URL only -- never the password.
+
+name: Diag Owner Login Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      SOLAR_BASE: https://solarpro.aiappinvent.com
+      OWNER_PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: Attempt owner login
+        run: |
+          python3 <<'PY'
+          import os, re, sys, requests
+
+          BASE = os.environ["SOLAR_BASE"]
+          PW   = os.environ["OWNER_PASSWORD"]
+          if not PW:
+              print("::error::SOLARPRO_OWNER_PASSWORD secret is empty"); sys.exit(2)
+
+          s = requests.Session()
+          s.headers["User-Agent"] = "Mozilla/5.0 (owner-login-check)"
+
+          def csrf(html):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+              return m.group(1) if m else ""
+
+          # Is /login the legacy form (200) or does it bounce to KC?
+          g = s.get(BASE + "/login", timeout=60, allow_redirects=False)
+          print(f"GET /login -> {g.status_code}"
+                + (f" -> {g.headers.get('Location','')[:80]}" if g.is_redirect else " (legacy form)"))
+          if g.is_redirect:
+              g = s.get(BASE + "/login", timeout=60)  # follow to get a form + token
+
+          r = s.post(BASE + "/login",
+                     data={"username": "marc667us", "password": PW, "_csrf": csrf(g.text)},
+                     timeout=60, allow_redirects=True)
+          landed = r.url
+          body = r.text.lower()
+          print(f"POST /login (username=marc667us) -> {r.status_code}, landed at: {landed}")
+
+          if "/dashboard" in landed:
+              print("RESULT: PASS -- owner marc667us logged in and reached the dashboard.")
+              sys.exit(0)
+          if "invalid username or password" in body:
+              print("::error::RESULT: FAIL -- 'Invalid username or password' (the stored owner password does not match SOLARPRO_OWNER_PASSWORD).")
+              sys.exit(1)
+          if "verify your email" in body:
+              print("::error::RESULT: FAIL -- login blocked by the email-verification gate for marc667us.")
+              sys.exit(1)
+          if "too many failed" in body:
+              print("::warning::RESULT: INCONCLUSIVE -- brute-force lockout is active; retry in 15 min.")
+              sys.exit(1)
+          # Landed back on /login or elsewhere
+          snippet = re.sub(r"\s+", " ", body)[:300]
+          print(f"::error::RESULT: FAIL -- did not reach /dashboard. First 300 chars: {snippet}")
+          sys.exit(1)
+          PY
