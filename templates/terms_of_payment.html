@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Terms of Payment — SolarPro Design{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
+  <div class="mb-5 text-center">
+    <div style="font-size:40px">💳</div>
+    <h2 class="fw-black mt-3">Terms of Payment</h2>
+    <p class="text-muted">Last updated: 24 July 2026 &nbsp;|&nbsp; Applies to all paid plans and transactions</p>
+    <div class="d-flex justify-content-center gap-3 mt-3 flex-wrap">
+      <a href="/refund-policy" class="btn btn-sm btn-outline-secondary">Refund Policy</a>
+      <a href="/terms" class="btn btn-sm btn-outline-secondary">Terms of Service</a>
+      <a href="/upgrade" class="btn btn-sm" style="background:#f59e0b;color:#000;font-weight:700">View Pricing</a>
+    </div>
+  </div>
+
+  <div class="solar-card p-4 mb-4" style="border-color:rgba(245,158,11,.3)">
+    <p class="mb-0" style="color:#f59e0b;font-weight:600;font-size:14px">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      Please read these Terms of Payment before purchasing. By submitting a payment you agree to them. They supplement, and are governed by, our <a href="/terms" style="color:#f59e0b">Terms of Service</a>.
+    </p>
+  </div>
+
+  <div class="solar-card p-4">
+
+    <h5 class="fw-bold">1. Plans &amp; pricing</h5>
+    <p>Paid subscription plans and their prices are shown on the <a href="/upgrade">Pricing</a> page. Prices are stated in the currency displayed at checkout. We may change prices prospectively; a price change never affects a billing period you have already paid for.</p>
+
+    <h5 class="fw-bold mt-4">2. Payment methods &amp; processors</h5>
+    <p>Payments are processed by our third-party payment providers (currently <b>Paystack</b> and <b>Stripe</b>). We do not store your full card number, CVV, or bank credentials on our servers — these are handled directly by the processor under their own security standards. Your use of a processor is also subject to that processor's terms.</p>
+
+    <h5 class="fw-bold mt-4">3. Authorisation</h5>
+    <p>By submitting a payment you represent that you are authorised to use the payment method and you authorise us (through our processor) to charge the amount shown for the plan you selected, plus any applicable taxes.</p>
+
+    <h5 class="fw-bold mt-4">4. One charge per purchase — no double billing</h5>
+    <p>Each successful purchase is recorded against a unique transaction reference. A payment is charged by the gateway only once per reference, and our systems are designed so that a repeated or retried payment notification for the same reference does <b>not</b> result in a second charge or a duplicate payment record. If you ever believe you were charged twice for the same purchase, contact us (section 10) and we will investigate and, where a genuine duplicate is confirmed, refund it in line with our <a href="/refund-policy">Refund Policy</a>.</p>
+
+    <h5 class="fw-bold mt-4">5. Receipts &amp; records</h5>
+    <p>On a successful payment we email a receipt to the address on your account and record the transaction in your account. You can review your transactions and download receipts at any time from your <a href="/account">account page</a>. Please keep your email address up to date so receipts reach you.</p>
+
+    <h5 class="fw-bold mt-4">6. Currency &amp; taxes</h5>
+    <p>The charged amount is the amount shown at checkout in the stated currency. You are responsible for any taxes, duties, or bank/FX fees imposed by your jurisdiction or card issuer that are not shown at checkout.</p>
+
+    <h5 class="fw-bold mt-4">7. Subscriptions &amp; renewals</h5>
+    <p>Where a plan is described as recurring, it continues for successive billing periods until cancelled. You may cancel future renewals from your account or by contacting us; cancellation stops future charges and does not, by itself, refund the current period (see the <a href="/refund-policy">Refund Policy</a>).</p>
+
+    <h5 class="fw-bold mt-4">8. Failed or reversed payments</h5>
+    <p>If a payment fails, is declined, or is later reversed by your bank or processor, the associated paid features may be suspended until payment is completed. We may retry a failed authorisation through the processor.</p>
+
+    <h5 class="fw-bold mt-4">9. Disputes &amp; chargebacks</h5>
+    <p>If you have a concern about a charge, please contact us <b>first</b> (section 10) so we can resolve it quickly — most issues are resolved faster this way than through a bank chargeback. For payment disputes and complaints we maintain a formal process and a supporting record of each transaction (reference, timestamp, amount, and verification of the payment notification) which we may use to respond to a dispute or chargeback. Raising a chargeback for a charge you actually authorised may result in suspension of the account.</p>
+
+    <h5 class="fw-bold mt-4">10. Contact</h5>
+    <p>Billing questions, receipts, and disputes: <a href="mailto:billing@aiappinvent.com">billing@aiappinvent.com</a>, or open a <a href="/tickets">support ticket</a>. We aim to acknowledge billing enquiries within 2 business days.</p>
+
+    <hr class="my-4" style="border-color:rgba(255,255,255,.08)">
+    <p class="text-muted" style="font-size:12px">
+      This page is provided for transparency and is written in plain terms. It is not legal advice.
+      It should be reviewed and adapted by qualified legal counsel for your jurisdiction before being
+      relied upon as a binding agreement.
+    </p>
+  </div>
+
+</div>
+{% endblock %}

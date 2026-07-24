@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Refund Policy — SolarPro Design{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
+  <div class="mb-5 text-center">
+    <div style="font-size:40px">↩️</div>
+    <h2 class="fw-black mt-3">Refund Policy</h2>
+    <p class="text-muted">Last updated: 24 July 2026 &nbsp;|&nbsp; Applies to all paid plans and transactions</p>
+    <div class="d-flex justify-content-center gap-3 mt-3 flex-wrap">
+      <a href="/terms-of-payment" class="btn btn-sm btn-outline-secondary">Terms of Payment</a>
+      <a href="/terms" class="btn btn-sm btn-outline-secondary">Terms of Service</a>
+      <a href="/tickets" class="btn btn-sm" style="background:#f59e0b;color:#000;font-weight:700">Request a Refund</a>
+    </div>
+  </div>
+
+  <div class="solar-card p-4 mb-4" style="border-color:rgba(245,158,11,.3)">
+    <p class="mb-0" style="color:#f59e0b;font-weight:600;font-size:14px">
+      <i class="bi bi-info-circle-fill me-2"></i>
+      We want you to be satisfied. This policy explains when a refund is available and how to request one. It supplements our <a href="/terms" style="color:#f59e0b">Terms of Service</a> and <a href="/terms-of-payment" style="color:#f59e0b">Terms of Payment</a>.
+    </p>
+  </div>
+
+  <div class="solar-card p-4">
+
+    <h5 class="fw-bold">1. Free trial first</h5>
+    <p>Paid plans are preceded by a free tier / trial so you can evaluate the platform before paying. We encourage you to use it to confirm the platform meets your needs before purchasing.</p>
+
+    <h5 class="fw-bold mt-4">2. Duplicate or erroneous charges — always refunded</h5>
+    <p>If you are charged more than once for the same purchase, or charged in error (for example a technical fault on our side), we will refund the duplicate/erroneous amount in full once confirmed. Our transaction records are designed to make such cases straightforward to verify.</p>
+
+    <h5 class="fw-bold mt-4">3. 14-day goodwill window for first-time purchases</h5>
+    <p>For your <b>first</b> purchase of a paid plan, if you are not satisfied you may request a refund within <b>14 days</b> of that first charge. Where granted, the refund is for the most recent charge of that first billing period. This goodwill window applies once per customer and does not apply to renewals.</p>
+
+    <h5 class="fw-bold mt-4">4. Renewals</h5>
+    <p>Recurring renewal charges are generally non-refundable once the new billing period has begun, except where required by law or where section 2 applies. To avoid a renewal charge, cancel future renewals before the renewal date from your <a href="/account">account</a> or by contacting us.</p>
+
+    <h5 class="fw-bold mt-4">5. Consumer rights</h5>
+    <p>Nothing in this policy limits any non-waivable refund or cancellation rights you have under the mandatory consumer-protection laws of your jurisdiction. Where such a law gives you a stronger right, that right applies.</p>
+
+    <h5 class="fw-bold mt-4">6. How to request a refund</h5>
+    <p>Email <a href="mailto:billing@aiappinvent.com">billing@aiappinvent.com</a> or open a <a href="/tickets">support ticket</a> with: the account email, the approximate date of the charge, and the amount or transaction reference (from your receipt or <a href="/account">account page</a>). We aim to acknowledge within 2 business days and to process approved refunds promptly through the original payment method.</p>
+
+    <h5 class="fw-bold mt-4">7. How refunds are issued</h5>
+    <p>Approved refunds are returned to the original payment method via the original processor (Paystack or Stripe). The time for the funds to appear depends on your bank/processor and is outside our control.</p>
+
+    <h5 class="fw-bold mt-4">8. Disputes</h5>
+    <p>If a refund request is declined and you disagree, you may escalate it through our <a href="/terms-of-payment">payment dispute process</a>. Please contact us before raising a bank chargeback — it is usually faster to resolve directly.</p>
+
+    <hr class="my-4" style="border-color:rgba(255,255,255,.08)">
+    <p class="text-muted" style="font-size:12px">
+      This page is provided for transparency and is written in plain terms. It is not legal advice.
+      Refund and cancellation rights vary by jurisdiction; this policy should be reviewed and adapted
+      by qualified legal counsel before being relied upon as a binding agreement.
+    </p>
+  </div>
+
+</div>
+{% endblock %}

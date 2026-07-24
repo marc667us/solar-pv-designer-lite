@@ -187,5 +187,19 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "api_v1 failed to register (app still serving): %s", _e
     )
 
+# --- Payment-legal pages (payments-legal suite, slice 4) ----------------------
+# Public Terms of Payment + Refund Policy pages. Registered here (not spliced
+# into CRLF+mojibake web_app.py) with the same boot-resilient guard as above: a
+# static legal page failing to register must never stop the app serving.
+try:
+    from new_legal_payment_routes import register_legal_payment
+
+    register_legal_payment(app)
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Payment-legal pages failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()
