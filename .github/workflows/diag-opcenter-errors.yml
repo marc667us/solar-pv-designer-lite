@@ -93,4 +93,16 @@ jobs:
           echo
           echo "=== 3) total unresolved error rows ==="
           "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
-            SELECT COUNT(*) FROM error_logs WHERE resolved=0;"
+            SELECT COUNT(*) FROM error_logs WHERE resolved = false;"
+
+          echo
+          echo "=== 4) EXACT message for /admin/operations only (function-name diagnostic) ==="
+          # Route-scoped to a single admin dashboard query. Its error_message
+          # is a Postgres 'function ... does not exist' diagnostic -- no user
+          # data -- so showing it is justified (cf. diag-cdc-drain-error.yml).
+          "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT created_at || '  |  ' || error_type || '  |  ' || left(coalesce(error_message,''), 200)
+              FROM error_logs
+             WHERE route = '/admin/operations'
+             ORDER BY id DESC
+             LIMIT 3;"
