@@ -2586,3 +2586,11 @@ Files Changed: web_app.py (_paystack_verify + upgrade_success: guard the UPDATE 
 Security/correctness: belt-and-suspenders on top of the DB ux_payments_reference unique index -- a replayed browser callback is now a true no-op (one payment row, one upgrade), not just a harmless re-write. Success flash + redirect still fire (the user did pay).
 Tests Added: 2 (first-verify-upgrades-and-records-once; replayed-3x-idempotent). No regression: 23 webhook+integrity tests still pass.
 What Was Completed: Codex APPROVE (no findings). Closes the last payments follow-up.
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: PWA -- make the web app installable (manifest + service worker + icons) | Status: shipped
+Objective: "Add to Home Screen" today + the base for a Google Play TWA (owner asked how to get on an app store).
+Files Changed: new_pwa_routes.py (NEW: /manifest.json, /service-worker.js, /offline; boot-resilient register from wsgi.py); scripts/gen_pwa_icons.py (NEW: Pillow solar-mark icons); static/icons/icon-192|512|maskable-512.png (NEW); templates/base.html (manifest link + apple metas + apple-touch-icon->192 + guarded SW registration); test_pwa.py (NEW, 5 tests).
+Safety (LIVE PAYMENTS app): the service worker is deliberately conservative -- GET-only (POST/auth/payment pass through untouched), NO_CACHE network-only for /api,/admin,/auth,/login,/paystack,/stripe,/upgrade,/billing,/enterprise,...; navigations network-FIRST (fallback only to a static /offline, never a cached auth page); only /static/* + /offline + manifest + icons are cached. Codex APPROVE (all 6 safety points confirmed).
+Tests Added: 5 (manifest valid+installable, SW headers+safety invariants, offline renders, icons correct sizes, idempotent registration).
+Next: Google Play via Bubblewrap TWA (needs a Google Play dev account ~$25); Apple needs a Capacitor native shell + Apple dev account.

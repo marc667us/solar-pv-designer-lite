@@ -276,5 +276,19 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "Billing Agent surface failed to register (app still serving): %s", _e
     )
 
+# --- PWA surface (manifest + service worker) ----------------------------------
+# Makes the web app installable ("Add to Home Screen" + Google Play TWA base).
+# The service worker is deliberately conservative (never caches auth/payment/
+# dynamic routes). Boot-resilient like the blocks above.
+try:
+    from new_pwa_routes import register_pwa
+
+    register_pwa(app)
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "PWA surface failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()
