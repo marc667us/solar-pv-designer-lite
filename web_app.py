@@ -25,6 +25,7 @@ try:
 except Exception:
     _country_compliance = None
 import secrets_broker as _sb  # Phase 1: audit + tier + Vault-ready secret reads
+import new_payment_integrity as _pi  # payment integrity + evidence ledger (Slice 1)
 from app.security.decorators import (
     require_role,
     require_service_account,
@@ -6874,13 +6875,56 @@ def admin_helpline_kb():
 
 def _record_payment(uid, gateway, plan, amount_usd, currency="USD",
                     reference="", status="success"):
+    # 1. Ensure the evidence schema on ITS OWN connection. On Postgres a
+    #    failed DDL (e.g. CREATE UNIQUE INDEX) aborts the whole transaction,
+    #    so this MUST NOT share the payment transaction -- otherwise a schema
+    #    hiccup could make the payment itself fail (Codex HIGH, slice 1).
+    try:
+        with get_db() as _sc:
+            _pi.ensure_payment_integrity_schema(_sc, bool(os.environ.get("DATABASE_URL")))
+    except Exception:
+        pass
+    # 2. The payment write, in a clean transaction of its own. INSERT OR
+    #    IGNORE + the ux_payments_reference unique index give DB-level
+    #    idempotency for real gateway payments: a duplicate reference cannot
+    #    create a second row even under a webhook-retry race. db_adapter
+    #    translates OR IGNORE to ON CONFLICT DO NOTHING on Postgres.
+    _inserted = True
     with get_db() as c:
-        c.execute(
-            "INSERT INTO payments (user_id,gateway,plan,amount_usd,currency,reference,status) "
+        _cur = c.execute(
+            "INSERT OR IGNORE INTO payments (user_id,gateway,plan,amount_usd,currency,reference,status) "
             "VALUES (?,?,?,?,?,?,?)",
             (uid, gateway, plan, amount_usd, currency, reference, status))
+        try:
+            _inserted = (_cur.rowcount != 0)
+        except Exception:
+            _inserted = True
         user_row = c.execute("SELECT email, username FROM users WHERE id=?", (uid,)).fetchone()
-    if status == "success" and amount_usd and user_row:
+    # 3. Evidence ledger + audit on SEPARATE connections -- best-effort and
+    #    isolated, so a failure here can never poison the committed payment.
+    try:
+        _client_ip = _get_real_ip()
+    except Exception:
+        _client_ip = ""
+    try:
+        with get_db() as _ec:
+            _pi.record_payment_event(
+                _ec, reference=reference, gateway=gateway,
+                event_type=("payment_recorded" if _inserted else "duplicate_blocked"),
+                user_id=uid, amount_usd=amount_usd, signature_verified=True,
+                client_ip=_client_ip,
+                payload={"plan": plan, "currency": currency, "status": status})
+    except Exception:
+        pass
+    try:
+        _write_audit_event(
+            "payment_recorded" if _inserted else "payment_duplicate_blocked",
+            user_id=uid,
+            details=json.dumps({"gateway": gateway, "plan": plan,
+                                "amount_usd": amount_usd, "reference": reference}))
+    except Exception:
+        pass
+    if _inserted and status == "success" and amount_usd and user_row:
         try:
             plan_label = PLAN_PRICES.get(plan, {}).get("label", plan.title())
             _subj = "Payment Confirmed - SolarPro " + plan_label + " Plan"

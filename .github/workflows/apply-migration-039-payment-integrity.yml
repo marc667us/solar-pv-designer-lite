@@ -1,0 +1,100 @@
+# Apply migration 039 (payment evidence ledger + no-double-payment unique index).
+#
+# DRY-RUN by default: applies inside a transaction against the REAL live DB,
+# verifies, then ROLLS BACK -- writes nothing. Set confirm=APPLY to commit.
+# (Standing rule: every UPDATE/DDL workflow defaults to dry-run; see
+# feedback_workflow_dry_run_gate.)
+
+name: Apply Migration 039 (Payment Integrity)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY to commit for real. Anything else = dry-run (rehearse + rollback).'
+        required: false
+        default: 'DRYRUN'
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Rehearse or apply migration 039
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+          MIG="migrations/039_payment_evidence_and_idempotency.sql"
+
+          # Verification queries run in BOTH modes.
+          VERIFY="
+            SELECT 'payment_events exists = ' || to_regclass('public.payment_events')::text;
+            SELECT 'ux_payments_reference exists = ' ||
+                   (SELECT COUNT(*) FROM pg_indexes WHERE indexname='ux_payments_reference')::text;
+            SELECT 'payments rows = ' || COUNT(*)::text FROM payments;
+            SELECT 'distinct non-empty refs = ' ||
+                   COUNT(DISTINCT reference)::text FROM payments WHERE reference <> '';
+          "
+
+          if [ "$CONFIRM" = "APPLY" ]; then
+            echo "=== APPLY (committing) ==="
+            "$PSQL" "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$MIG"
+            echo "=== post-apply verification ==="
+            "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "$VERIFY"
+            echo "APPLIED."
+          else
+            echo "=== DRY-RUN (rehearse inside a transaction, then ROLLBACK) ==="
+            "$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 <<SQL
+          BEGIN;
+          \\i $MIG
+          $VERIFY
+          ROLLBACK;
+          SQL
+            echo "DRY-RUN complete -- nothing was committed. Re-run with confirm=APPLY to commit."
+          fi

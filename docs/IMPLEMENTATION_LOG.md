@@ -2524,3 +2524,14 @@ Next Recommended Step:
      confirmed source_document_id is only a provenance pointer, NOT an agent hand-off, and that
      Feasibility (R4P2_D07) is engine-written and reports.py refuses it without an approved
      reference design — the chain cannot reach it from a one-liner until that is solved.
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Payments-legal suite -- Slice 1 (payment integrity + evidence) | Status: shipped (code); migration 039 dry-run validated, APPLY owner-gated
+Objective: DB-level "only one payment / no double payment" + "collect payment evidence" + audit trail.
+Files Changed: new_payment_integrity.py (NEW: redaction + evidence ledger + idempotency helpers); web_app.py::_record_payment (INSERT OR IGNORE + rowcount-gated single receipt + evidence + audit, each concern on its OWN connection); migrations/039_payment_evidence_and_idempotency.sql (NEW); .github/workflows/apply-migration-039-payment-integrity.yml (NEW, dry-run-gated); test_payment_integrity.py (NEW, 9 tests); patch_payment_integrity_wire.py + patch_payment_integrity_isolate.py (byte patches).
+Database Changes: NEW payment_events (append-only evidence, redacted payloads); partial UNIQUE index ux_payments_reference ON payments(reference) WHERE reference<>'' AND gateway IN ('paystack','stripe').
+Security Changes: gateway payloads redacted (card/auth/PII); every payment now writes an audit event via write_audit_event.
+Tests Added: 9 (redaction incl. PII, gateway-scoped idempotency, non-gateway grants repeat, evidence row, never-raises, idempotent schema). Full run: 23 passed with the two webhook suites.
+What Was Completed: idempotency + evidence + audit, Codex APPROVE (1 HIGH transaction-poisoning + 2 MEDIUM fixed).
+Known Risks: migration 039 APPLY still owner-gated (dry-run first). Code is self-sufficient (schema ensured lazily on first payment, isolated connection).
+Next Recommended Step: Slice 2 (payment_disputes table + user "raise dispute/complaint" + admin management).
