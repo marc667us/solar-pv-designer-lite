@@ -1,0 +1,100 @@
+# Set BOT_DEFENSE_ENFORCE on the Render Solar service env, non-destructively.
+#
+# Flips the bot-defense from monitor mode -> full enforce: automation-User-Agent
+# bots (curl/requests/headless) are hard-blocked on login/payment POSTs, on top
+# of the honeypot blocking that is always on. Internal SolarPro-* crons are
+# allow-listed, so this does not break monitoring.
+#
+# NON-DESTRUCTIVE single-key PUT (never the bulk replace endpoint, which would
+# wipe other env vars). Reversible: run with value=0 to revert to monitor mode.
+# Default is DRY-RUN; re-run with -f confirm=APPLY to commit.
+#
+#   gh workflow run "Set Render BOT_DEFENSE_ENFORCE" -f value=1 -f confirm=APPLY   # enforce
+#   gh workflow run "Set Render BOT_DEFENSE_ENFORCE" -f value=0 -f confirm=APPLY   # revert
+
+name: Set Render BOT_DEFENSE_ENFORCE
+
+on:
+  workflow_dispatch:
+    inputs:
+      value:
+        description: "1 = enforce (block UA bots); 0 = monitor only."
+        required: false
+        default: "1"
+      confirm:
+        description: "DRY-RUN by default. Type APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      VALUE:             ${{ inputs.value }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Validate + resolve mode
+        run: |
+          set -e
+          if [ "$VALUE" != "0" ] && [ "$VALUE" != "1" ]; then
+            echo "::error::value must be 0 or 1 (got '$VALUE')"; exit 1
+          fi
+          [ -n "$RENDER_API_KEY" ] || { echo "::error::RENDER_API_KEY not set"; exit 1; }
+          [ -n "$RENDER_SERVICE_ID" ] || { echo "::error::RENDER_SERVICE_ID not set"; exit 1; }
+          if [ "$CONFIRM" = "APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY -- BOT_DEFENSE_ENFORCE will be set to '$VALUE' on Render ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- would set BOT_DEFENSE_ENFORCE='$VALUE'. Re-run with -f confirm=APPLY. ==="
+          fi
+
+      - name: Apply -- single-key PUT (non-destructive)
+        if: env.MODE == 'apply'
+        run: |
+          set -eo pipefail
+          RESPONSE=$(jq -nc --arg v "$VALUE" '{value: $v}' \
+            | curl -fsS -X PUT \
+                -H "Authorization: Bearer $RENDER_API_KEY" \
+                -H "Content-Type: application/json" \
+                "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/BOT_DEFENSE_ENFORCE" \
+                -d @-)
+          KEY=$(python3 -c "
+          import json, sys
+          d = json.loads(sys.argv[1])
+          ev = d.get('envVar') if isinstance(d, dict) and 'envVar' in d else d
+          print((ev or {}).get('key','') if isinstance(ev, dict) else '')
+          " "$RESPONSE")
+          if [ "$KEY" = "BOT_DEFENSE_ENFORCE" ]; then
+            echo "OK: BOT_DEFENSE_ENFORCE=$VALUE set on Render (non-destructive single-key PUT)."
+          else
+            echo "::error::Unexpected Render response:"; echo "$RESPONSE" | head -c 400; exit 1
+          fi
+
+      - name: Trigger deploy so the app reads the new env
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          DEPLOY=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}')
+          DID=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('id',''))" "$DEPLOY")
+          echo "Deploy triggered (id=$DID). BOT_DEFENSE_ENFORCE=$VALUE active on next boot (~2 min)."
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "BOT_DEFENSE_ENFORCE=$VALUE is live on Render after the redeploy."
+            [ "$VALUE" = "1" ] && echo "Automation-UA bots are now BLOCKED on login/payment (honeypot already was)."
+            [ "$VALUE" = "0" ] && echo "Reverted to MONITOR mode (honeypot still blocks; UA bots recorded only)."
+          else
+            echo "DRY-RUN only -- no change. Re-run with -f confirm=APPLY."
+          fi
