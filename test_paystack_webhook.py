@@ -43,6 +43,18 @@ def app(tmp_path_factory):
         "web_app_paystack", Path(__file__).resolve().parent / "web_app.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    # Pin the exact secret the webhook handler reads.
+    #
+    # PAYSTACK_SECRET (web_app.py:369) is resolved through the secrets broker
+    # `_sb`, a PROCESS-WIDE singleton with a 300s cache -- NOT a plain
+    # os.environ read like Stripe's. When the Stripe suite imports web_app
+    # first (without PAYSTACK_SECRET_KEY set), that cache is seeded with the
+    # wrong/empty secret, and this module then inherits the stale value, so
+    # every correctly-signed event 400s. Setting the env var here does not
+    # help -- the broker already cached, and locally an encrypted store wins
+    # over env anyway. Overriding the module global directly makes the suite
+    # hermetic: independent of import order, broker cache, and local secrets.
+    mod.PAYSTACK_SECRET = _SECRET
     try:
         mod.limiter.enabled = False
     except Exception:
