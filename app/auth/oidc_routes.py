@@ -206,8 +206,13 @@ def auth_login():
 
     issuer = _issuer()
     if not issuer:
-        log.error("KEYCLOAK_ISSUER not set; cannot start OIDC flow.")
-        return jsonify(error="OIDC_NOT_CONFIGURED"), 503
+        # KC is enabled but no issuer is configured on this deployment (rolled
+        # back / not provisioned). A dead 503 here is a single point of total
+        # lockout, so fall back to the working legacy /login form instead --
+        # the same anti-lockout rule web_app.py login() enforces (2026-07-18:
+        # "an auth path with no fallback is a single point of total lockout").
+        log.error("KEYCLOAK_ISSUER not set; falling back to legacy /login.")
+        return _legacy_login_redirect()
 
     verifier, challenge = _make_pkce_pair()
     state = _make_state()
@@ -248,8 +253,10 @@ def auth_register():
 
     issuer = _issuer()
     if not issuer:
-        log.error("KEYCLOAK_ISSUER not set; cannot start OIDC registration flow.")
-        return jsonify(error="OIDC_NOT_CONFIGURED"), 503
+        # Same anti-lockout fallback as auth_login: a missing issuer must not
+        # dead-end registration; send the user to the legacy /register form.
+        log.error("KEYCLOAK_ISSUER not set; falling back to legacy /register.")
+        return _legacy_register_redirect()
 
     verifier, challenge = _make_pkce_pair()
     state = _make_state()

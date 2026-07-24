@@ -165,12 +165,22 @@ def test_login_honours_next_param(flask_app):
             assert s["_kc_next"] == "/admin/marketplace"
 
 
-def test_login_503_when_issuer_unset(monkeypatch, flask_app):
+def test_login_falls_back_to_legacy_when_issuer_unset(monkeypatch, flask_app):
+    # A missing issuer must NOT dead-end at a 503 (single point of total
+    # lockout). /auth/login falls back to the working legacy /login form.
     monkeypatch.delenv("KEYCLOAK_ISSUER", raising=False)
     with flask_app.test_client() as c:
-        r = c.get("/auth/login")
-        assert r.status_code == 503
-        assert r.get_json()["error"] == "OIDC_NOT_CONFIGURED"
+        r = c.get("/auth/login", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers.get("Location", "").endswith("/login?legacy=1")
+
+
+def test_register_falls_back_to_legacy_when_issuer_unset(monkeypatch, flask_app):
+    monkeypatch.delenv("KEYCLOAK_ISSUER", raising=False)
+    with flask_app.test_client() as c:
+        r = c.get("/auth/register", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers.get("Location", "").endswith("/register?legacy=1")
 
 
 # ── /auth/callback ──────────────────────────────────────────────────────
