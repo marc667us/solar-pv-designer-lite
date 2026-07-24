@@ -2578,3 +2578,11 @@ Tests Added: 10 (all-green, dup fail, missing-terms fail, missing-secret warn, a
 What Was Completed: Codex APPROVE (re-review, after 1 HIGH-ish DB-misreport + 2 robustness findings fixed).
 Known Risks: none new. Reads env booleans only (no secret values), admin-gated, no 500 on DB failure.
 Next Recommended Step: owner to APPLY migrations 039/040; Paystack /verify dedupe follow-up.
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Payments Slice-1 follow-up -- idempotent browser-callback paths | Status: shipped
+Objective: a replayed /paystack/verify or /upgrade/success (browser back / double-submit) must not re-run the plan UPDATE / re-send the receipt.
+Files Changed: web_app.py (_paystack_verify + upgrade_success: guard the UPDATE + _record_payment on a "reference already in payments" check) via patch_verify_dedupe.py; test_paystack_verify.py (NEW, 2 tests).
+Security/correctness: belt-and-suspenders on top of the DB ux_payments_reference unique index -- a replayed browser callback is now a true no-op (one payment row, one upgrade), not just a harmless re-write. Success flash + redirect still fire (the user did pay).
+Tests Added: 2 (first-verify-upgrades-and-records-once; replayed-3x-idempotent). No regression: 23 webhook+integrity tests still pass.
+What Was Completed: Codex APPROVE (no findings). Closes the last payments follow-up.

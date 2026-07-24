@@ -8141,10 +8141,14 @@ def upgrade_success():
                 uid  = int(checkout.metadata.get("user_id", 0))
                 if plan and uid == session["user_id"]:
                     with get_db() as c:
-                        c.execute("UPDATE users SET plan=? WHERE id=?", (plan, uid))
-                    _record_payment(uid, "stripe", plan,
-                                    PLAN_PRICES.get(plan, {}).get("usd", 0),
-                                    reference=session_id)
+                        _already = c.execute(
+                            "SELECT 1 FROM payments WHERE reference=?", (session_id,)).fetchone() is not None
+                        if not _already:
+                            c.execute("UPDATE users SET plan=? WHERE id=?", (plan, uid))
+                    if not _already:
+                        _record_payment(uid, "stripe", plan,
+                                        PLAN_PRICES.get(plan, {}).get("usd", 0),
+                                        reference=session_id)
                     flash(f"Subscription activated! Welcome to {PLAN_PRICES[plan]['label']}.", "success")
                     return redirect(url_for("dashboard"))
         except Exception:
@@ -8180,11 +8184,15 @@ def paystack_verify():
                 data = json.loads(resp.read())
             if data.get("status") and data["data"].get("status") == "success":
                 with get_db() as c:
-                    c.execute("UPDATE users SET plan=? WHERE id=?",
-                              (plan, session["user_id"]))
-                _record_payment(session["user_id"], "paystack", plan,
-                                PLAN_PRICES.get(plan, {}).get("usd", 0),
-                                reference=ref)
+                    _already = c.execute(
+                        "SELECT 1 FROM payments WHERE reference=?", (ref,)).fetchone() is not None
+                    if not _already:
+                        c.execute("UPDATE users SET plan=? WHERE id=?",
+                                  (plan, session["user_id"]))
+                if not _already:
+                    _record_payment(session["user_id"], "paystack", plan,
+                                    PLAN_PRICES.get(plan, {}).get("usd", 0),
+                                    reference=ref)
                 flash(f"Payment confirmed! Welcome to {PLAN_PRICES[plan]['label']}.", "success")
                 return redirect(url_for("dashboard"))
         except Exception:
