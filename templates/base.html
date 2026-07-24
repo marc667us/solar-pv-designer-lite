@@ -1420,5 +1420,92 @@ document.querySelectorAll('.solar-toast').forEach(function(t){
 
 <!-- Growth Layer: site-wide Share-SolarPro modal -->
 {% include "growth/_platform_share_modal.html" ignore missing %}
+
+{# ── PWA: dismissible "Install app" banner (Android = native prompt; iOS = Share→Add hint) ── #}
+<div id="pwa-install-banner" role="dialog" aria-label="Install SolarPro"
+     style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:1080;
+            background:#12122a;border-top:1px solid rgba(245,158,11,.35);
+            padding:10px 14px;box-shadow:0 -4px 24px rgba(0,0,0,.45)">
+  <div style="max-width:900px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <img src="/static/icons/icon-192.png" alt="" width="38" height="38"
+         style="border-radius:9px;flex:0 0 auto"/>
+    <div style="flex:1 1 200px;min-width:180px">
+      <div style="color:#e7e7f4;font-weight:600;font-size:14px;line-height:1.2">Install SolarPro</div>
+      <div id="pwa-install-sub" style="color:#9a9ac2;font-size:12px;line-height:1.3">
+        Add it to your home screen for a full-screen app — no app store needed.
+      </div>
+    </div>
+    <button id="pwa-install-btn" type="button"
+            style="background:#f59e0b;color:#111;font-weight:700;border:0;border-radius:8px;
+                   padding:8px 16px;font-size:14px;cursor:pointer;flex:0 0 auto">Install</button>
+    <button id="pwa-install-dismiss" type="button" aria-label="Dismiss"
+            style="background:transparent;color:#9a9ac2;border:0;font-size:22px;line-height:1;
+                   cursor:pointer;padding:4px 8px;flex:0 0 auto">&times;</button>
+  </div>
+</div>
+<script>
+// Install-prompt controller. Progressive enhancement -- every branch is guarded and
+// fail-safe; if anything is unsupported the banner simply stays hidden.
+(function () {
+  var banner  = document.getElementById('pwa-install-banner');
+  if (!banner) return;
+  var btn     = document.getElementById('pwa-install-btn');
+  var dismiss = document.getElementById('pwa-install-dismiss');
+  var sub     = document.getElementById('pwa-install-sub');
+  var deferred = null;                      // stashed beforeinstallprompt event (Android/Chrome)
+  var DKEY = 'pwa_install_dismissed_v1';    // remember a dismissal so we don't nag
+
+  function isStandalone() {
+    // Already installed / launched from home screen -> never show the banner.
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+           || window.navigator.standalone === true;
+  }
+  function dismissed() {
+    try { return localStorage.getItem(DKEY) === '1'; } catch (e) { return false; }
+  }
+  function isSensitiveRoute() {
+    // Never float over auth / payment forms -- on mobile a bottom-fixed bar can
+    // cover the submit button. Suppress on login/register/reset + upgrade/checkout.
+    return /^\/(login|register|forgot-password|reset-password|upgrade|paystack|stripe|checkout|billing|subscribe)(\/|$)/
+      .test(window.location.pathname);
+  }
+  function show() {
+    if (isSensitiveRoute()) return;
+    if (!dismissed() && !isStandalone()) banner.style.display = 'block';
+  }
+  function hide() { banner.style.display = 'none'; }
+
+  // Android / desktop Chrome: capture the install prompt, show our own button.
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();      // suppress the default mini-infobar; we drive the UX
+    deferred = e;
+    show();
+  });
+
+  if (btn) btn.addEventListener('click', function () {
+    if (!deferred) { hide(); return; }
+    deferred.prompt();
+    deferred.userChoice.finally(function () { deferred = null; hide(); });
+  });
+  if (dismiss) dismiss.addEventListener('click', function () {
+    try { localStorage.setItem(DKEY, '1'); } catch (e) {}
+    hide();
+  });
+  window.addEventListener('appinstalled', function () {
+    try { localStorage.setItem(DKEY, '1'); } catch (e) {}
+    hide();
+  });
+
+  // iOS Safari fires NO beforeinstallprompt -- show Share->Add instructions instead.
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua);
+  var isSafari = /safari/i.test(ua) && !/crios|fxios|chrome|android/i.test(ua);
+  if (isIOS && isSafari && !isStandalone() && !dismissed()) {
+    if (sub) sub.textContent = 'Tap the Share icon, then "Add to Home Screen".';
+    if (btn) btn.style.display = 'none';   // no programmatic install on iOS
+    show();
+  }
+})();
+</script>
 </body>
 </html>
