@@ -426,3 +426,57 @@ without human approval. Phase 1 makes no LLM calls at all, so there is no prompt
 **Owner sign-off:** Granted 2026-07-11 via the directive *"use your experience reusable componenet and
 services is ok"* — the same call made for AI-SOC. Scope of exemption: the Enterprise Programme module only.
 §0.1 remains binding elsewhere.
+
+
+## ADR-0009 — Billing Agent built as a deterministic Python oversight service, exempt from §0.1 (2026-07-24)
+
+# Architecture Decision Record
+ADR Number: ADR-0009
+Title: Billing Agent as a deterministic Python oversight service, exempt from §0.1 Google-ADK-only
+Date: 2026-07-24
+Status: accepted
+
+## Context
+The owner requested a "billing agent" to do billing management, oversee the payment systems, implement
+the payment terms & conditions, protect the payment workflow on the app side, and enforce Stripe
+compliance. §0.1 (Agentic ADK Extension) requires every agent to be built in Google ADK. However:
+* the owner instructed at the start of this session to NOT open Google ADK;
+* ADK has no working Gemini/Vertex key on this box (found 2026-07-02, quota 0);
+* the identical call was already made and approved for AI-SOC (ADR-0008) and the Enterprise Programme
+  governance services (ADR-018).
+The Billing Agent is an OVERSEER/monitor over the payment system built across the 2026-07-24
+payments-legal suite (integrity+evidence, disputes, billing center, legal pages, reconciliation).
+
+## Decision
+Build the Billing Agent as a deterministic Python service (`billing_agent.py`) exposing a defined skill
+set, invoked from an admin surface (`/admin/billing-agent`), following the AI-SOC pattern. No ADK
+dependency. It runs read-only oversight checks and produces an auditable health report. Optional LLM
+enrichment (a plain-English summary) rides the existing zero-cost chain only.
+CRITICAL (§14): the agent NEVER takes an autonomous money action. Issuing refunds, emailing customers,
+and changing terms stay human-approved (they live in the slice-2 admin dispute flow and the app config).
+The agent FLAGS and REPORTS; humans act.
+
+## Alternatives Considered
+1. Real ADK `LlmAgent` — blocked: no working key, and the owner said no ADK this session.
+2. Soft-fallback ADK (ADR-003 pattern) — heavier than warranted; every oversight check is deterministic
+   SQL/introspection with no reasoning loop, so an LlmAgent would add latency and a prompt-injection
+   surface with no user-visible gain.
+
+## Reason for Decision
+Billing compliance demands EXPLAINABLE, AUDITABLE checks: is the no-double-payment unique index present?
+are there duplicate references? are the webhook signing secrets set? are the terms/refund pages
+published? are disputes aging past SLA? is card data never stored (PCI scope)? These are deterministic
+facts, not judgements — a model would only obscure them.
+
+## Consequences
+The upgrade path to real ADK stays open: each skill is a pure(-ish) function (data in, verdict out), so
+wrapping them as ADK `FunctionTool`s later is mechanical. §0.1 remains binding for every other module.
+
+**Impact on Security:** Positive. The agent is read-only, takes no autonomous money action, and its
+deterministic checks have no prompt-injection surface.
+**Impact on Performance:** Positive. In-process SQL rollups + config introspection, no model latency.
+**Impact on Cost:** Zero recurring.
+**Impact on Maintenance:** +1 ADR, +`billing_agent.py` + `new_billing_agent_routes.py`. No new dependency.
+
+**Owner sign-off:** the same standing call as AI-SOC/Enterprise ("use your experience, do it without ADK").
+Scope of exemption: the Billing Agent oversight service only. §0.1 remains binding elsewhere.

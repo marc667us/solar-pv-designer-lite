@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Billing Agent — Admin{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:960px">
+
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h3 class="fw-black mb-0"><i class="bi bi-robot me-2" style="color:#a78bfa"></i>{{ agent['agent_name'] }}</h3>
+      <p class="text-muted mb-0">{{ agent['agent_role'] }}</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/disputes" class="btn btn-sm btn-outline-warning">Disputes</a>
+      <a href="/admin/billing-agent" class="btn btn-sm btn-outline-light">↻ Re-run oversight</a>
+    </div>
+  </div>
+
+  {% set st = report['overall_status'] %}
+  {% set badge = 'bg-success' if st=='ok' else ('bg-warning text-dark' if st in ['warn','unknown'] else 'bg-danger') %}
+
+  <!-- headline -->
+  <div class="solar-card p-4 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div>
+      <div class="text-muted" style="font-size:12px">Overall billing health</div>
+      <div class="d-flex align-items-center gap-3 mt-1">
+        <span class="badge {{ badge }}" style="font-size:15px;padding:8px 14px">{{ st|upper }}</span>
+        <span class="fw-black" style="font-size:28px">{{ report['score'] }}<span style="font-size:16px">/100</span></span>
+      </div>
+    </div>
+    <div class="text-muted" style="font-size:12px">
+      Generated {{ report['generated_at'] }}<br>
+      Read-only oversight — the agent flags &amp; reports; it takes no money action.
+    </div>
+  </div>
+
+  <!-- skills / checks -->
+  <div class="solar-card p-4 mb-4">
+    <h5 class="fw-bold mb-3">Oversight skills</h5>
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr><th style="width:60px">Status</th><th>Skill</th><th>Finding</th></tr></thead>
+        <tbody>
+        {% for s in report['skills'] %}
+          {% set sb = 'bg-success' if s['status']=='ok' else ('bg-warning text-dark' if s['status'] in ['warn','unknown'] else 'bg-danger') %}
+          <tr>
+            <td><span class="badge {{ sb }}">{{ s['status']|upper }}</span></td>
+            <td class="fw-bold">{{ s['title'] }}</td>
+            <td style="font-size:13px">{{ s['detail'] }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- agent card -->
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="solar-card p-4 h-100">
+        <h6 class="fw-bold text-muted">Agent</h6>
+        <div style="font-size:13px">
+          <div><span class="text-muted">ID:</span> {{ agent['agent_id'] }}</div>
+          <div><span class="text-muted">Role:</span> {{ agent['agent_role'] }}</div>
+          <div class="mt-2"><span class="text-muted">Data scope:</span>
+            {% for d in agent['allowed_data_scope'] %}<span class="badge bg-dark border me-1">{{ d }}</span>{% endfor %}
+          </div>
+          <div class="mt-2"><span class="text-muted">Tools:</span>
+            {% for t in agent['allowed_tools'] %}<span class="badge bg-dark border me-1">{{ t }}</span>{% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="solar-card p-4 h-100" style="border-color:rgba(245,158,11,.3)">
+        <h6 class="fw-bold" style="color:#f59e0b"><i class="bi bi-shield-lock me-1"></i>Human approval required</h6>
+        <p class="text-muted mb-2" style="font-size:12px">The agent is an overseer, not an actor. It never performs these on its own (§14):</p>
+        <div>
+          {% for a in agent['approval_required_actions'] %}
+          <span class="badge bg-dark border me-1 mb-1">{{ a|replace('_',' ') }}</span>
+          {% endfor %}
+        </div>
+        <p class="text-muted mt-3 mb-0" style="font-size:12px">
+          Refunds &amp; customer replies are made by a human in <a href="/admin/disputes">Disputes</a>;
+          terms/prices are changed in config.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

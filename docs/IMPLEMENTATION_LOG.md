@@ -2567,3 +2567,14 @@ Security Changes: reconciliation watch prints COUNTS/aggregates only (Actions lo
 What Was Completed: daily reconciliation + dispute-aging + evidence-health watch; CDC-on-payments migration + behavioural rehearsal. Codex APPROVE (no findings; residual risk = CDC trigger is on the payment path, hence dry-run gate).
 Known Risks: applying 040 puts a trigger on every payment write; only apply after reading the rehearsal output.
 Next Recommended Step: run the watch + the 040 dry-run against live; owner decides on APPLY_040. Then the slice-1 Paystack /verify dedupe follow-up.
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: Billing Agent -- deterministic payment-oversight service | Status: shipped
+Objective: an agent that oversees the payment system, enforces terms, protects the payment workflow app-side, and checks Stripe compliance.
+Files Changed: billing_agent.py (NEW: AGENT metadata + 7 read-only skills + run_oversight); new_billing_agent_routes.py (NEW: GET /admin/billing-agent, boot-resilient); templates/admin_billing_agent.html (NEW); templates/admin.html (+tile); wsgi.py (register); docs/ARCHITECTURE_DECISIONS.md (ADR-0009 -- no-ADK exemption, AI-SOC precedent); test_billing_agent.py (NEW, 10 tests).
+Governance: read-only overseer (SELECT/introspection/env only). approval_required_actions = [issue_refund, email_customer, modify_terms, modify_prices] -- the agent FLAGS and REPORTS, humans act (§14). ADR-0009 documents the §0.1 exemption (deterministic Python, no ADK -- owner said no ADK this session + no working Gemini key).
+Skills: idempotency_guard (unique index + 0 dup refs), evidence_capture (payment_events), webhook_protection (secrets set y/n only), terms_published (routes), dispute_sla (aging >7d), stripe_compliance (sig verify + NO card columns/PCI + idempotency + dispute route + receipts), workflow_protection (webhook+upgrade routes). run_oversight -> health report (overall = worst status, score = %ok).
+Tests Added: 10 (all-green, dup fail, missing-terms fail, missing-secret warn, aging fail, missing-index warn, PCI card-col fail, forbidden-actions declared, missing-endpoint fail, DB-error-degrades-to-unknown).
+What Was Completed: Codex APPROVE (re-review, after 1 HIGH-ish DB-misreport + 2 robustness findings fixed).
+Known Risks: none new. Reads env booleans only (no secret values), admin-gated, no 500 on DB failure.
+Next Recommended Step: owner to APPLY migrations 039/040; Paystack /verify dedupe follow-up.

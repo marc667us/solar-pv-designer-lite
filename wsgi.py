@@ -253,5 +253,28 @@ except Exception as _e:  # pragma: no cover - boot resilience path
         "Billing center failed to register (app still serving): %s", _e
     )
 
+# --- Billing Agent (payment oversight service, ADR-0009) ----------------------
+# GET /admin/billing-agent -- deterministic, read-only oversight of the payment
+# system (idempotency, evidence, webhook protection, terms published, dispute
+# SLA, Stripe compliance, workflow integrity). Boot-resilient; the agent takes
+# no money action (it flags and reports).
+try:
+    import os as _os_ba
+    from new_billing_agent_routes import register_billing_agent
+    import web_app as _wa_ba
+
+    register_billing_agent(
+        app,
+        admin_required=_wa_ba.admin_required,
+        get_db=_wa_ba.get_db,
+        current_user=_wa_ba.current_user,
+        is_postgres=lambda: bool(_os_ba.environ.get("DATABASE_URL")),
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Billing Agent surface failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()
