@@ -61,9 +61,20 @@
   "feedback": {
     "count": 0
   },
-  "last_poll_utc": "2026-07-25T17:45:59.883045+00:00",
+  "last_poll_utc": "2026-07-25T17:51:16.701271+00:00",
   "security_audit": {
-    "error": "HTTP 405"
+    "admin_users": 2,
+    "anthropic_key_set": false,
+    "axigen_configured": false,
+    "brevo_key_set": true,
+    "disabled_accounts": 0,
+    "failed_logins_24h": 0,
+    "paystack_key_set": true,
+    "recent_payments": 1,
+    "resend_key_set": false,
+    "secret_key_set": true,
+    "status": "pass",
+    "total_users": 7
   },
   "tickets": {
     "count": 0
