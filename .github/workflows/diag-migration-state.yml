@@ -135,6 +135,32 @@ jobs:
             echo "migration 021: NOT_APPLIED ($PENDING fk_* constraints still NOT VALID)"
           fi
 
+      - name: Enterprise module -- are the authorisation link tables populated?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+          # COUNTS ONLY -- never a row. `link_sponsor_user()` has no caller outside tests
+          # (no route, no UI), so if this table is empty the level-3 sponsor approval tier
+          # cannot fire at all: sponsor_inbox() and _sponsor_institution_for() both return
+          # early on an empty result. Same shape as register item A8.
+          echo "=== row counts (counts only, no data) ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT 'enterprise_sponsor_users', COUNT(*) FROM enterprise_sponsor_users
+            UNION ALL SELECT 'enterprise_applications', COUNT(*) FROM enterprise_applications
+            UNION ALL SELECT 'enterprise_programme_registry', COUNT(*) FROM enterprise_programme_registry
+            UNION ALL SELECT 'enterprise_role_assignments', COUNT(*) FROM enterprise_role_assignments
+            UNION ALL SELECT 'enterprise_tenants', COUNT(*) FROM enterprise_tenants;"
+          echo ""
+          echo "=== verdict ==="
+          N=$("$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM enterprise_sponsor_users;")
+          if [ "$N" = "0" ]; then
+            echo "enterprise_sponsor_users is EMPTY -> level-3 sponsor approval CANNOT fire."
+          else
+            echo "enterprise_sponsor_users has $N row(s) -- inserted out-of-band (no app path writes it)."
+          fi
+
       - name: RLS FORCE state (register item A6, same 'unverified' class)
         env:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
