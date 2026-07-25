@@ -112,12 +112,32 @@ def explain(check_id: str, status: str, detail: str = "") -> Explanation:
     if handler:
         return handler(raw, detail)
 
-    # 4. UNKNOWN -- say so rather than invent a diagnosis
+    # 4. UNKNOWN -- say so rather than invent a diagnosis.
+    #
+    # The echoed status is SANITISED first. `_status_of` falls back to the raw response BODY
+    # when a check does not return JSON (an HTML error page, a login redirect), so `status`
+    # here can be up to 200 characters of arbitrary markup. That text is not confined to the
+    # admin page any more: beta-monitor persists explanations to data/response_state.json,
+    # which is committed to a PUBLIC repo, and emails them. An error page can carry internal
+    # paths or stack detail, so it must never be echoed verbatim into either.
     return Explanation(
         severity=WARN if raw not in ("error", "fail", "failed") else ERROR,
-        plain=(f"This check reported '{status}'. There is no plain-English explanation for "
-               f"'{check_id}' yet, so treat the raw result as the source of truth."),
+        plain=(f"This check reported '{_safe_status(status)}'. There is no plain-English "
+               f"explanation for '{check_id}' yet, so treat the raw result as the source "
+               f"of truth."),
         manual="Ask for this check to be explained if you hit it often.")
+
+
+def _safe_status(status: str) -> str:
+    """A status word safe to echo into a public file or an email.
+
+    Keeps a short, single-line, markup-free fragment. A real status is one word, so anything
+    long enough to be truncated here was never a status -- it was a response body.
+    """
+    s = " ".join(str(status or "").split())          # collapse newlines/tabs
+    if "<" in s or ">" in s:                          # an HTML page, not a status
+        return "an unrecognised (non-JSON) response"
+    return (s[:40] + "...") if len(s) > 40 else (s or "empty")
 
 
 def _ok_sentence(service: str) -> str:

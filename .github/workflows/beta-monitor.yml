@@ -212,6 +212,44 @@ jobs:
               except Exception as e:
                   security[alias] = {"error": str(e)[:120]}
 
+          # ---------- Ops Center sweep ----------
+          # Runs every /admin/ops/* check and returns each one with a SEVERITY decided by
+          # ops_support.py (ok / info / warn / error). Nothing read this on a schedule
+          # before, which is why the Email and Payments tiles could sit unresolved and the
+          # brute-force detector could stay blind for 45 days -- all of it was visible on a
+          # page nobody had reason to open.
+          ops_sweep = {}
+          try:
+              osr = s.get(BASE + "/admin/ops/support/sweep", timeout=60)
+              if osr.status_code != 200:
+                  ops_sweep = {"error": f"HTTP {osr.status_code}"}
+              else:
+                  rows = (osr.json() or {}).get("results") or []
+                  for row in rows:
+                      ops_sweep[row.get("id", "?")] = {
+                          "severity": row.get("severity"),
+                          "label":    row.get("label"),
+                          "plain":    (row.get("plain") or "")[:200],
+                      }
+          except Exception as e:
+              ops_sweep = {"error": str(e)[:120]}
+
+          # MAKE BLINDNESS LOUD. A probe that silently returns nothing is
+          # indistinguishable from "all clear" -- exactly how the brute-force detector
+          # read as healthy for 45 days. If this cannot be collected, say so every run.
+          if "error" in ops_sweep or not ops_sweep:
+              print(f"::warning::ops sweep UNREADABLE - the Ops Center health checks were "
+                    f"not collected this run (got: {str(ops_sweep)[:200]})")
+          else:
+              _sev = {}
+              for cid, row in ops_sweep.items():
+                  _sev.setdefault(row.get("severity"), []).append(cid)
+              print("ops sweep: " + ", ".join(f"{k}={len(v)}" for k, v in sorted(_sev.items())))
+              # WARN is logged, not alerted -- see this patch's docstring on alert fatigue.
+              for cid in _sev.get("warn", []):
+                  print(f"::warning::ops check '{cid}' is degraded: "
+                        f"{ops_sweep[cid].get('plain', '')[:160]}")
+
           # ---------- Diff against prior state ----------
           new_alerts = []
           for key in probes:
@@ -241,6 +279,23 @@ jobs:
           # First observation of failed_logins gets logged but no alert
           # (no baseline to compare against).
 
+          # Ops Center severity transitions. Only ERROR alerts, and only when a check
+          # NEWLY enters it: this poller emails on every alert at a 30-minute cadence, so
+          # re-alerting a standing fault would send 48 mails a day and get the address
+          # filtered. INFO (absent by design -- Redis, queue) never alerts at all.
+          prev_sweep = state.get("ops_sweep", {}) or {}
+          if isinstance(ops_sweep, dict) and "error" not in ops_sweep:
+              for cid, row in ops_sweep.items():
+                  was = (prev_sweep.get(cid) or {}).get("severity")
+                  now = row.get("severity")
+                  if now == "error" and was != "error":
+                      new_alerts.append(
+                          f"OPS: '{row.get('label') or cid}' is FAILING - "
+                          f"{row.get('plain', '')[:160]}"
+                      )
+                  elif was == "error" and now in ("ok", "info"):
+                      print(f"ops check '{cid}' recovered ({was} -> {now})")
+
           # Active sessions count change — sudden jump = suspicious
           ses = security.get("active_sessions", {}) or {}
           ses_count = ses.get("count") if isinstance(ses, dict) else None
@@ -256,6 +311,18 @@ jobs:
           new_state = {**observations}
           new_state["security_audit"]    = sa
           new_state["active_sessions"]   = ses
+          # PUBLIC FILE -- severity and label only. `plain` is free text and, for a
+          # check with no handler, can contain the raw response BODY (see
+          # ops_support._safe_status). data/response_state.json is committed to a public
+          # repo every 30 minutes, so the free text simply does not go in it. The alert
+          # email, which is private, still carries the full explanation.
+          if isinstance(ops_sweep, dict) and "error" not in ops_sweep:
+              _public_sweep = {cid: {"severity": row.get("severity"),
+                                     "label":    row.get("label")}
+                               for cid, row in ops_sweep.items()}
+          else:
+              _public_sweep = ops_sweep
+          new_state["ops_sweep"]         = _public_sweep
           new_state["last_poll_utc"]     = datetime.now(timezone.utc).isoformat()
           new_state["alerts_this_poll"]  = new_alerts
 

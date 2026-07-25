@@ -16,6 +16,7 @@ check happened to return.
 import pytest
 
 import ops_support as ops
+import new_ops_support_routes as _routes
 
 # IMPORTED AT MODULE SCOPE, ON PURPOSE. `wsgi` registers the support routes onto the shared
 # Flask app, and Flask refuses to add a route once that app has served its first request. All
@@ -405,3 +406,45 @@ class TestTheEmailAndPaymentsTilesHaveARealCheck:
                     "/admin/ops/support/sweep").get_json()["results"]}
         assert "ping/payments" in rows
         assert rows["ping/payments"]["plain"]
+
+
+class TestExplanationsAreSafeToPublish:
+    """An explanation is no longer confined to the admin page.
+
+    beta-monitor persists check results to data/response_state.json -- committed to a PUBLIC
+    repo every 30 minutes -- and emails them. That changed the threat model. `_run_check`
+    falls back to the raw response BODY when a check does not return JSON (an HTML error
+    page, a login redirect); `_status_of` hands that body back as the `status`; and the
+    UNKNOWN branch echoed it verbatim. `ping/redis` and `ping/queue` have no handler in
+    _BROKEN, so both reached that branch with a real response body in hand.
+
+    Codex reviewed this exact question -- "could any check's output carry a secret, a token,
+    or an internal path into that public file?" -- and answered CONFIRMED-safe. It was not.
+    These tests fail against the pre-fix code.
+    """
+
+    # Built by concatenation on purpose: no escape sequences to be mangled in transit.
+    RAW_BODY = ("<html><body>Traceback (most recent call last): "
+                "File /app/web_app.py line 42 in handler "
+                "internal-path-that-must-not-be-published</body></html>")
+
+    @pytest.mark.parametrize("check", [c[0] for c in _routes.SWEEP] + ["ping/brandnew"])
+    def test_no_check_echoes_a_raw_response_body(self, check):
+        """Every SWEEP check, plus a check with no handler at all -- the future-proofing
+        case, since a check added without an explanation is exactly how this arose.
+        """
+        plain = ops.explain(check, self.RAW_BODY).plain
+        assert "Traceback" not in plain
+        assert "/app/web_app.py" not in plain
+        assert "internal-path-that-must-not-be-published" not in plain
+        assert "<html" not in plain
+        assert "<body" not in plain
+
+    def test_a_real_status_word_is_still_shown(self):
+        """The sanitiser must not blind the operator to a genuine short status."""
+        assert "weird_state" in ops.explain("ping/brandnew", "weird_state").plain
+
+    def test_a_long_status_is_truncated_not_dumped(self):
+        plain = ops.explain("ping/brandnew", "x" * 500).plain
+        assert len(plain) < 300
+        assert "..." in plain
