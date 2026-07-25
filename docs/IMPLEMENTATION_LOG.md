@@ -2609,3 +2609,20 @@ Files: bot_defense.py (NEW: classify + is_sensitive + bot_events ledger); new_bo
 Design: FAIL-OPEN (never breaks auth/payments). Honeypot (hidden field) -> ALWAYS block (zero false positives). Automation-UA (curl/requests/scrapy/headless/...) -> MONITORED by default, blocks only when BOT_DEFENSE_ENFORCE=1 (protects our own crons which POST /login). Empty-UA -> flagged. Internal SolarPro-* UAs allow-listed. Webhooks (/paystack,/stripe) EXEMPT. Every decision recorded to bot_events (admin view + ready to feed the Billing Agent).
 Security (Codex-gated): Codex APPROVE (no blocking findings) -- fail-open, conservative default (only honeypot 403s), webhooks exempt, honeypot properly hidden, no normal-browser path blocked. 14 tests.
 Next: after reviewing /admin/bot-defense for a few days with no legit tool caught, set Render BOT_DEFENSE_ENFORCE=1 to also block automation-UA. (rotate-admin-password smoke test uses curl -> would then need -A "SolarPro-Rotate/1.0".)
+
+# Implementation Log Entry
+Date: 2026-07-24 | Task: PWA in-app "Install app" banner | Status: SHIPPED + VERIFIED LIVE
+Objective: Prompt visitors to install SolarPro to their home screen (foundation for Play/Apple store).
+Files Changed: templates/base.html (+87 lines; dismissible install banner + prompt controller).
+Database Changes: none. API Changes: none (client-side only).
+Frontend Changes: bottom-fixed banner; Android/desktop Chrome capture beforeinstallprompt -> Install
+  button calls deferred.prompt(); iOS Safari (no beforeinstallprompt) shows Share->Add-to-Home hint;
+  dismissal remembered in localStorage (pwa_install_dismissed_v1); hidden when standalone/installed.
+Security Changes: none. All banner text static (no XSS surface). Suppressed on auth/payment routes.
+Tests Added: Jinja parse check; live smoke (manifest/icon/sw 200, /login 200, guard present).
+Documentation Updated: this log; memory session file.
+What Was Completed: banner live at commit f19de13; Codex reviewed (1 HIGH fixed: banner could overlap
+  login/payment forms on mobile -> added isSensitiveRoute() gate on show()) then APPROVED.
+What Remains: Google Play TWA (Bubblewrap) + Apple (Capacitor) store submissions (operator-side).
+Known Risks: none material; fail-safe (unsupported browsers just never show the banner).
+Next Recommended Step: Bubblewrap TWA build for Play Store when owner wants store distribution.
