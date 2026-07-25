@@ -88,14 +88,71 @@ def redact_payment_payload(obj) -> str:
     return s[:_MAX_PAYLOAD_CHARS]
 
 
-def ensure_payment_integrity_schema(conn, is_postgres: bool = False) -> None:
+def _run_isolated(connect, work):
+    """Run `work(conn)` on a connection this module OPENS AND CLOSES ITSELF.
+
+    THE HAZARD THIS EXISTS FOR. Both public functions below historically took a
+    caller-supplied `conn`, so connection isolation was enforced by CALLERS
+    (Codex finding C3, "works today, fragile for future callers"). On Postgres
+    that is not a style question -- it is a money bug waiting for its second
+    caller. A failed statement aborts the WHOLE transaction, and psycopg2 then
+    rejects every later statement on that connection with InFailedSqlTransaction.
+    So a swallowed evidence-logging error does NOT contain the damage: the
+    caller's payment INSERT, on the same connection, fails afterwards. The
+    "NEVER raises" contract reads like a guarantee of safety and is not one when
+    the connection is shared.
+
+    Passing `connect` (a factory such as the app's `get_db`) moves that
+    guarantee into this module: the evidence write lands on its own connection
+    and its own transaction, so it cannot poison the caller's.
+
+    THE CONTRACT: `connect` returns a NEW connection which this module then OWNS and
+    closes. It is not a way to hand in a shared one -- pass `conn=` for that.
+
+    AND THE CLOSE IS EXPLICIT, which is the whole subtlety here (Codex HIGH). A
+    sqlite3/psycopg2 connection implements the context-manager protocol for TRANSACTION
+    scope: `with conn:` commits or rolls back and does NOT close the connection.
+    `get_db()` hands back exactly such a raw connection, so `with ctx as own:` alone
+    would leave every evidence write's connection open. CPython's refcounting happens to
+    reclaim it once `ctx` falls out of scope -- which is why the app's existing
+    `with get_db() as c:` sites survive -- but an exception traceback keeps the frame
+    (and therefore `ctx`) alive, and refcount timing is not a resource policy. Close it.
+    """
+    ctx = connect()
+    try:
+        if hasattr(ctx, "__enter__"):
+            # Transaction scope only -- see above. Still needs the close below.
+            with ctx as own:
+                return work(own)
+        return work(ctx)
+    finally:
+        # A context-manager WRAPPER (e.g. @contextlib.contextmanager) has no close(),
+        # and its __exit__ has already done the cleanup -- getattr skips it correctly.
+        _close = getattr(ctx, "close", None)
+        if callable(_close):
+            try:
+                _close()
+            except Exception:
+                pass
+
+
+def ensure_payment_integrity_schema(conn=None, is_postgres: bool = False,
+                                    *, connect=None) -> None:
     """Create the evidence ledger + the idempotency index, idempotently.
 
-    Input:  an open DB connection (the app's get_db() wrapper) and whether the
-            backend is Postgres. Output: none -- side effect is DDL.
+    Input:  EITHER `connect` -- a connection factory (e.g. the app's `get_db`),
+            which is the SAFE form: this function then opens and closes its own
+            connection, so failed DDL cannot abort a caller's transaction --
+            OR a live `conn`, supported for back-compat, in which case the
+            CALLER owns isolation (see `_run_isolated` for why that matters on
+            Postgres). Plus whether the backend is Postgres.
+    Output: none -- side effect is DDL.
 
     Safe to call on every cold start: every statement is IF NOT EXISTS.
     """
+    if connect is not None:
+        return _run_isolated(
+            connect, lambda c: ensure_payment_integrity_schema(c, is_postgres))
     if is_postgres:
         conn.execute(
             """
@@ -155,16 +212,36 @@ def ensure_payment_integrity_schema(conn, is_postgres: bool = False) -> None:
         pass
 
 
-def record_payment_event(conn, *, reference="", gateway="", event_type="",
-                         user_id=None, amount_usd=0, signature_verified=False,
-                         client_ip="", payload=None) -> None:
+def record_payment_event(conn=None, *, connect=None, reference="", gateway="",
+                         event_type="", user_id=None, amount_usd=0,
+                         signature_verified=False, client_ip="",
+                         payload=None) -> None:
     """Append one row to the evidence ledger. NEVER raises.
 
     Evidence collection is best-effort: a failure to log evidence must never
     turn a good payment into a failed one. Inputs mirror the columns; `payload`
     is redacted + JSON-encoded here. `created_at` is a Python-computed UTC
     string (never datetime('now'), which is SQLite-only).
+
+    PREFER `connect=get_db` OVER `conn=<live connection>`. "Never raises" is
+    only half the guarantee: on Postgres a failed INSERT aborts the surrounding
+    transaction, so swallowing the exception still leaves a SHARED connection
+    poisoned and the caller's payment write fails afterwards. Passing the
+    factory makes this function open its own connection, which is the only form
+    where "cannot affect the payment" is actually true. See `_run_isolated`.
     """
+    if connect is not None:
+        # Isolated form: the write lands on its own connection/transaction, and
+        # _run_isolated itself is inside this function's try, so a failure to
+        # even OPEN a connection is swallowed like any other evidence failure.
+        try:
+            return _run_isolated(connect, lambda c: record_payment_event(
+                c, reference=reference, gateway=gateway, event_type=event_type,
+                user_id=user_id, amount_usd=amount_usd,
+                signature_verified=signature_verified, client_ip=client_ip,
+                payload=payload))
+        except Exception:
+            return None
     try:
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(

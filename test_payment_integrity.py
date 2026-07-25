@@ -125,3 +125,164 @@ def test_schema_is_idempotent(conn):
     # Calling twice must not raise.
     pi.ensure_payment_integrity_schema(conn, is_postgres=False)
     pi.ensure_payment_integrity_schema(conn, is_postgres=False)
+
+
+# ── connection isolation (Codex C3) ─────────────────────────────────────────
+
+class TestConnectionIsolation:
+    """C3: isolation used to be enforced by CALLERS, not by this module.
+
+    On Postgres that is not a style question. A failed statement aborts the whole
+    transaction and psycopg2 then rejects every later statement on that connection with
+    InFailedSqlTransaction. So "record_payment_event never raises" did NOT mean "cannot
+    affect the payment": a swallowed evidence error on a SHARED connection still killed
+    the caller's payment write that came afterwards.
+
+    `connect=` moves the guarantee into the module. These tests assert the property that
+    matters -- the caller's connection is untouched -- rather than the implementation.
+    """
+
+    class _PoisonOnEvidence:
+        """Stands in for psycopg2's aborted-transaction behaviour.
+
+        Any failed statement 'poisons' the connection, and every later statement on it
+        raises -- which is exactly how a shared connection turns a best-effort evidence
+        write into a failed payment.
+        """
+
+        def __init__(self):
+            self.poisoned = False
+            self.statements = []
+
+        def execute(self, sql, params=None):
+            if self.poisoned:
+                raise RuntimeError("InFailedSqlTransaction: transaction is aborted")
+            if "INSERT INTO payment_events" in sql:
+                self.poisoned = True
+                raise RuntimeError("evidence insert failed")
+            self.statements.append(sql)
+            return self
+
+        def close(self):
+            pass
+
+    def test_shared_connection_is_how_a_payment_used_to_die(self):
+        """Documents the hazard the isolated form exists to prevent.
+
+        Not a regression test for our code -- it pins the BEHAVIOUR OF THE DATABASE that
+        makes sharing unsafe, so nobody 'simplifies' the factory away later.
+        """
+        shared = self._PoisonOnEvidence()
+        pi.record_payment_event(shared, reference="r1", event_type="payment_recorded")
+        assert shared.poisoned, "the failed evidence write aborted the transaction"
+        with pytest.raises(RuntimeError):
+            shared.execute("INSERT INTO payments (user_id) VALUES (1)")
+
+    def test_isolated_form_leaves_the_callers_connection_untouched(self):
+        """The whole point: evidence failure must not reach the payment connection."""
+        payment_conn = self._PoisonOnEvidence()
+        broken = self._PoisonOnEvidence()
+        pi.record_payment_event(connect=lambda: broken,
+                                reference="r2", event_type="payment_recorded")
+        assert broken.poisoned                      # the evidence connection took the hit
+        assert not payment_conn.poisoned            # the payment connection did not
+        payment_conn.execute("INSERT INTO payments (user_id) VALUES (1)")  # still usable
+
+    class _OwnedConn:
+        """Stands in for a connection the factory freshly opened.
+
+        `connect` means "here is a NEW connection, you own it" -- the module closes what
+        it opens. A test cannot hand over the shared fixture connection and then keep
+        querying it, so this records the close rather than performing it. No __enter__:
+        sqlite3/psycopg2 connections have one, but exercising the plain branch here keeps
+        the two paths independently covered (the context-manager path has its own test).
+        """
+
+        def __init__(self, real):
+            self._real = real
+            self.closed = False
+
+        def execute(self, *a, **k):
+            return self._real.execute(*a, **k)
+
+        def close(self):
+            self.closed = True
+
+    def test_isolated_form_actually_writes_the_row(self, conn):
+        """Isolation must not be achieved by quietly not writing anything."""
+        owned = self._OwnedConn(conn)
+        pi.record_payment_event(connect=lambda: owned, reference="r3",
+                                gateway="paystack", event_type="payment_recorded",
+                                user_id=5, amount_usd=49)
+        row = conn.execute(
+            "SELECT reference, gateway, event_type, user_id FROM payment_events "
+            "WHERE reference='r3'").fetchone()
+        assert row == ("r3", "paystack", "payment_recorded", 5)
+
+    def test_the_module_closes_the_connection_it_opened(self, conn):
+        """The guarantee Codex's HIGH finding was about.
+
+        A sqlite3/psycopg2 connection's `with` block manages the TRANSACTION and does not
+        close the connection, so relying on the with-block alone leaked one connection per
+        evidence write. CPython refcounting masked it; that is not a resource policy.
+        """
+        owned = self._OwnedConn(conn)
+        pi.record_payment_event(connect=lambda: owned, reference="r7",
+                                event_type="payment_recorded")
+        assert owned.closed, "the module must close the connection it opened"
+
+    def test_the_connection_is_closed_even_when_the_write_explodes(self, conn):
+        """A leak on the failure path is the one that actually accumulates."""
+        class Boom(self._OwnedConn):
+            def execute(self, *a, **k):
+                raise RuntimeError("db gone")
+
+        owned = Boom(conn)
+        pi.record_payment_event(connect=lambda: owned, reference="r8",
+                                event_type="payment_recorded")
+        assert owned.closed, "failure path must still release the connection"
+
+    def test_a_factory_that_itself_explodes_is_still_swallowed(self):
+        """Evidence logging cannot break a payment -- including when the DB is so far
+        gone that opening a connection fails.
+        """
+        def boom():
+            raise RuntimeError("cannot connect")
+        pi.record_payment_event(connect=boom, reference="r4", event_type="x")
+
+    def test_schema_helper_accepts_a_factory_too(self, conn):
+        """Failed DDL aborts a Postgres transaction just as an INSERT does."""
+        owned = self._OwnedConn(conn)
+        pi.ensure_payment_integrity_schema(connect=lambda: owned, is_postgres=False)
+        conn.execute("SELECT 1 FROM payment_events LIMIT 1")
+        assert owned.closed
+
+    def test_context_manager_factories_are_supported(self, conn):
+        """get_db() is a context manager in this app -- the common real-world case."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def factory():
+            yield conn
+
+        pi.record_payment_event(connect=factory, reference="r5",
+                                event_type="payment_recorded")
+        assert conn.execute(
+            "SELECT COUNT(*) FROM payment_events WHERE reference='r5'").fetchone()[0] == 1
+
+    def test_the_legacy_conn_form_still_works(self, conn):
+        """Back-compat: the live caller in web_app.py passes a conn and must keep working."""
+        pi.record_payment_event(conn, reference="r6", event_type="payment_recorded")
+        assert conn.execute(
+            "SELECT COUNT(*) FROM payment_events WHERE reference='r6'").fetchone()[0] == 1
+
+    def test_a_caller_supplied_connection_is_NEVER_closed(self, conn):
+        """The severe inverse of the leak fix.
+
+        The module closes what IT opens. Closing a connection the caller still owns would
+        break the payment write that follows on the live path (web_app._record_payment
+        passes its connection positionally). Ownership follows which door it came in.
+        """
+        owned = self._OwnedConn(conn)
+        pi.record_payment_event(owned, reference="r9", event_type="payment_recorded")
+        assert not owned.closed, "must not close a connection it did not open"
