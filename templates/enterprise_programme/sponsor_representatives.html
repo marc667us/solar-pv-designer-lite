@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Sponsor Signatories · Enterprise{% endblock %}
+
+{#
+  Who may sign for a funding institution.
+
+  This screen exists because level-3 (sponsor) approval could not fire at all without it:
+  `enterprise_sponsor_users` was empty on live and nothing in the app could write to it, so
+  applications would reach the sponsor step and stall there forever.
+
+  Platform-admin only, deliberately. A signing right is NOT tenant-scoped -- its holder can
+  approve applications belonging to other organisations -- so it must not be grantable by the
+  organisation that benefits from it.
+#}
+
+{% block content %}
+<div class="container py-4" style="max-width:1000px">
+
+  <div class="d-flex align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-pen me-2"></i>Sponsor Signatories</h3>
+    <span class="badge bg-danger ms-3">Platform admin</span>
+  </div>
+
+  <div class="alert alert-secondary small">
+    A signatory may <strong>approve applications belonging to other organisations</strong> on
+    behalf of the institution named here. That is why this page is admin-only and not part of
+    a programme's own settings — an organisation must not be able to appoint the person who
+    approves its own funding.
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} py-2">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="card mb-4">
+    <div class="card-header"><strong>Grant a signing right</strong></div>
+    <div class="card-body">
+      {% if not institutions %}
+        <p class="text-muted mb-0">
+          No <em>approved</em> funding institutions exist yet, so there is nothing to sign for.
+          Approve one in the funding registry first.
+        </p>
+      {% else %}
+        <form method="post" class="row g-2 align-items-end">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="grant">
+          <div class="col-md-5">
+            <label class="form-label small">Institution</label>
+            <select name="institution_id" class="form-select" required>
+              <option value="">Choose…</option>
+              {% for i in institutions %}
+                <option value="{{ i.institution_id }}">{{ i.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small">Person who may sign</label>
+            <select name="user_id" class="form-select" required>
+              <option value="">Choose…</option>
+              {% for u in users %}
+                <option value="{{ u.id }}">{{ u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100">Grant</button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><strong>Current signatories</strong></div>
+    <div class="card-body p-0">
+      {% if not links %}
+        <p class="text-muted p-3 mb-0">
+          Nobody can sign for any institution yet, so <strong>no application can pass the
+          sponsor step</strong>. Grant at least one signing right above.
+        </p>
+      {% else %}
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Institution</th><th>Signatory</th><th>Granted by</th><th>When</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in links %}
+                <tr>
+                  <td>{{ l.institution_id }}</td>
+                  <td>
+                    {# The user row may be gone; the link must still be visible so it can be removed. #}
+                    {{ l.username or ('user #' ~ l.user_id ~ ' (deleted)') }}
+                  </td>
+                  <td class="text-muted small">{{ l.added_by_user_id or '—' }}</td>
+                  <td class="text-muted small">{{ l.created_at or '—' }}</td>
+                  <td class="text-end">
+                    <form method="post" onsubmit="return confirm('Revoke this signing right?')">
+                      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="revoke">
+                      <input type="hidden" name="institution_id" value="{{ l.institution_id }}">
+                      <input type="hidden" name="user_id" value="{{ l.user_id }}">
+                      <button class="btn btn-sm btn-outline-danger">Revoke</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

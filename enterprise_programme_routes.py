@@ -31,6 +31,9 @@ guard the queue drainer skips.
 
 from __future__ import annotations
 
+import functools
+import json
+import logging
 import re
 
 from flask import (
@@ -84,13 +87,34 @@ def _field(row, key: str):
 
 
 def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
-                                  current_user):
+                                  current_user, admin_required=None):
     """Attach the enterprise module to an existing Flask app.
 
-    Input:  the app plus the four dependencies it needs from web_app (injected to avoid a
-            circular import).
+    Input:  the app plus the dependencies it needs from web_app (injected to avoid a
+            circular import). `admin_required` guards the one platform-wide surface
+            (sponsor signing rights); see the fail-closed note below.
     Output: none. Registers routes + a context processor.
     """
+
+    # OPTIONAL, AND FAIL-CLOSED, for two reasons that both bite.
+    #
+    # 1. wsgi.py wraps this whole registration in `try/except` and only LOGS on failure, so
+    #    a REQUIRED new kwarg would turn any caller mismatch into "the entire enterprise
+    #    module silently vanishes" -- a much worse outcome than the feature being absent.
+    #    Optional keeps every existing caller working untouched.
+    # 2. Defaulting to "no guard" would expose a surface that hands out approval authority
+    #    over other tenants' applications. A missing guard must DENY, and say so, not open.
+    if admin_required is None:
+        def _admin_required(fn):
+            @functools.wraps(fn)
+            def _denied(*a, **kw):
+                logging.getLogger(__name__).error(
+                    "enterprise: admin_required was not injected; refusing %s",
+                    getattr(fn, "__name__", "?"))
+                abort(403)
+            return _denied
+    else:
+        _admin_required = admin_required
 
     # Registration must stay SIDE-EFFECT FREE -- no DB touch here. Flask forbids adding
     # routes once the app has served a request, so registration happens at import time, and
@@ -2279,6 +2303,124 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 can_edit=rbac.has_permission(c, active, uid, "programme.edit",
                                              programme_id=programme_id),
             )
+
+    # WHO MAY SIGN FOR A SPONSOR -- the missing half of level-3 approval.
+    #
+    # THE DEFECT THIS CLOSES (found 2026-07-25 by reading the live DB, not the code):
+    # `enterprise_sponsor_users` was EMPTY on production and `link_sponsor_user()` had NO
+    # caller outside tests -- no route, no UI. Both readers hard-gate on it
+    # (`sponsor_inbox` and `_sponsor_institution_for` return early on an empty result), so
+    # the sponsor approval tier could never fire for anyone. Applications would reach
+    # level 3 and stall there permanently. Same shape as the programme-scoped role grant
+    # that also has no UI and is only ever inserted by tests.
+    #
+    # WHY PLATFORM-ADMIN AND NOT THE PROGRAMME OWNER. Signing authority for an institution
+    # is NOT tenant-scoped: `enterprise_sponsor_users` is deliberately platform-wide
+    # (migration 031 -- "the same bank may sponsor two ministries' programmes"). A holder
+    # can approve applications belonging to OTHER organisations. If a programme owner could
+    # add themselves as a representative of a bank their own programme names, they could
+    # self-approve their own level 3 -- a cross-tenant privilege escalation dressed up as a
+    # convenience. Admin-only is the conservative default; widening it later is additive,
+    # un-widening it after someone has used it is not.
+    @app.route("/enterprise/sponsors/representatives", methods=["GET", "POST"])
+    @login_required
+    @_admin_required
+    def enterprise_sponsor_representatives():
+        """List, grant and revoke the right to sign for a funding institution."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+
+            if request.method == "POST":
+                csrf_protect()
+                action = (request.form.get("action") or "").strip()
+                inst = (request.form.get("institution_id") or "").strip()
+                raw_user = (request.form.get("user_id") or "").strip()
+
+                # EXPLICIT DISPATCH. An unrecognised action must not fall through to the
+                # branch that HANDS OUT authority (Codex MED). `else: grant` is fail-open
+                # dispatch: a typo'd or crafted action would quietly grant. On an
+                # authorisation surface the default has to be "do nothing".
+                if action not in ("grant", "revoke"):
+                    flash("Unrecognised action.", "error")
+                    return redirect(url_for("enterprise_sponsor_representatives"))
+
+                try:
+                    target = int(raw_user)
+                except (TypeError, ValueError):
+                    flash("Pick a user.", "error")
+                    return redirect(url_for("enterprise_sponsor_representatives"))
+
+                # REVOKE IS VALIDATED DIFFERENTLY FROM GRANT, on purpose.
+                #
+                # A check that guards handing OUT authority must never block TAKING IT
+                # BACK. An institution can be de-approved AFTER a signing right was
+                # granted, and the sponsor authorisation path keys on
+                # `enterprise_sponsor_users` against the programme's NAMED sponsors -- not
+                # against current approval status -- so that right stays LIVE for every
+                # programme that already named the institution. Running the
+                # "is it approved?" test before the action branch therefore made the
+                # authority PERMANENT: the admin could see the row and never remove it.
+                # (Codex HIGH; the first version of this route had exactly that bug.)
+                #
+                # Removing authority can never escalate anything, so revoke asks only for
+                # a well-formed target. It deliberately does NOT require the user to still
+                # exist either -- a grant outlives a deleted account, which is precisely
+                # the dangling row the listing keeps visible so it CAN be cleaned up.
+                if action == "revoke":
+                    applications.unlink_sponsor_user(c, inst, target)
+                    _audit(c, uid, "sponsor_user_revoked", inst, target)
+                    flash("Signing right revoked.", "success")
+                    return redirect(url_for("enterprise_sponsor_representatives"))
+
+                # GRANT. institution_id is a free-text form field, so an unchecked one
+                # would let an admin mint a signing right for an institution that was
+                # never vetted -- or never existed.
+                approved = {s["institution_id"] for s in sponsors.approved_sponsors(c)}
+                if inst not in approved:
+                    flash("That is not an approved funding institution.", "error")
+                    return redirect(url_for("enterprise_sponsor_representatives"))
+                if not c.execute("SELECT 1 FROM users WHERE id=?",
+                                 (target,)).fetchone():
+                    flash("No such user.", "error")
+                    return redirect(url_for("enterprise_sponsor_representatives"))
+                applications.link_sponsor_user(c, inst, target, uid)
+                _audit(c, uid, "sponsor_user_linked", inst, target)
+                flash("Signing right granted.", "success")
+                return redirect(url_for("enterprise_sponsor_representatives"))
+
+            return render_template(
+                "enterprise_programme/sponsor_representatives.html",
+                institutions=sponsors.approved_sponsors(c),
+                links=applications.list_sponsor_users(c),
+                users=_active_users(c),
+            )
+
+    def _active_users(c):
+        """Candidate signatories. Platform-wide, because institutions are."""
+        try:
+            rows = c.execute(
+                "SELECT id, username FROM users ORDER BY username"
+            ).fetchall()
+        except Exception:
+            return []
+        return [{"id": r[0], "username": r[1]} for r in rows]
+
+    def _audit(c, actor_uid, action, institution_id, target_uid):
+        """Record every grant/revoke. Authority handed out with no trail is not governed.
+
+        Never raises: an audit failure must not undo a completed authorisation change --
+        it is logged evidence, not the source of truth.
+        """
+        try:
+            import web_app as _wa
+            _wa._write_audit_event(
+                action, user_id=actor_uid,
+                details=json.dumps({"institution_id": institution_id,
+                                    "target_user_id": target_uid}))
+        except Exception:
+            pass
 
     @app.route("/enterprise/programmes/<int:programme_id>/apply", methods=["GET", "POST"])
     @login_required

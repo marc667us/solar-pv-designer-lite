@@ -59,6 +59,11 @@ try:
         login_required=_wa.login_required,
         csrf_protect=_wa.csrf_protect,
         current_user=_wa.current_user,
+        # Guards ONE surface: who may sign for a funding institution. That right is
+        # platform-wide, not tenant-scoped, so it must not be grantable by the
+        # organisation whose applications the signatory would approve. The module
+        # fails CLOSED (403) if this is ever not passed.
+        admin_required=_wa.admin_required,
     )
 except Exception as _e:  # pragma: no cover - boot resilience path
     import logging

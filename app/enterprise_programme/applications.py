@@ -649,6 +649,46 @@ def link_sponsor_user(c, institution_id: str, user_id: int, added_by_user_id: in
     )
 
 
+def list_sponsor_users(c) -> list[dict]:
+    """Every institution -> user link, for the admin screen that manages them.
+
+    Output: [{institution_id, user_id, username, added_by_user_id, created_at}] ordered by
+    institution then username.
+
+    LEFT JOIN, not JOIN: a link whose user row has since been deleted must still be VISIBLE
+    so it can be removed. An inner join would hide exactly the stale grants an operator most
+    needs to see.
+    """
+    try:
+        rows = c.execute(
+            "SELECT su.institution_id, su.user_id, u.username, "
+            "       su.added_by_user_id, su.created_at "
+            "  FROM enterprise_sponsor_users su "
+            "  LEFT JOIN users u ON u.id = su.user_id "
+            " ORDER BY su.institution_id, u.username"
+        ).fetchall()
+    except Exception:
+        # The table is created by migration 031 / ensure_schema; an empty list is a truer
+        # answer than a 500 on a database where the module has never been used.
+        return []
+    return [{"institution_id": r[0], "user_id": r[1], "username": r[2],
+             "added_by_user_id": r[3], "created_at": r[4]} for r in rows]
+
+
+def unlink_sponsor_user(c, institution_id: str, user_id: int) -> None:
+    """Revoke one person's authority to sign for one institution.
+
+    The counterpart to link_sponsor_user. Granting approval authority with no way to take it
+    back is not an authorisation model -- a rep who changes job would keep signing rights
+    over other organisations' applications indefinitely.
+    """
+    c.execute(
+        "DELETE FROM enterprise_sponsor_users "
+        " WHERE institution_id=? AND user_id=?",
+        (institution_id, user_id),
+    )
+
+
 def _num(v):
     """A form field to a number, or None. A blank box is not a zero."""
     if v in (None, ""):
