@@ -1,34 +1,46 @@
-# Keep the SolarPro Keycloak service awake on Render free tier.
+# Alert if Keycloak is genuinely UNREACHABLE. (Warming is keep-warm.yml's job.)
 #
-# What it does:
-#   Hits the master-realm well-known endpoint every 10 minutes. Any 2xx
-#   response resets Render free's 15-min idle timer so the container
-#   does not get shut down between user logins. Failures are surfaced
-#   in the workflow run summary (non-2xx -> step exits non-zero ->
-#   GitHub email alert fires).
+# WHAT WAS WRONG (found 2026-07-25: 5 of 5 recent runs failing while KC answered 200
+# in 0.64 s from a browser):
 #
-# Why well-known and not /health/ready:
-#   * /health/ready is on a separate management port (9000) inside the
-#     container; on Render free the public URL only forwards the HTTP
-#     port. Hitting /realms/master/.well-known/openid-configuration is
-#     a real OIDC discovery call that exercises the JVM + DB.
-#   * The well-known doc is cached by KC for a short period, so the
-#     load on Postgres is negligible.
+#   curl --max-time 30
 #
-# Cost:
-#   * GH Actions free tier: 2000 min/mo. This workflow uses ~5s per
-#     run, 6 runs/hour, 24x7 -> ~720 min/mo. Well within the cap.
+# Keycloak runs on Render's free tier and cold-wakes in ~50 s. A 30-second cap cannot
+# survive that, so the ping aborted mid-wake and reported "HTTP 000 / Operation timed out
+# after 30002 ms". The workflow whose entire purpose was to prevent cold starts was
+# TIMING OUT ON THE COLD START IT EXISTED TO PREVENT -- and, having aborted, may not even
+# have completed the wake it triggered. It then emailed a failure every 10 minutes: 144
+# false alarms a day, which is how a real alert stops being read.
 #
-# Failure handling:
-#   If KEYCLOAK_ISSUER is unset (i.e. Deploy Keycloak workflow has not
-#   succeeded yet) the workflow exits cleanly with a no-op so it does
-#   not spam alerts before the first deploy.
+# WHY THIS IS NO LONGER A WARMER. keep-warm.yml already pings this exact service every
+# ~5 minutes with --max-time 90 and has been green throughout. Two keep-warms is one too
+# many, and the redundant one was the broken one. (keep-warm.yml absorbed the KC ping on
+# 2026-07-06 specifically to avoid a duplicate file; this workflow predates that and
+# quietly became redundant.)
+#
+# WHAT IT DOES INSTEAD -- the job keep-warm.yml canNOT do. keep-warm swallows failures
+# (`|| echo WARN`) and stays green on purpose: a warmer must not page anyone for a slow
+# wake. The cost is that nothing anywhere tells you if Keycloak is genuinely DOWN. This
+# does, and it distinguishes the two cases the old version conflated:
+#
+#   * SLOW (cold wake)  -> attempt 1 may time out; the retry lands warm  -> PASS
+#   * DOWN (real fault) -> both attempts fail                            -> FAIL, and the
+#                                                                          alert means something
+#
+# Cadence is 30 min, not 10: warming is handled elsewhere, so this only needs to catch a
+# sustained outage. Fewer runs, fewer Actions minutes, no duplicate load on a free instance.
+#
+# NOTE (2026-07-25): KEYCLOAK_ENABLED is currently EMPTY on Render -- the app runs legacy
+# auth and does not use KC at all, so a KC outage has no user impact today. This alert is
+# for when it is re-enabled. If Keycloak is retired for good, delete this file.
 
 name: Keycloak Keep-Alive
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Offset minutes: GitHub's free cron silently DROPS fires at :00/:30 under load
+    # (same reasoning documented in keep-warm.yml).
+    - cron: "13,43 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -37,24 +49,51 @@ permissions:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # 2 attempts x 90 s + 20 s backoff, with headroom.
+    timeout-minutes: 6
     env:
       KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
     steps:
-      - name: Ping well-known
+      - name: Ping well-known (retry once before crying wolf)
         run: |
-          set -e
-          if [ -z "$KEYCLOAK_ISSUER" ]; then
-            echo "KEYCLOAK_ISSUER not set yet -- skip"
+          set -u
+          if [ -z "${KEYCLOAK_ISSUER:-}" ]; then
+            echo "KEYCLOAK_ISSUER not set -- nothing to check, skipping."
             exit 0
           fi
-          # KEYCLOAK_ISSUER ends in /realms/solarpro; strip and hit master.
+          # KEYCLOAK_ISSUER ends in /realms/solarpro; strip to the base.
           BASE=$(echo "$KEYCLOAK_ISSUER" | sed 's|/realms/.*||')
           URL="${BASE}/realms/master/.well-known/openid-configuration"
-          echo "ping: $URL"
-          STATUS=$(curl -fSso /dev/null -w "%{http_code}" --max-time 30 "$URL" || true)
+          echo "target: $URL"
+
+          # --max-time 90 matches keep-warm.yml's proven value and covers a full ~50 s
+          # cold wake. Anything shorter measures Render's spin-up, not Keycloak's health.
+          # `|| echo "000 timeout"` keeps a curl failure from killing the step before the
+          # retry gets its turn.
+          attempt() {
+            curl -sS -o /dev/null -w "%{http_code} %{time_total}" --max-time 90 "$URL" 2>/dev/null \
+              || echo "000 timeout"
+          }
+
+          RESULT=$(attempt)
+          STATUS=$(echo "$RESULT" | cut -d' ' -f1)
+          ELAPSED=$(echo "$RESULT" | cut -d' ' -f2)
+          echo "attempt 1: HTTP $STATUS after ${ELAPSED}s"
+
+          # A first-attempt failure is AMBIGUOUS: it may itself have triggered the wake.
+          # Retrying is what separates "cold" from "down". The old version treated both as
+          # an outage, which is why it alerted 144 times a day and meant nothing.
           if [ "$STATUS" != "200" ]; then
-            echo "::error::keepalive ping failed: HTTP $STATUS"
+            echo "::notice::attempt 1 did not return 200 (HTTP $STATUS) -- likely a cold wake; retrying in 20s"
+            sleep 20
+            RESULT=$(attempt)
+            STATUS=$(echo "$RESULT" | cut -d' ' -f1)
+            ELAPSED=$(echo "$RESULT" | cut -d' ' -f2)
+            echo "attempt 2: HTTP $STATUS after ${ELAPSED}s"
+          fi
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Keycloak is UNREACHABLE -- 2 attempts at 90s each, last HTTP $STATUS. This is a real outage, not a cold start."
             exit 1
           fi
-          echo "OK ($STATUS)"
+          echo "OK: Keycloak reachable (HTTP $STATUS in ${ELAPSED}s)"
