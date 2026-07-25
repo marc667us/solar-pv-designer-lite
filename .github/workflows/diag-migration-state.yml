@@ -153,6 +153,14 @@ jobs:
             UNION ALL SELECT 'enterprise_role_assignments', COUNT(*) FROM enterprise_role_assignments
             UNION ALL SELECT 'enterprise_tenants', COUNT(*) FROM enterprise_tenants;"
           echo ""
+          echo "=== approved funding institutions (the only valid grant targets) ==="
+          # Names of vetted institutions are registry facts, not user data. No contact
+          # details, no financial terms -- just what a signing right could be granted FOR.
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT institution_id, name, status
+              FROM financial_institutions
+             ORDER BY status, name;" 2>/dev/null || echo "(financial_institutions not present)"
+          echo ""
           echo "=== verdict ==="
           N=$("$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM enterprise_sponsor_users;")
           if [ "$N" = "0" ]; then
