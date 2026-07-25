@@ -129,6 +129,9 @@ def _ok_sentence(service: str) -> str:
         "ai":       "An AI provider is configured and reachable.",
         "redis":    "Redis answered.",
         "queue":    "The background queue answered.",
+        "payments": "A payment gateway is configured, so checkout can run.",
+        # /admin/ops/email/status resolves to service "status" -- see the note on _BROKEN.
+        "status":   "Email is configured.",
     }.get(service, "This check passed.")
 
 
@@ -186,6 +189,15 @@ def _email(raw: str, detail: str) -> Explanation:
                 "Check the Brevo key is set and the sender address is verified."))
 
 
+def _payments(raw: str, detail: str) -> Explanation:
+    return Explanation(
+        ERROR,
+        "No payment gateway is configured, so checkout falls back to demo mode and no one "
+        "can actually pay. Browsing and design still work.",
+        manual=("Set PAYSTACK_SECRET_KEY (or STRIPE_SECRET_KEY) in the Render environment. "
+                "That is a deployment credential, so it cannot be set from this page."))
+
+
 _BROKEN: dict[str, Callable[[str, str], Explanation]] = {
     "database": _database,
     "ai": _ai,
@@ -193,6 +205,11 @@ _BROKEN: dict[str, Callable[[str, str], Explanation]] = {
     "backend": _backend,
     "storage": _storage,
     "email": _email,
+    "payments": _payments,
+    # `service` is the LAST path segment, so the check id "email/status" resolves to
+    # "status", not "email". Aliased rather than renamed so the existing check id keeps
+    # working. Do NOT add another "<something>/status" check without giving it its own id --
+    # it would silently inherit the email explanation.
     "status": _email,          # /admin/ops/email/status
 }
 

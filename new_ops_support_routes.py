@@ -37,6 +37,7 @@ SWEEP = (
     ("ping/redis",    "/admin/ops/ping/redis",    "Redis cache"),
     ("ping/queue",    "/admin/ops/ping/queue",    "Background queue"),
     ("email/status",  "/admin/ops/email/status",  "Email"),
+    ("ping/payments", "/admin/ops/ping/payments", "Payments"),
 )
 
 
@@ -122,6 +123,69 @@ def register_ops_support(app, *, admin_required, csrf_protect):
             "results": results,
             "fix_all": [{"id": f, "label": ops_support.FIXES[f].label}
                         for f in ops_support.fixable(explanations)],
+        })
+
+    # ---- honest tile checks: Email and Payments -------------------------------------
+    #
+    # Added because the badge grid had tiles for both and no endpoint behind either, so
+    # they never left their initial grey "checking" state. See this patch's docstring for
+    # why Email does NOT reuse /admin/ops/email/status (that route is a config dump and
+    # returns status "ok" unconditionally -- it can never go amber).
+    #
+    # Neither route contacts a provider. Reporting what is CONFIGURED is what a tile can
+    # honestly say without spending rate limit on every dashboard refresh. No key, key
+    # prefix, or secret material is returned by either.
+
+    def _env_set(name):
+        import os
+        return bool((os.environ.get(name) or "").strip())
+
+    @app.route("/admin/ops/ping/email", methods=["GET"])
+    @admin_required
+    def ops_ping_email():
+        """Is there a usable outbound email path configured?"""
+        import os
+        brevo = _env_set("BREVO_API_KEY")
+        axigen = (_env_set("AXIGEN_SERVER_URL") and _env_set("AXIGEN_USER")
+                  and _env_set("AXIGEN_PASSWORD"))
+        resend = (os.environ.get("RESEND_API_KEY") or "").strip().startswith("re_")
+        smtp = _env_set("SMTP_HOST") and _env_set("SMTP_USER") and _env_set("SMTP_PASS")
+        # SMTP does NOT count towards "usable": Render blocks outbound SMTP, so an
+        # SMTP-only deployment cannot actually deliver and must not show green.
+        usable = [n for n, ok in (("brevo", brevo), ("axigen", axigen),
+                                  ("resend", resend)) if ok]
+        return jsonify({
+            "status": "ok" if usable else "error",
+            "service": "email",
+            "usable_providers": usable,
+            "smtp_configured": smtp,
+            "message": ("Email can be sent via " + ", ".join(usable)) if usable else
+                       ("No HTTPS email provider is configured. Render blocks outbound "
+                        "SMTP, so SMTP alone cannot deliver."),
+        })
+
+    @app.route("/admin/ops/ping/payments", methods=["GET"])
+    @admin_required
+    def ops_ping_payments():
+        """Is a payment gateway configured?
+
+        Mirrors the app's OWN rule instead of inventing a stricter one: web_app.py falls
+        back to demo mode telling the user to set STRIPE_SECRET_KEY or PAYSTACK_SECRET_KEY,
+        so a gateway is usable when EITHER secret is present. PAYSTACK_PUBLIC_KEY is
+        client-side only -- reported, not required.
+        """
+        paystack = _env_set("PAYSTACK_SECRET_KEY")
+        stripe = _env_set("STRIPE_SECRET_KEY")
+        usable = [n for n, ok in (("paystack", paystack), ("stripe", stripe)) if ok]
+        return jsonify({
+            "status": "ok" if usable else "error",
+            "service": "payments",
+            "usable_gateways": usable,
+            "paystack_public_key_set": _env_set("PAYSTACK_PUBLIC_KEY"),
+            "stripe_webhook_secret_set": _env_set("STRIPE_WEBHOOK_SECRET"),
+            "message": ("Checkout can run via " + ", ".join(usable)) if usable else
+                       ("No payment gateway is configured; checkout falls back to demo "
+                        "mode."),
         })
 
     @app.route("/admin/ops/support/fix/<fix_id>", methods=["POST"])

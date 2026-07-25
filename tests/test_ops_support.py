@@ -290,3 +290,118 @@ class TestTheSupportSurfaceIsActuallyReachable:
 
         for needle in ("Technical support", "runSupportSweep", "runFixAll", "fixAllBtn"):
             assert needle in html, f"the Ops Center page is missing {needle!r}"
+
+
+class TestTheEmailAndPaymentsTilesHaveARealCheck:
+    """The Ops Center rendered EIGHT service tiles but only wired SEVEN endpoints, and the
+    two it skipped were Email and Payments. `refreshAllStatus()` iterates HEALTH_ENDPOINTS,
+    so both tiles sat on their initial grey "checking" badge forever -- indistinguishable
+    from still loading, on every visit, for every operator.
+
+    The rule these tests protect: a tile must be able to go AMBER. Pointing Email at the
+    existing /admin/ops/email/status would have looked like a fix and been worse than the
+    bug -- that route returns status "ok" unconditionally, so the tile could never report a
+    failure. A green light that cannot turn amber is not monitoring.
+    """
+
+    def _client(self, admin=True):
+        c = _wsgi.app.test_client()
+        if admin:
+            with c.session_transaction() as s:
+                s.update({"user_id": 1, "username": "admin", "is_admin": True})
+        return c
+
+    def test_both_routes_are_registered(self):
+        rules = {str(r.rule) for r in _wsgi.app.url_map.iter_rules()}
+        assert "/admin/ops/ping/email" in rules
+        assert "/admin/ops/ping/payments" in rules
+
+    @pytest.mark.parametrize("path", ["/admin/ops/ping/email",
+                                      "/admin/ops/ping/payments"])
+    def test_an_anonymous_caller_is_refused(self, path):
+        """These name which providers a deployment does and does not have. That is
+        reconnaissance, not a public page.
+        """
+        assert self._client(admin=False).get(path).status_code != 200
+
+    @pytest.mark.parametrize("path", ["/admin/ops/ping/email",
+                                      "/admin/ops/ping/payments"])
+    def test_no_secret_material_is_returned(self, path, monkeypatch):
+        """A health check must never become a way to read a key. /admin/ops/email/status
+        returns key PREFIXES; these deliberately return booleans and provider names only.
+        """
+        monkeypatch.setenv("BREVO_API_KEY", "xkeysib-SECRETVALUE-should-never-appear")
+        monkeypatch.setenv("PAYSTACK_SECRET_KEY", "sk_live_SECRETVALUE-should-never-appear")
+        body = self._client().get(path).get_data(as_text=True)
+        assert "SECRETVALUE" not in body
+        assert "xkeysib-" not in body
+        assert "sk_live_" not in body
+
+    def test_email_is_ok_when_an_https_provider_is_configured(self, monkeypatch):
+        monkeypatch.setenv("BREVO_API_KEY", "xkeysib-anything")
+        d = self._client().get("/admin/ops/ping/email").get_json()
+        assert d["status"] == "ok"
+        assert "brevo" in d["usable_providers"]
+
+    def test_smtp_alone_does_not_count_as_usable_email(self, monkeypatch):
+        """Render blocks outbound SMTP, so an SMTP-only deployment cannot deliver mail.
+        Reporting it green would be a lie the operator only discovers when a password
+        reset never arrives.
+        """
+        for var in ("BREVO_API_KEY", "RESEND_API_KEY", "AXIGEN_SERVER_URL",
+                    "AXIGEN_USER", "AXIGEN_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("SMTP_HOST", "mail.privateemail.com")
+        monkeypatch.setenv("SMTP_USER", "support@aiappinvent.com")
+        monkeypatch.setenv("SMTP_PASS", "whatever")
+        d = self._client().get("/admin/ops/ping/email").get_json()
+        assert d["status"] == "error", "SMTP-only must not report green"
+        assert d["smtp_configured"] is True, "but it must still be reported"
+
+    def test_a_placeholder_resend_key_does_not_count(self, monkeypatch):
+        """RESEND_API_KEY has held a Render-generated placeholder ('rnd_...') rather than a
+        real key ('re_...'). Counting it would have shown green with no way to send.
+        """
+        for var in ("BREVO_API_KEY", "AXIGEN_SERVER_URL", "AXIGEN_USER",
+                    "AXIGEN_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("RESEND_API_KEY", "rnd_pGzmPlaceholder")
+        d = self._client().get("/admin/ops/ping/email").get_json()
+        assert d["status"] == "error"
+        assert "resend" not in d["usable_providers"]
+
+    @pytest.mark.parametrize("var", ["PAYSTACK_SECRET_KEY", "STRIPE_SECRET_KEY"])
+    def test_either_gateway_secret_alone_is_enough(self, var, monkeypatch):
+        """Mirrors the app's OWN rule (web_app.py: "set STRIPE_SECRET_KEY or
+        PAYSTACK_SECRET_KEY"). A stricter check would report a false failure on a
+        deployment that takes payments perfectly well.
+        """
+        monkeypatch.delenv("PAYSTACK_SECRET_KEY", raising=False)
+        monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+        monkeypatch.setenv(var, "sk_test_anything")
+        assert self._client().get("/admin/ops/ping/payments").get_json()["status"] == "ok"
+
+    def test_payments_reports_error_when_no_gateway_at_all(self, monkeypatch):
+        monkeypatch.delenv("PAYSTACK_SECRET_KEY", raising=False)
+        monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+        d = self._client().get("/admin/ops/ping/payments").get_json()
+        assert d["status"] == "error"
+        assert d["usable_gateways"] == []
+
+    def test_payments_has_a_real_explanation_not_the_unknown_fallback(self):
+        """A check added to SWEEP without an explanation falls through to the "no
+        plain-English explanation yet" branch, which renders as a WARNING -- so adding a
+        check would have introduced the very amber this work removed.
+        """
+        e = ops.explain("ping/payments", "error")
+        assert e.severity == ops.ERROR
+        assert "no plain-english explanation" not in e.plain.lower()
+        assert e.manual, "nothing to do and no button leaves the operator stuck"
+        assert ops.explain("ping/payments", "ok").severity == ops.OK
+
+    def test_the_sweep_covers_payments(self):
+        rows = {r["id"]: r
+                for r in self._client().get(
+                    "/admin/ops/support/sweep").get_json()["results"]}
+        assert "ping/payments" in rows
+        assert rows["ping/payments"]["plain"]

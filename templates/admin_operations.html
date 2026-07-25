@@ -662,6 +662,11 @@ const HEALTH_ENDPOINTS = {
   'queue':    '/api/health/queue',
   'ai':       '/api/health/ai',
   'storage':  '/api/health/storage',
+  /* Both tiles existed in the grid with nothing behind them, so they sat on the
+     initial grey 'checking' badge forever. These two checks report what is
+     CONFIGURED without calling a provider -- see new_ops_support_routes.py. */
+  'email':    '/admin/ops/ping/email',
+  'payments': '/admin/ops/ping/payments',
 };
 
 const SERVICE_MAP = {
