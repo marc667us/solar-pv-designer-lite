@@ -1,0 +1,158 @@
+# Read-only: what state are the DATED migration obligations ACTUALLY in?
+#
+# WHY THIS EXISTS. The outstanding-work register carried two items as
+# "date PASSED, never confirmed run -- VERIFY FIRST" for weeks:
+#   * migration 005 (Phase B: users.password_hash -> legacy_password_hash)
+#   * migration 021 (VALIDATE the NOT VALID fk_* constraints from mig 013)
+# Nobody could answer either without applying something, because the apply
+# workflows' dry-run mode only PREVIEWS the SQL -- it never inspects live
+# state. An unverifiable obligation gets assumed, and an assumed migration is
+# how you end up applying one twice or never.
+#
+# This answers both by SELECT alone. It writes nothing, ever: there is no
+# confirm input because there is no action to confirm.
+#
+# SECURITY: Actions logs on this repo are PUBLIC. This prints SCHEMA FACTS
+# ONLY -- column names, constraint names, booleans, counts. Never a row,
+# never a hash, never a connection string. Do NOT add data queries here.
+
+name: Diag Migration State
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql 18 (and assert the major)
+        run: |
+          set -e
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' \
+            /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          PSQL_MAJOR=$(/usr/lib/postgresql/18/bin/psql --version | grep -oE "[0-9]+" | head -1)
+          [ "$PSQL_MAJOR" = "18" ] || { echo "::error::psql major is $PSQL_MAJOR, expected 18"; exit 1; }
+
+      - name: Resolve solarpro-postgres (masked)
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no external connection string"; exit 1; }
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Migration 005 (Phase B) -- has password_hash been renamed?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+          echo "=== users columns relevant to migration 005 ==="
+          # Column NAMES only. The column being present/absent is the whole answer;
+          # its CONTENTS are password hashes and must never be selected here.
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='users'
+               AND column_name IN ('password_hash','legacy_password_hash',
+                                   'is_admin','legacy_is_admin')
+             ORDER BY column_name;"
+          echo ""
+          echo "=== verdict ==="
+          APPLIED=$("$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                      WHERE table_schema='public' AND table_name='users'
+                                        AND column_name='legacy_password_hash')
+                        THEN 'APPLIED' ELSE 'NOT_APPLIED' END;")
+          echo "migration 005: $APPLIED"
+          if [ "$APPLIED" = "NOT_APPLIED" ]; then
+            echo "  users.password_hash still exists -- the ?legacy=1 login path still works."
+            echo "  NOTE: 005 requires KEYCLOAK_ENABLED=true and DISABLES legacy password login."
+          fi
+
+      - name: Migration 021 -- are the fk_* constraints VALIDATED?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+          echo "=== fk_* constraint validation state ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT con.convalidated AS validated, COUNT(*) AS n
+              FROM pg_constraint con
+              JOIN pg_class     c ON c.oid = con.conrelid
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE con.contype='f' AND n.nspname='public' AND con.conname LIKE 'fk_%'
+             GROUP BY con.convalidated
+             ORDER BY con.convalidated;"
+          echo ""
+          echo "=== still NOT VALID (constraint names only) ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT c.relname || '.' || con.conname
+              FROM pg_constraint con
+              JOIN pg_class     c ON c.oid = con.conrelid
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE con.contype='f' AND n.nspname='public'
+               AND con.conname LIKE 'fk_%' AND con.convalidated = FALSE
+             ORDER BY 1;"
+          echo ""
+          echo "=== verdict ==="
+          PENDING=$("$PSQL" "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*) FROM pg_constraint con
+              JOIN pg_class c ON c.oid = con.conrelid
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE con.contype='f' AND n.nspname='public'
+               AND con.conname LIKE 'fk_%' AND con.convalidated = FALSE;")
+          if [ "$PENDING" = "0" ]; then
+            echo "migration 021: APPLIED (0 fk_* constraints remain NOT VALID)"
+          else
+            echo "migration 021: NOT_APPLIED ($PENDING fk_* constraints still NOT VALID)"
+          fi
+
+      - name: RLS FORCE state (register item A6, same 'unverified' class)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          PSQL="/usr/lib/postgresql/18/bin/psql"
+          # A6 claims every enterprise RLS policy is INERT because the tables were
+          # ENABLEd but never FORCEd (Postgres exempts the owner, and the app connects
+          # as owner). That is also an UNVERIFIED claim -- so measure it while connected.
+          echo "=== enterprise_* tables: rowsecurity vs forcerowsecurity ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT tablename, rowsecurity, forcerowsecurity
+              FROM pg_tables
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
+             ORDER BY tablename;"
+          echo ""
+          echo "=== summary across ALL public tables ==="
+          "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
+            SELECT rowsecurity AS rls_enabled, forcerowsecurity AS rls_forced, COUNT(*)
+              FROM pg_tables WHERE schemaname='public'
+             GROUP BY 1,2 ORDER BY 1,2;"
