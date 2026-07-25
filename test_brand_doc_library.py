@@ -86,3 +86,61 @@ def test_brands_with_no_verified_doc_page_fall_back_to_search(brand):
     than a front page does. An entry here must be a page that actually serves documents.
     """
     assert library_for(brand) == ""
+
+
+# ── product-scoped document search (2026-07-25) ───────────────────────────────
+# Owner: "fix the datasheet and literature links on the product card". Measured on
+# live BEFORE this: /doc/datasheet and /doc/literature for products 524/526/527/
+# 528/529/530 ALL redirected to the same https://www.se.com/ww/en/download/.
+
+import urllib.parse as _up
+
+from brand_doc_library import library_domain_for, product_doc_search_for
+
+
+def _q(url):
+    """The decoded search query out of a Google search URL."""
+    return _up.unquote_plus(url.split("q=", 1)[1]) if "q=" in url else ""
+
+
+def test_library_domain_strips_www_and_keeps_subdomains():
+    assert library_domain_for("Schneider") == "se.com"          # www. dropped
+    assert library_domain_for("ABB") == "library.abb.com"       # subdomain kept
+    assert library_domain_for("Generic") == ""
+    assert library_domain_for("") == ""
+
+
+def test_scoped_search_is_product_specific():
+    """THE BUG: every product of a brand got the same generic portal."""
+    a = product_doc_search_for("Schneider", "A9F74216", "datasheet")
+    b = product_doc_search_for("Schneider", "A9F74263", "datasheet")
+    assert a != b, "two different models must not resolve to the same URL"
+    assert "A9F74216" in _q(a) and "A9F74263" in _q(b)
+
+
+def test_scoped_search_is_kind_aware():
+    """THE OTHER HALF: datasheet and literature were byte-identical."""
+    ds = product_doc_search_for("Schneider", "A9F74216", "datasheet")
+    lit = product_doc_search_for("Schneider", "A9F74216", "literature")
+    assert ds != lit
+    assert "datasheet" in _q(ds) and "literature" in _q(lit)
+
+
+def test_scoped_search_stays_on_the_manufacturer_domain():
+    assert "site:se.com" in _q(product_doc_search_for("Schneider", "A9F74216"))
+    assert "site:library.abb.com" in _q(product_doc_search_for("ABB", "S203-C16"))
+
+
+def test_scoped_search_declines_when_it_cannot_be_specific():
+    """Must return '' so the CALLER falls back to the library / web search."""
+    assert product_doc_search_for("Schneider", "") == ""        # no model
+    assert product_doc_search_for("Schneider", "   ") == ""     # whitespace model
+    assert product_doc_search_for("Benning", "ENERTRONIC") == ""  # brand not in library
+    assert product_doc_search_for("Nexans / Tropical", "X") == ""  # multi-vendor
+    assert product_doc_search_for("Generic", "X") == ""           # placeholder
+
+
+def test_scoped_search_does_not_over_narrow_with_filetype():
+    """filetype:pdf on a model-specific query can return ZERO results, which is a
+    worse dead end than the generic portal. The open web-search fallback keeps it."""
+    assert "filetype" not in _q(product_doc_search_for("Schneider", "A9F74216"))

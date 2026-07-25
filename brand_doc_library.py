@@ -117,3 +117,60 @@ def library_for(brand: str) -> str:
     if "/" in b or "," in b:
         return ""
     return BRAND_DOC_LIBRARY.get(b, "")
+
+
+def library_domain_for(brand: str) -> str:
+    """The bare domain of `brand`'s documentation library, or ''.
+
+    Input:  a raw brand string.  Output: e.g. "se.com", "library.abb.com", or "".
+    Reuses the VERIFIED urls above rather than introducing a second per-brand table
+    that could drift out of sync with them.
+    Syntax notes: urlsplit().netloc gives "www.se.com"; the leading "www." is dropped
+    so the site: filter also matches other hosts on the same domain.
+    """
+    lib = library_for(brand)
+    if not lib:
+        return ""
+    try:
+        from urllib.parse import urlsplit
+        host = (urlsplit(lib).netloc or "").strip().lower()
+    except Exception:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def product_doc_search_for(brand: str, model: str, kind: str = "datasheet") -> str:
+    """A document search for ONE product, scoped to its manufacturer's own site.
+
+    Input:  brand, the product model/name, and kind in {'datasheet','literature'}.
+    Output: a search URL restricted to the brand's documentation domain, or ''.
+
+    WHY THIS EXISTS (2026-07-25). The brand tier above answers with the manufacturer's
+    documentation ENTRY POINT. That is honest, but it ignores both the model and the
+    kind, so every Schneider product -- whichever one you clicked, and whether you asked
+    for the datasheet or the literature -- landed on the SAME generic
+    https://www.se.com/ww/en/download/ portal. Two differently-labelled links doing the
+    identical thing, on a page with no product context, is what "the links don't work"
+    means to someone looking for one specific document.
+
+    This keeps the file's honesty rule intact -- it still never asserts that a particular
+    PDF *is* the product's datasheet -- while making the destination product-specific and
+    kind-aware. `site:` keeps every result on the manufacturer's OWN domain.
+
+    Deliberately NOT `filetype:pdf` here: over-narrowing a model-specific query can return
+    ZERO results, which is a worse dead end than the generic portal was. Without it the
+    search lands on the product's page on the official site, which carries the documents.
+    The last-resort open web search (in the caller) keeps filetype:pdf, unchanged.
+    """
+    domain = library_domain_for(brand)
+    m = (model or "").strip()
+    if not domain or not m:
+        return ""
+    terms = "brochure literature" if (kind or "").strip().lower() == "literature" \
+        else "datasheet specification"
+    try:
+        from urllib.parse import quote_plus
+        return "https://www.google.com/search?q=" + quote_plus(
+            "site:%s %s %s" % (domain, m, terms))
+    except Exception:
+        return ""

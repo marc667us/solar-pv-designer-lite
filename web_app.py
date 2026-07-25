@@ -26867,6 +26867,20 @@ def marketplace_product_doc_redirect(pid, kind):
     except Exception:
         _lib = ""
     if _lib:
+        # PRODUCT-SPECIFIC FIRST. The bare library URL is the same page for every
+        # product of that brand and for BOTH kinds, so it answered "where do this
+        # vendor's documents live" when the user asked "where is THIS product's
+        # datasheet". Scope the search to the manufacturer's own domain instead;
+        # still never asserts a specific PDF is the right one.
+        try:
+            from brand_doc_library import product_doc_search_for as _brand_search
+            _scoped = _brand_search(row.get("brand") or "",
+                                    row.get("model") or row.get("name") or "",
+                                    kind)
+        except Exception:
+            _scoped = ""
+        if _scoped:
+            return redirect(_scoped)
         return redirect(_lib)
     import urllib.parse as _up
     kind_terms = "brochure literature" if kind == "literature" else "datasheet specification"
