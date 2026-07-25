@@ -61,7 +61,41 @@
   "feedback": {
     "count": 0
   },
-  "last_poll_utc": "2026-07-25T18:44:40.289098+00:00",
+  "last_poll_utc": "2026-07-25T19:42:42.986655+00:00",
+  "ops_sweep": {
+    "email/status": {
+      "label": "Email",
+      "severity": "ok"
+    },
+    "ping/ai": {
+      "label": "AI provider",
+      "severity": "ok"
+    },
+    "ping/backend": {
+      "label": "Application",
+      "severity": "ok"
+    },
+    "ping/database": {
+      "label": "Database",
+      "severity": "ok"
+    },
+    "ping/payments": {
+      "label": "Payments",
+      "severity": "ok"
+    },
+    "ping/queue": {
+      "label": "Background queue",
+      "severity": "info"
+    },
+    "ping/redis": {
+      "label": "Redis cache",
+      "severity": "info"
+    },
+    "ping/storage": {
+      "label": "Disk space",
+      "severity": "ok"
+    }
+  },
   "security_audit": {
     "admin_users": 2,
     "anthropic_key_set": false,
