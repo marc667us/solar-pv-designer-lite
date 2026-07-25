@@ -1,0 +1,142 @@
+# Appoint (or revoke) a signatory for a funding institution -- through the REAL route.
+#
+# WHY A WORKFLOW AND NOT A psql INSERT. The row is an AUTHORISATION grant: its holder can
+# approve applications belonging to other organisations. Writing it straight into the table
+# would bypass the admin guard, the CSRF check, and the validation that the institution is
+# actually APPROVED and the user actually EXISTS -- i.e. every control that makes the grant
+# legitimate. This drives the same HTTP form a human admin uses, so the grant is subject to
+# exactly the same rules and lands in the same audit trail.
+#
+# DRY-RUN BY DEFAULT (per the workflow dry-run gate). Without confirm=GRANT it logs in,
+# proves the surface is reachable and reports the CURRENT signatories, and writes nothing.
+#
+# SECURITY: Actions logs on this repo are PUBLIC. This prints institution ids, usernames and
+# HTTP statuses -- never the password, never a CSRF token, never a session cookie.
+
+name: Grant Sponsor Signing Right
+
+on:
+  workflow_dispatch:
+    inputs:
+      institution_id:
+        description: "Approved institution id, e.g. FI-CF3D0958F2E9"
+        required: true
+      user_id:
+        description: "Numeric id of the person who may sign"
+        required: true
+      action:
+        description: "grant | revoke"
+        required: false
+        default: "grant"
+      confirm:
+        description: "Type GRANT to actually apply. Blank = dry-run, writes nothing."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BASE:   https://solarpro.aiappinvent.com
+      ADMIN_PW: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+      INST:   ${{ inputs.institution_id }}
+      TARGET: ${{ inputs.user_id }}
+      ACTION: ${{ inputs.action }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Drive the real admin form
+        run: |
+          python3 - <<'PY'
+          import os, re, sys, urllib.parse
+          import http.cookiejar as cj
+          import urllib.request as ur
+
+          BASE   = os.environ["BASE"].rstrip("/")
+          PW     = os.environ.get("ADMIN_PW", "")
+          INST   = (os.environ.get("INST") or "").strip()
+          TARGET = (os.environ.get("TARGET") or "").strip()
+          ACTION = (os.environ.get("ACTION") or "grant").strip().lower()
+          APPLY  = os.environ.get("CONFIRM", "") == "GRANT"
+          PATH   = "/enterprise/sponsors/representatives"
+
+          if not PW:
+              print("::error::SOLARPRO_ADMIN_PASSWORD is not set"); sys.exit(1)
+          if ACTION not in ("grant", "revoke"):
+              print(f"::error::action must be grant or revoke, got {ACTION!r}"); sys.exit(1)
+
+          jar = cj.CookieJar()
+          op  = ur.build_opener(ur.HTTPCookieProcessor(jar))
+          op.addheaders = [("User-Agent", "Mozilla/5.0 (SponsorGrant)")]
+
+          def get(p):
+              with op.open(BASE + p, timeout=60) as r:
+                  return r.status, r.read().decode("utf-8", "replace")
+
+          def csrf(html):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+              return m.group(1) if m else ""
+
+          # ---- log in as admin (the same legacy path beta-monitor uses) -------------
+          _, html = get("/login")
+          tok = csrf(html)
+          body = urllib.parse.urlencode(
+              {"username": "admin", "password": PW, "_csrf": tok}).encode()
+          with op.open(ur.Request(BASE + "/login", data=body), timeout=60) as r:
+              landed = r.geturl()
+          if "/login" in landed:
+              print("::error::admin login failed"); sys.exit(1)
+          print(f"login OK ({landed})")
+
+          # ---- read the surface ------------------------------------------------------
+          st, html = get(PATH)
+          print(f"GET {PATH} -> HTTP {st}")
+          if st == 404:
+              print("::error::the enterprise module flag is OFF (route 404s). Enable it first.")
+              sys.exit(1)
+          if st != 200:
+              print(f"::error::admin could not open the page (HTTP {st})"); sys.exit(1)
+
+          def current():
+              _, h = get(PATH)
+              # The table lists institution ids; count the rows to show before/after.
+              return h.count("Revoke</button>")
+
+          before = current()
+          print(f"signatories currently listed: {before}")
+
+          if not APPLY:
+              print("")
+              print(f"DRY-RUN -- would {ACTION} institution={INST} user_id={TARGET}")
+              print("Nothing was written. Re-run with confirm=GRANT to apply.")
+              sys.exit(0)
+
+          # ---- apply -----------------------------------------------------------------
+          _, page = get(PATH)
+          tok = csrf(page)
+          if not tok:
+              print("::error::no CSRF token on the page"); sys.exit(1)
+          body = urllib.parse.urlencode({
+              "_csrf": tok, "action": ACTION,
+              "institution_id": INST, "user_id": TARGET,
+          }).encode()
+          with op.open(ur.Request(BASE + PATH, data=body), timeout=60) as r:
+              print(f"POST {PATH} -> HTTP {r.status}")
+
+          after = current()
+          print(f"signatories now listed: {after} (was {before})")
+
+          # PROVE IT, do not assume. A redirect with a flash message is not evidence --
+          # the route flashes an error and redirects on a rejected institution too.
+          if ACTION == "grant" and after <= before:
+              print("::error::grant did not take effect -- the institution may not be "
+                    "approved, or the user id may not exist")
+              sys.exit(1)
+          if ACTION == "revoke" and after >= before:
+              print("::error::revoke did not take effect")
+              sys.exit(1)
+          print(f"OK: {ACTION} applied and verified.")
+          PY
