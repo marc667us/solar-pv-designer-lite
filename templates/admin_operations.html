@@ -676,7 +676,7 @@ async function pingService(svc) {
     const data = await apiGet(endpoint);
     const ms = Date.now() - t0;
     showResult('pingResult', Object.assign({service: svc, latency_ms: ms}, data));
-    updateServiceBadge(svc, data.status === 'ok' || data.status === 'connected' ? 'ok' : 'warn', ms);
+    updateServiceBadge(svc, classifyHealth(svc, data.status), ms);
   } catch(e) {
     showResult('pingResult', {service: svc, error: e.message}, true);
     updateServiceBadge(svc, 'error');
@@ -684,6 +684,24 @@ async function pingService(svc) {
 }
 
 function pingFrontend() { pingService('frontend'); }
+
+/* Services this deployment deliberately does not have. Mirrors ops_support.py's
+   ABSENT_BY_DESIGN so the badge grid agrees with the support panel and with this
+   page's own allOk summary. Absent-by-design is INFO (blue), never amber. */
+const ABSENT_BY_DESIGN = ['redis', 'queue', 'celery'];
+const ABSENT_WORDS = ['not_configured', 'not configured', 'unavailable',
+                      'absent', 'disabled', 'none', ''];
+
+/* ok | info | warn -- the badge state for one raw status word.
+   Note we do NOT fold 'warn'/'error' into info the way the server does: if Redis is
+   ever actually configured and then fails, that must stay visible, not read as
+   'by design'. Absent is benign; broken is not. */
+function classifyHealth(svc, status) {
+  const raw = String(status == null ? '' : status).trim().toLowerCase();
+  if (raw === 'ok' || raw === 'connected') return 'ok';
+  if (ABSENT_BY_DESIGN.includes(svc) && ABSENT_WORDS.includes(raw)) return 'info';
+  return 'warn';
+}
 
 function updateServiceBadge(svc, state, ms=null) {
   // Map service name to grid index
@@ -696,6 +714,12 @@ function updateServiceBadge(svc, state, ms=null) {
     badge.className = 'badge bg-success mt-1';
     badge.textContent = ms ? `ok · ${ms}ms` : 'ok';
     if (icon) icon.className = icon.className.replace('text-secondary','text-success');
+  } else if (state === 'info') {
+    /* Absent by design -- correct on this tier. Blue, and it says why. */
+    badge.className = 'badge bg-info mt-1';
+    badge.textContent = 'by design';
+    badge.title = 'Not part of this deployment. Nothing is broken.';
+    if (icon) icon.className = icon.className.replace('text-secondary','text-info');
   } else if (state === 'warn') {
     badge.className = 'badge bg-warning mt-1';
     badge.textContent = 'degraded';
@@ -715,14 +739,19 @@ async function refreshAllStatus() {
       const data = await apiGet(endpoint);
       const ms = Date.now() - t0;
       results[svc] = {status: data.status, latency_ms: ms};
-      updateServiceBadge(svc, (data.status === 'ok' || data.status === 'connected') ? 'ok' : 'warn', ms);
+      updateServiceBadge(svc, classifyHealth(svc, data.status), ms);
     } catch(e) {
       results[svc] = {status: 'error', error: e.message};
       updateServiceBadge(svc, 'error');
     }
   }
   document.getElementById('lastHealthCheck').textContent = 'Last checked: ' + new Date().toLocaleTimeString();
-  const allOk = Object.values(results).every(r => ['ok','connected','not_configured'].includes(r.status));
+  /* One rule for the banner and the badges. The previous hardcoded list accepted
+     'not_configured' but not 'unavailable' -- which is exactly what the Redis check
+     returns -- so a deployment with no Redis read as "Degraded Services" forever.
+     classifyHealth() is now the single source of truth; a real fault still -> warn. */
+  const allOk = Object.entries(results).every(
+    ([svc, r]) => ['ok', 'info'].includes(classifyHealth(svc, r.status)));
   const sb = document.getElementById('overallStatus');
   if (allOk) {
     sb.className = 'badge bg-success fs-6 px-3 py-2';
