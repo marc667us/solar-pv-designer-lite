@@ -75,11 +75,21 @@ def classify(ua, honeypot_value):
     """
     try:
         u = (ua or "").strip().lower()
-        # Trusted internal automation bypasses every check.
-        if any(u.startswith(p) for p in _ALLOW_UA_PREFIX):
-            return "allow", "internal"
+        # HONEYPOT IS CHECKED FIRST -- ahead of the internal allow-list below.
+        # The User-Agent is an attacker-controlled request header, so an
+        # allow-list keyed on it must never be able to wave through a request
+        # that has ALREADY proven itself a bot by filling the hidden field.
+        # Checking the allow-list first let anyone bypass the whole layer with
+        # `User-Agent: SolarPro-x` (the prefix is public -- the repo is public).
+        # Safe to reorder: our own crons POST real forms and never populate
+        # `company_website`, and no legitimate form field shares that name
+        # (real website inputs are named `website`), so internal automation
+        # cannot trip this.
         if honeypot_value and str(honeypot_value).strip():
             return "honeypot", "honeypot"
+        # Trusted internal automation bypasses the UA heuristics below.
+        if any(u.startswith(p) for p in _ALLOW_UA_PREFIX):
+            return "allow", "internal"
         if not u:
             return "empty", "empty-ua"
         for tok in _BOT_UA:

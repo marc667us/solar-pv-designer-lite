@@ -32,6 +32,21 @@ def test_classify_honeypot_always_bot():
     assert bd.classify("Mozilla/5.0", "spam")[0] == "honeypot"
 
 
+def test_classify_honeypot_beats_internal_allowlist():
+    """REGRESSION: the internal allow-list must not override a filled honeypot.
+
+    The User-Agent is attacker-controlled, and `_ALLOW_UA_PREFIX` is public
+    (public repo), so if the allow-list were checked first anyone could bypass
+    the entire bot-defense layer by sending `User-Agent: SolarPro-x`. A client
+    that filled the hidden field has already proven itself a bot regardless of
+    what UA it claims.
+    """
+    for ua in ("SolarPro-x", "SolarPro-AgentTriage/1.0", "solarpro"):
+        assert bd.classify(ua, "spam")[0] == "honeypot", ua
+    # And the trusted path still works when the honeypot is EMPTY.
+    assert bd.classify("SolarPro-AgentTriage/1.0", "")[0] == "allow"
+
+
 def test_classify_bot_user_agents():
     for ua in ("python-requests/2.31", "curl/8.5", "Scrapy/2.11",
                "Go-http-client/1.1", "HeadlessChrome/120", "okhttp/4.9"):
