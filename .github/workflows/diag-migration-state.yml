@@ -144,15 +144,20 @@ jobs:
           # A6 claims every enterprise RLS policy is INERT because the tables were
           # ENABLEd but never FORCEd (Postgres exempts the owner, and the app connects
           # as owner). That is also an UNVERIFIED claim -- so measure it while connected.
-          echo "=== enterprise_* tables: rowsecurity vs forcerowsecurity ==="
+          # NOTE: pg_tables exposes `rowsecurity` but NOT the FORCE flag. The forced bit
+          # lives on pg_class.relforcerowsecurity -- which is the whole point of A6, since
+          # ENABLE without FORCE leaves the policies inert for the owning role.
+          echo "=== enterprise_* tables: RLS enabled vs FORCED ==="
           "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
-            SELECT tablename, rowsecurity, forcerowsecurity
-              FROM pg_tables
-             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
-             ORDER BY tablename;"
+            SELECT c.relname, c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public' AND c.relkind='r'
+               AND c.relname LIKE 'enterprise%'
+             ORDER BY c.relname;"
           echo ""
-          echo "=== summary across ALL public tables ==="
+          echo "=== summary across ALL public tables (enabled | forced | count) ==="
           "$PSQL" "$DATABASE_URL" -X -At -F ' | ' -v ON_ERROR_STOP=1 -c "
-            SELECT rowsecurity AS rls_enabled, forcerowsecurity AS rls_forced, COUNT(*)
-              FROM pg_tables WHERE schemaname='public'
+            SELECT c.relrowsecurity, c.relforcerowsecurity, COUNT(*)
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public' AND c.relkind='r'
              GROUP BY 1,2 ORDER BY 1,2;"
