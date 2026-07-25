@@ -176,11 +176,31 @@ jobs:
 
           # ---------- Security probes ----------
           security = {}
-          for path, alias in [("/admin/ops/security/audit",      "security_audit"),
-                              ("/admin/ops/logs/audit",          "audit_log"),
-                              ("/admin/ops/security/sessions",   "active_sessions")]:
+          # /admin/ops/security/audit is POST-only and CSRF-protected
+          # (web_app.py:12560, csrf_protect() at :12586). This loop used to GET
+          # all three probes, so that one returned 405 on EVERY run since it was
+          # written (2026-06-10) and failed_logins_24h was never collected.
+          # Re-derive the token from an AUTHENTICATED page rather than reusing the
+          # pre-login one, so this keeps working if login ever starts rotating
+          # the session. csrf_protect() also accepts an X-CSRF-Token header.
+          # /admin renders a name="_csrf" input that get_csrf()'s regex can read;
+          # /admin/operations does NOT (checked -- 0 occurrences), so do not point
+          # this at the Ops Center. Falls back to the pre-login `tok`, which stays
+          # valid because login does not clear the session and generate_csrf()
+          # only mints when absent (web_app.py:286-289).
+          sec_tok = tok
+          try:
+              sec_tok = get_csrf(s.get(BASE + "/admin", timeout=30).text) or tok
+          except Exception:
+              pass
+          for path, alias, method in [("/admin/ops/security/audit",     "security_audit",  "POST"),
+                                      ("/admin/ops/logs/audit",         "audit_log",       "GET"),
+                                      ("/admin/ops/security/sessions",  "active_sessions", "GET")]:
               try:
-                  pr = s.get(BASE + path, timeout=30)
+                  if method == "POST":
+                      pr = s.post(BASE + path, data={"_csrf": sec_tok}, timeout=30)
+                  else:
+                      pr = s.get(BASE + path, timeout=30)
                   if pr.status_code != 200:
                       security[alias] = {"error": f"HTTP {pr.status_code}"}
                       continue
@@ -206,6 +226,13 @@ jobs:
           sa = security.get("security_audit", {}) or {}
           fl = sa.get("failed_logins_24h") if isinstance(sa, dict) else None
           prev_fl = state.get("security_audit", {}).get("failed_logins_24h")
+          # Make a BLIND detector VISIBLE. This read None on every run for ~45 days
+          # (405 on the probe, AND the route never returned the key at all), so the
+          # alert below could never fire and nothing ever said so. A silent
+          # monitoring gap reads exactly like "no attacks" -- never let it be quiet.
+          if fl is None:
+              print("::warning::brute-force detector BLIND — security_audit probe "
+                    f"returned no failed_logins_24h (got: {str(sa)[:200]})")
           if fl is not None and prev_fl is not None and fl > prev_fl:
               new_alerts.append(
                   f"SECURITY: failed_logins_24h went {prev_fl} -> {fl} "

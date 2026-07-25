@@ -12599,6 +12599,18 @@ def admin_ops_security_audit():
                 ).fetchone()[0]
             else:
                 results["recent_payments"] = 0
+            # Brute-force signal consumed by beta-monitor.yml. Dialect-safe
+            # 24h window: compute the cutoff in Python and bind it, because
+            # datetime('now', ...) is SQLite-only and raises UndefinedFunction
+            # on Postgres (the bug that took out /admin/operations).
+            if _table_exists(c, "audit_logs"):
+                _since_24h = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                results["failed_logins_24h"] = c.execute(
+                    "SELECT COUNT(*) FROM audit_logs WHERE action='failed_login' "
+                    "AND created_at >= ?", (_since_24h,)
+                ).fetchone()[0]
+            else:
+                results["failed_logins_24h"] = 0
     except Exception as e:
         # Surface the failure in the JSON instead of returning a 500 HTML page
         results["status"] = "warning"
