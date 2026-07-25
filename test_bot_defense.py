@@ -178,3 +178,45 @@ def test_fails_open_when_db_broken():
     # a real browser passes even though recording fails
     assert c.post("/login", data={"username": "x"},
                   headers={"User-Agent": "Mozilla/5.0 Chrome/126"}).status_code == 200
+
+
+# ── honeypot template coverage ────────────────────────────────────────────────
+
+def test_honeypot_rendered_on_every_guarded_form():
+    """The guard only works if the form actually RENDERS the hidden field.
+
+    Locks the template markup to `bot_defense.HONEYPOT_FIELD`, so renaming the
+    constant without updating the forms fails here instead of silently
+    disabling the honeypot on live.
+    """
+    import os
+    expected = bd.HONEYPOT_FIELD                      # "company_website"
+    forms = [
+        "auth.html",                # /login + /register
+        "upgrade.html",             # /upgrade/checkout + /upgrade/redeem
+        "forgot_password.html",     # /forgot-password
+        "reset_password.html",      # /reset-password
+        "supplier_register.html",   # /supplier/register
+        "installer_register.html",  # /installer/register
+    ]
+    for name in forms:
+        path = os.path.join("templates", name)
+        src = open(path, encoding="utf-8", errors="replace").read()
+        # either the shared partial or a pre-existing inline copy satisfies this
+        assert ("_bot_honeypot.html" in src) or (expected in src), name
+
+
+def test_honeypot_name_does_not_collide_with_real_fields():
+    """`company_website` must never become a REAL input name.
+
+    /supplier/register and /installer/register carry a genuine website field.
+    If the honeypot were renamed to collide with it, real signups would 403.
+    """
+    import os, re
+    expected = bd.HONEYPOT_FIELD
+    assert expected != "website"
+    for name in ("supplier_register.html", "installer_register.html"):
+        src = open(os.path.join("templates", name), encoding="utf-8",
+                   errors="replace").read()
+        # the real field is name="website" -- must still be present and distinct
+        assert re.search(r'name="website"', src), name

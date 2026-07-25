@@ -361,6 +361,7 @@
         </div>
       </div>
       <form method="POST" action="{{ url_for('upgrade_redeem_code') }}">
+        {% include "_bot_honeypot.html" %}
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <div class="d-flex gap-2">
           <input type="text" name="code" placeholder="PRO-XXXX-XXXX"

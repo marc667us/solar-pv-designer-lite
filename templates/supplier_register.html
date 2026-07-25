@@ -23,6 +23,7 @@
 
     <div class="solar-card p-4">
       <form method="POST" action="{{ url_for('supplier_register') }}">
+        {% include "_bot_honeypot.html" %}
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
         <h6 class="fw-bold text-warning mb-3"><i class="bi bi-building me-1"></i>Company</h6>

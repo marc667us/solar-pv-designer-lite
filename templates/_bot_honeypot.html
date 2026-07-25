@@ -1,0 +1,27 @@
+{# ---------------------------------------------------------------------------
+   Bot honeypot -- shared partial.
+
+   What it is: a text input that is invisible to humans but present in the DOM,
+   so naive form-filling bots populate it. `bot_defense.classify()` treats ANY
+   non-empty value as proof-of-bot and the before_request guard returns 403
+   before the real handler runs.
+
+   Input:  none.
+   Output: one hidden <input name="company_website"> inside an off-screen wrapper.
+
+   The field name MUST stay in sync with `bot_defense.HONEYPOT_FIELD`.
+   Do NOT rename it to `website` -- that is a REAL field on the supplier and
+   installer registration forms, and the collision would 403 genuine signups.
+
+   Syntax notes:
+     - aria-hidden keeps it out of the accessibility tree (screen readers skip it)
+     - the off-screen + zero-size wrapper is what makes browsers treat the field
+       as invisible, which is why Chrome/password-manager autofill skips it
+     - tabindex="-1" keeps it out of keyboard tab order
+     - autocomplete="off" is a second, independent signal against autofill
+   Usage: {% include "_bot_honeypot.html" %}  (place just inside <form>)
+--------------------------------------------------------------------------- #}
+<div aria-hidden="true" style="position:absolute!important;left:-9999px!important;top:-9999px!important;height:0;width:0;overflow:hidden">
+  <label>Company website</label>
+  <input type="text" name="company_website" tabindex="-1" autocomplete="off" value="">
+</div>

@@ -44,6 +44,7 @@
     {% endwith %}
 
     <form method="post" action="{{ url_for('installer_register') }}" id="regForm">
+      {% include "_bot_honeypot.html" %}
       <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
 
       <!-- Company Info -->
