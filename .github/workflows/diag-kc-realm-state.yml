@@ -19,7 +19,7 @@ jobs:
           tok = requests.post(f"{BASE}/realms/master/protocol/openid-connect/token",
               data={"client_id":"admin-cli","grant_type":"password",
                     "username":"admin","password":os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']},
-              timeout=10).json()["access_token"]
+              timeout=120).json()["access_token"]   # free-tier KC: the admin token grant hits the DB and can take >60s cold; 10s never stood a chance
           H = {"Authorization": f"Bearer {tok}"}
           realm = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
           flags = ("registrationAllowed","registrationEmailAsUsername",
