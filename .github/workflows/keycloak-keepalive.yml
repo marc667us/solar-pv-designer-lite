@@ -12,16 +12,24 @@
 # have completed the wake it triggered. It then emailed a failure every 10 minutes: 144
 # false alarms a day, which is how a real alert stops being read.
 #
-# WHY THIS IS NO LONGER A WARMER. keep-warm.yml already pings this exact service every
-# ~5 minutes with --max-time 90 and has been green throughout. Two keep-warms is one too
-# many, and the redundant one was the broken one. (keep-warm.yml absorbed the KC ping on
-# 2026-07-06 specifically to avoid a duplicate file; this workflow predates that and
-# quietly became redundant.)
+# WHY THIS IS NO LONGER A WARMER. keep-warm.yml pings this exact service on a generous
+# timeout (120 s as of 2026-07-26). Two keep-warms is one too many, and the redundant
+# one was the broken one. (keep-warm.yml absorbed the KC ping on 2026-07-06 specifically
+# to avoid a duplicate file; this workflow predates that and quietly became redundant.)
 #
-# WHAT IT DOES INSTEAD -- the job keep-warm.yml canNOT do. keep-warm swallows failures
-# (`|| echo WARN`) and stays green on purpose: a warmer must not page anyone for a slow
-# wake. The cost is that nothing anywhere tells you if Keycloak is genuinely DOWN. This
-# does, and it distinguishes the two cases the old version conflated:
+# CORRECTION 2026-07-26: the sentence above used to claim keep-warm pinged "every ~5
+# minutes and has been green throughout". Green, yes -- every run succeeded. Every ~5
+# minutes, NO. Measured across its last 100 runs (163 h): GitHub delivered 0.61 fires
+# per hour against a cron asking for 12, and ALL 99 gaps exceeded Render's 15-min idle
+# timeout (median 86 min, max 230 min). Nothing was being kept warm. "Green" was
+# measuring whether the pings that ran succeeded, not whether they ran often enough.
+# keep-warm.yml was rewritten the same day into a long-lived loop; see its header.
+#
+# WHAT IT DOES INSTEAD -- the job keep-warm.yml canNOT do. keep-warm counts its failures
+# and reports them in a summary, but stays green on purpose: a warmer must not page
+# anyone for a slow wake. The cost is that nothing anywhere tells you if Keycloak is
+# genuinely DOWN. This does, and it distinguishes the two cases the old version
+# conflated:
 #
 #   * SLOW (cold wake)  -> attempt 1 may time out; the retry lands warm  -> PASS
 #   * DOWN (real fault) -> both attempts fail                            -> FAIL, and the
@@ -66,8 +74,11 @@ jobs:
           URL="${BASE}/realms/master/.well-known/openid-configuration"
           echo "target: $URL"
 
-          # --max-time 90 matches keep-warm.yml's proven value and covers a full ~50 s
-          # cold wake. Anything shorter measures Render's spin-up, not Keycloak's health.
+          # --max-time 90 covers a ~50-60 s cold wake. Anything shorter measures Render's
+          # spin-up, not Keycloak's health. NOTE: keep-warm.yml moved to 120 s on
+          # 2026-07-26 after a KC ping was seen hitting the 90 s cap mid-wake (run
+          # 30202621493). 90 s is retained HERE on purpose -- this workflow retries once
+          # before failing, so a wake that overruns attempt 1 is caught by attempt 2.
           # `|| echo "000 timeout"` keeps a curl failure from killing the step before the
           # retry gets its turn.
           attempt() {

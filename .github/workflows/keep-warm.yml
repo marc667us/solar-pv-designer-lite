@@ -1,56 +1,193 @@
-# Pings solarpro.aiappinvent.com every 10 minutes to keep Render free tier warm.
+# Keeps solarpro.aiappinvent.com AND auth.aiappinvent.com warm on Render's free tier.
 #
-# Why: Render free spins the container down after 15 min of inactivity. First user
-# request triggers a cold start that takes 30-60 seconds — beta-killer for public
-# visitors who'll abandon at the 10-second mark. A 10-min ping keeps the service
-# warm 24/7.
+# Why warming matters: Render free spins a container down after 15 min of inactivity.
+# The next visitor pays the cold start -- MEASURED 2026-07-25: app ~25 s, Keycloak
+# ~60.7 s (warm: 0.6 s). A public beta visitor who waits 60 s for a login page is gone.
 #
-# Cost on GitHub free tier: ~720 minutes/month (2000 free for private, unlimited
-# public). Each run ~10 seconds — well under the cap.
+# ============================================================================
+# WHY THIS FILE WAS REWRITTEN 2026-07-26 -- it was NOT keeping anything warm
+# ============================================================================
+# The old version asked cron for a ping every 5 minutes and reported `success` on
+# every run, so it looked green for weeks. It was not working. Measured over the
+# 163 hours to 2026-07-26T11:40Z, across the last 100 runs:
 #
-# To pause without removing: comment out the `cron` line below, or disable in
-# Actions tab. To stop entirely: delete this file.
+#     cron requested   : 12 runs/hour
+#     actually fired   : 0.61 runs/hour        <- GitHub dropped ~95% of fires
+#     gaps over 15 min : 99 of 99              <- EVERY gap exceeded Render's idle
+#                                                 timeout, so nothing was ever warm
+#     median gap       : 86 min
+#     max gap          : 230 min (3.8 h)
+#
+# The pings themselves were fine -- a landed run returns HTTP 200 for all three URLs
+# (Keycloak in 0.5 s). The failure was entirely in DELIVERY. The old file's own comment
+# already predicted this ("GitHub silently DROPS scheduled fires... observed gaps have
+# exceeded 2-4 hours") and its mitigation -- ask for fires more often, at offset minutes
+# -- DID NOT WORK. You cannot out-schedule a scheduler that is dropping you. Asking
+# 12x/hour and receiving 0.6x/hour is the proof.
+#
+# THE FIX: stop depending on cron FREQUENCY; depend only on cron EVENTUALLY firing.
+# Each run is now a long-lived warming loop that pings every 5 minutes for 5h30m
+# (GitHub's hard job cap is 6h). One delivered fire therefore buys 5h30m of coverage
+# instead of a single 10-second ping.
+#
+# HOW THE HANDOFF WORKS -- note `cancel-in-progress: FALSE` below, which is deliberate.
+# When a fire lands while a warmer is running, GitHub holds the new run as PENDING
+# rather than starting it; if another fire lands, the newer one replaces the pending
+# one (GitHub cancels any previously-pending run in the group and keeps the newest).
+# When the running warmer finishes its 5h30m, the pending run starts immediately.
+# Result: a continuously-running warmer handed off seamlessly, with only runner
+# start-up between shifts.
+#
+# `cancel-in-progress: true` was tried first and is WORSE here. It kills the live
+# warmer the moment a fire lands, and GitHub does not guarantee the replacement has
+# acquired a runner before that happens -- so every delivered fire opened a small
+# window with NO warmer at all, several times an hour. Codex flagged this on
+# 2026-07-26 and it is the reason for the `false`.
+#
+# EXPECT SOME CANCELLED RUNS IN THE RUN LIST -- but they are only ever PENDING runs
+# that a newer fire superseded. The ACTIVE warmer is never cancelled by this. Judge
+# the workflow by whether one is currently running, not by run conclusions:
+#
+#     gh run list --workflow=keep-warm.yml --limit 5
+#     # healthy: one row `in_progress`, and cancelled rows above/below it
+#
+# Cost: the repo is PUBLIC, so GitHub-hosted runner minutes are unmetered, and this
+# holds one of the 20 concurrent standard-runner slots a Free account gets. No spend.
+#
+# ⚠️ FAIR-USE CAVEAT, stated honestly rather than buried. GitHub's billing docs do make
+# standard runners free on public repos, and no rule says "no 24/7 job". But GitHub's
+# Acceptable Use Policy forbids activity that places undue burden on their servers and
+# reserves enforcement discretion, and an always-on uptime warmer is closer to
+# general-purpose compute than to CI/CD. Risk for a single Ubuntu job is low, NOT zero.
+# The purpose-built zero-cost alternative is an external uptime pinger (UptimeRobot's
+# free tier does 5-minute checks) or a Cloudflare Worker cron -- both need the owner to
+# create an account, which is why this was not done unilaterally. If the owner would
+# rather not lean on Actions this way, that swap is the clean answer.
+#
+# STAYING GREEN IS DELIBERATE. A warmer must never page anyone for a slow cold wake,
+# so ping failures are counted and summarised, never fatal. The genuine "Keycloak is
+# DOWN" alert lives in keycloak-keepalive.yml, which retries before it cries wolf.
+#
+# To pause: disable in the Actions tab AND cancel the in-flight run, or it keeps warming
+# for up to 5h30m more. To stop entirely: delete this file.
 
 name: keep-warm
 
 on:
   schedule:
-    # GitHub free-tier cron is best-effort: under load it silently DROPS
-    # scheduled fires, and the official docs warn that the top of the hour
-    # (:00) is the worst slot. Real-world observed gaps on this repo have
-    # exceeded 2-4 hours despite "*/10 * * * *" — long enough for Render's
-    # 15-min idle timeout to put the container to sleep and produce
-    # "server cannot be reached" on the next user visit.
-    #
-    # Mitigation: schedule far more aggressively and at offset minutes that
-    # avoid the :00/:30 high-load windows. Even if GitHub drops half the
-    # fires, the effective rate still stays under Render's 15-min limit.
+    # Still aggressive, but for a different reason than before. Each fire only needs to
+    # RESTART the loop, so we no longer need 12 landings an hour -- we need at least one
+    # landing every 5h30m. Since GitHub drops ~95% of fires, asking often is what makes
+    # a landing near-certain. Offset minutes avoid the :00/:30 high-load windows that
+    # GitHub's own docs call out as the worst slots.
     - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
   workflow_dispatch: {}  # manual trigger for testing
 
 permissions:
   contents: read
 
+# One warmer at a time, with the NEXT one queued behind it. See "HOW THE HANDOFF WORKS"
+# in the header: `false` is load-bearing here, not a default left unset. Setting it to
+# `true` would kill the live warmer on every delivered fire and open a coverage gap
+# while its replacement waits for a runner.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 6   # 3 URLs x up to 90s cold wake = ~4.5 min worst case
+    # 5h35m: the loop stops itself at 5h30m; the spare 5 min lets the summary print
+    # instead of the job being killed mid-write by GitHub's 6h cap.
+    timeout-minutes: 335
     steps:
-      - name: Warm app + Keycloak
+      - name: Warm app + Keycloak on a loop
         run: |
-          # Keep BOTH free-tier services warm. The app cold-wakes in ~25 s, but
-          # Keycloak (auth.aiappinvent.com) — which /login redirects to — cold-
-          # wakes in ~50 s, so a cold KC is what makes login "not work". Ping its
-          # discovery endpoint too. --max-time 90 covers a full KC cold wake so
-          # the ping actually lands (and wakes it) instead of timing out first.
-          # We do NOT use -f here: KC discovery is 200 and app ping is 200, but
-          # any <500 response still proves the container is awake.
+          # Never let a failed ping kill the loop -- a warmer that dies on the first
+          # cold-wake timeout is exactly the bug keycloak-keepalive.yml used to have.
           set +e
-          for URL in \
-            "https://solarpro.aiappinvent.com/api/ping" \
-            "https://solarpro-global.onrender.com/api/ping" \
-            "https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration"; do
-            echo "Pinging $URL"
-            curl -sS --max-time 90 -o /dev/null -w "  HTTP %{http_code} in %{time_total}s\n" "$URL" || \
-              echo "  WARN: ping failed for $URL"
+
+          RUN_SECONDS=19800   # 5h30m, under GitHub's 6h job cap
+          INTERVAL=300        # 5 min cycle, well inside Render's 15-min idle timeout
+          # 120 s, not the 90 s used until now. OBSERVED 2026-07-26 in run 30202621493:
+          # the Keycloak ping returned "HTTP 000 in 90.002589s" -- it hit the cap exactly,
+          # mid-wake. Seven minutes later KC answered in 1.25 s, so it was a slow COLD WAKE,
+          # not an outage: a free-tier wake can exceed the 60.7 s measured on 2026-07-25.
+          # A cap that expires mid-wake is the precise bug that made keycloak-keepalive.yml
+          # useless, so do not lower this without new measurements.
+          MAXTIME=120
+
+          URLS="https://solarpro.aiappinvent.com/api/ping
+          https://solarpro-global.onrender.com/api/ping
+          https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration"
+
+          START=$(date +%s)
+          DEADLINE=$((START + RUN_SECONDS))
+          ROUNDS=0
+          PINGS=0
+          FAILURES=0
+
+          # Print the tally even when this run is CANCELLED by the next fire -- which is
+          # the NORMAL way a loop ends here, not the exception. Without this, the common
+          # case would leave no record of what the run actually did.
+          summary() {
+            MINS=$(( ($(date +%s) - START) / 60 ))
+            echo "----------------------------------------"
+            echo "warmed for ${MINS} min | ${ROUNDS} rounds | ${PINGS} pings | ${FAILURES} failed"
+            if [ "$PINGS" -gt 0 ] && [ "$FAILURES" -eq "$PINGS" ]; then
+              # Every single ping failed for the whole run. Warn -- visible in the run
+              # summary -- but do NOT fail the job: paging on this is
+              # keycloak-keepalive.yml's job, and duplicate alerts are how alerts stop
+              # being read -- 144 false alarms/day is what destroyed that workflow's
+              # credibility before it was repaired on 2026-07-25.
+              echo "::warning::keep-warm: every ping failed this run (${FAILURES}/${PINGS}). Check the app and Keycloak."
+            fi
+          }
+          trap 'summary; exit 0' TERM INT
+
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            ROUNDS=$((ROUNDS + 1))
+            ROUND_START=$(date +%s)
+            echo "=== round ${ROUNDS} @ $(date -u +%H:%M:%SZ) ==="
+            for URL in $URLS; do
+              PINGS=$((PINGS + 1))
+              # A generous cap lets the ping actually LAND -- and so complete the wake it
+              # triggered -- instead of aborting partway. No -f, so curl exits 0 for ANY
+              # HTTP response including 5xx. That is correct for a warmer: a 500 still
+              # proves the container answered, which is the only thing being measured
+              # here. Judging whether the response was HEALTHY is beta-monitor's job.
+              OUT=$(curl -sS --max-time "$MAXTIME" -o /dev/null -w "%{http_code} %{time_total}" "$URL" 2>&1)
+              if [ $? -ne 0 ]; then
+                FAILURES=$((FAILURES + 1))
+                # curl writes its diagnostic to stderr AND the -w line to stdout, so a
+                # failure arrives as two lines. Flatten it, or the log is hard to scan.
+                echo "  WARN ${URL} -> $(echo "$OUT" | tr '\n' ' ')"
+              else
+                echo "  ok   ${URL} -> HTTP ${OUT}s"
+              fi
+            done
+
+            # Sleep for the remainder of the CYCLE, not a flat INTERVAL. A round where
+            # every URL cold-wakes can take 3 x MAXTIME = 6 min all by itself; adding a
+            # flat 5 min on top would stretch the gap to 11 min and creep toward Render's
+            # 15-min idle timeout -- exactly what this workflow exists to stay clear of.
+            # Floor of 30 s so a pathological round cannot spin the loop hot.
+            ELAPSED=$(( $(date +%s) - ROUND_START ))
+            NAP=$((INTERVAL - ELAPSED))
+            [ "$NAP" -lt 30 ] && NAP=30
+
+            # Stop rather than sleep past the deadline, or the final round overshoots into
+            # the job cap and the summary is lost.
+            REMAINING=$((DEADLINE - $(date +%s)))
+            [ "$REMAINING" -lt "$NAP" ] && break
+
+            # Sleep in the BACKGROUND and wait on it. A foreground `sleep` would make bash
+            # defer the TERM/INT trap until the full nap elapsed -- MEASURED at 28 s for a
+            # 30 s sleep, far past the ~7.5 s grace GitHub allows before SIGKILL -- so the
+            # summary would never print on the cancellation path, which is the path almost
+            # every run takes.
+            sleep "$NAP" &
+            wait $!
           done
+
+          summary
