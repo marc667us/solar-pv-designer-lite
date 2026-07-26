@@ -12,11 +12,20 @@
 # 163 hours to 2026-07-26T11:40Z, across the last 100 runs:
 #
 #     cron requested   : 12 runs/hour
-#     actually fired   : 0.61 runs/hour        <- GitHub dropped ~95% of fires
+#     actually delivered: 0.61 runs/hour       <- ~5% of what was asked for
 #     gaps over 15 min : 99 of 99              <- EVERY gap exceeded Render's idle
 #                                                 timeout, so nothing was ever warm
 #     median gap       : 86 min
 #     max gap          : 230 min (3.8 h)
+#
+# THIS IS NOT SPECIFIC TO THIS WORKFLOW. The same measurement across 8 scheduled
+# workflows in this repo returns ~0.5-0.6 delivered runs/hour for ALL of them, whether
+# they ask for 12/h or 2/h; repo-wide, 5.55 scheduled runs/hour land across 18
+# workflows. The requested rate has essentially no effect on the delivered rate, so
+# TIGHTENING A CRON IN THIS REPO BUYS NOTHING. (Consequences elsewhere: drain-cdc-outbox
+# actually drains every ~96 min, not 15; beta-monitor's alert latency is ~88 min, not
+# 30.) The mechanism is NOT confirmed -- throttle, per-repo cap, free-tier
+# deprioritisation? -- only the behaviour is measured. Do not assert a cause.
 #
 # The pings themselves were fine -- a landed run returns HTTP 200 for all three URLs
 # (Keycloak in 0.5 s). The failure was entirely in DELIVERY. The old file's own comment
@@ -75,11 +84,13 @@ name: keep-warm
 
 on:
   schedule:
-    # Still aggressive, but for a different reason than before. Each fire only needs to
-    # RESTART the loop, so we no longer need 12 landings an hour -- we need at least one
-    # landing every 5h30m. Since GitHub drops ~95% of fires, asking often is what makes
-    # a landing near-certain. Offset minutes avoid the :00/:30 high-load windows that
-    # GitHub's own docs call out as the worst slots.
+    # Left aggressive, but it now means something different. A fire no longer needs to
+    # land often -- it only needs to land ONCE per 5h30m to keep a successor queued
+    # behind the live warmer. Asking often simply makes that near-certain. Offset
+    # minutes avoid the :00/:30 high-load windows GitHub's docs call the worst slots.
+    #
+    # Do NOT bother tightening this if coverage ever looks thin: the requested rate has
+    # no measurable effect on the delivered rate. See the note below.
     - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
   workflow_dispatch: {}  # manual trigger for testing
 
