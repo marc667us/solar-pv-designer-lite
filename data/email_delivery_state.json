@@ -1,6 +1,7 @@
 {
   "alerted_event_keys": [
     "blocked|kafedie@gmail.com|2026-06-11T00:30:27.067Z",
+    "hardBounces|jan.hartmann@spacetech-i.com|2026-08-01T07:56:52.000Z",
     "hardBounces|kafedie@gmail.com|2026-06-11T00:14:51.000Z",
     "hardBounces|sales@infinitysolarusa.com|2026-06-10T23:42:53.000Z",
     "softBounces|admin@solarpro.global|2026-06-13T21:50:55.000Z",
@@ -14,6 +15,7 @@
     "softBounces|live_full_1782842415_bce@suite.local|2026-06-30T18:00:28.000Z",
     "softBounces|live_suite_2026_06_30_bce_1782828204@suite.local|2026-06-30T14:03:46.000Z",
     "softBounces|pablo.jimenez@btdinc.com|2026-07-28T14:31:42.000Z",
+    "softBounces|queenfan@gmail.com|2026-08-01T14:25:09.000Z",
     "softBounces|rferber314@gmail.com|2026-08-01T06:04:56.000Z",
     "softBounces|sales@aiappinvent.com|2026-06-21T16:11:10.000Z",
     "softBounces|sales@aiappinvent.com|2026-06-21T18:07:34.000Z",
@@ -239,6 +241,12 @@
     "softBounces|sales@aiappinvent.com|2026-07-31T04:50:07.000Z",
     "softBounces|sales@aiappinvent.com|2026-08-01T02:17:21.000Z",
     "softBounces|sales@aiappinvent.com|2026-08-01T06:05:02.000Z",
+    "softBounces|sales@aiappinvent.com|2026-08-01T07:03:47.000Z",
+    "softBounces|sales@aiappinvent.com|2026-08-01T07:56:58.000Z",
+    "softBounces|sales@aiappinvent.com|2026-08-01T08:40:12.000Z",
+    "softBounces|sales@aiappinvent.com|2026-08-01T09:32:00.000Z",
+    "softBounces|sales@aiappinvent.com|2026-08-01T12:20:40.000Z",
+    "softBounces|sales@aiappinvent.com|2026-08-01T14:25:14.000Z",
     "softBounces|smoke_1chen2w8@solarpro-test.local|2026-06-24T17:15:45.000Z",
     "softBounces|support@aiappinvent.com|2026-07-09T19:05:47.000Z",
     "softBounces|talk2us@ofgen.co.ke|2026-06-11T15:14:22.000Z",
@@ -249,15 +257,15 @@
     "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T20:58:56.000Z",
     "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T23:09:11.000Z"
   ],
-  "last_run_utc": "2026-08-01T07:03:38.954238+00:00",
+  "last_run_utc": "2026-08-01T17:32:46.405066+00:00",
   "totals": {
     "blocked": 0,
-    "deferred": 0,
-    "delivered": 1,
-    "hardBounces": 0,
+    "deferred": 1,
+    "delivered": 3,
+    "hardBounces": 1,
     "opened": 0,
-    "other": 5,
-    "softBounces": 4,
+    "other": 16,
+    "softBounces": 11,
     "spam": 0
   },
   "window_days": 1
