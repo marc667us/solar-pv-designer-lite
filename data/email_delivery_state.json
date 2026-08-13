@@ -37,8 +37,10 @@
     "softBounces|live_suite_2026_06_30_bce_1782828204@suite.local|2026-06-30T14:03:46.000Z",
     "softBounces|manning.mary66@gmail.com|2026-08-08T05:16:56.000Z",
     "softBounces|marianneesty@verizon.net|2026-08-06T00:38:45.000Z",
+    "softBounces|mattia.dacampo@gmail.com|2026-08-13T17:45:12.000Z",
     "softBounces|miandhshs@hotme.com|2026-08-06T08:10:20.000Z",
     "softBounces|michael@ippolitorealty.com|2026-08-13T04:28:17.000Z",
+    "softBounces|michellelmorby@gmail.com|2026-08-13T16:05:15.000Z",
     "softBounces|pablo.jimenez@btdinc.com|2026-07-28T14:31:42.000Z",
     "softBounces|queenfan@gmail.com|2026-08-01T14:25:09.000Z",
     "softBounces|rae46142@gmail.com|2026-08-05T06:05:12.000Z",
@@ -358,15 +360,15 @@
     "softBounces|wng288@gmail.com|2026-08-04T10:04:33.000Z",
     "softBounces|yuliya.kolosova@gmail.com|2026-08-09T12:10:18.000Z"
   ],
-  "last_run_utc": "2026-08-13T13:58:54.661022+00:00",
+  "last_run_utc": "2026-08-13T19:35:27.147576+00:00",
   "totals": {
     "blocked": 0,
     "deferred": 3,
     "delivered": 3,
     "hardBounces": 0,
     "opened": 0,
-    "other": 12,
-    "softBounces": 8,
+    "other": 17,
+    "softBounces": 10,
     "spam": 0
   },
   "window_days": 1
