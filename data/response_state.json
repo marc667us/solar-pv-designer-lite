@@ -61,7 +61,7 @@
   "feedback": {
     "count": 0
   },
-  "last_poll_utc": "2026-08-25T17:51:06.392724+00:00",
+  "last_poll_utc": "2026-08-25T18:19:41.765424+00:00",
   "ops_sweep": {
     "email/status": {
       "label": "Email",
@@ -93,7 +93,7 @@
     },
     "ping/storage": {
       "label": "Disk space",
-      "severity": "ok"
+      "severity": "warn"
     }
   },
   "security_audit": {
