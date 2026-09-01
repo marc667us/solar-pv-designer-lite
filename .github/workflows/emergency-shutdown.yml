@@ -1,0 +1,104 @@
+name: EMERGENCY — suspend SolarPro (take the app offline for everyone)
+
+# 🔴 OWNER-TRIGGERED KILL SWITCH, 2026-09-01.
+#
+# Owner instruction, verbatim: *"pull solarpro from online, block any user or
+# bot or malware, hackers are using my dns to acces the app, shut the app from
+# all users when i am ready i will ask you to restore"*.
+#
+# WHY SUSPEND AND NOT A DNS CHANGE.
+#
+# The report is that the DOMAIN is being used to reach the app. Changing or
+# removing DNS moves the name; it does not stop the origin answering, and
+# `solarpro-global.onrender.com` would still serve the application to anyone
+# who has ever seen that hostname — which is everyone who has read a Render
+# URL. Suspending the SERVICE stops the origin itself, so every route in,
+# named or direct, stops at the same moment.
+#
+# WHY SUSPEND AND NOT DELETE.
+#
+# Suspend is exactly reversible with `resume`, keeps the service id, the custom
+# domain, the certificate and the environment intact, and is what the owner
+# asked for: off now, restored on request. Deleting would make "restore" a
+# rebuild.
+#
+# ⚠️ THIS VERIFIES THE RESULTING STATE AND DOES NOT TRUST THE RESPONSE.
+# A 200 from the suspend endpoint is a message, not a fact. The job re-reads
+# the service and fails unless Render reports it actually suspended — the
+# house rule this project has paid for repeatedly: check the listener, the
+# process, the privilege, never the message.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type SHUTDOWN to confirm taking the app offline'
+        required: true
+        default: ''
+
+jobs:
+  suspend:
+    runs-on: ubuntu-latest
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: Refuse without an explicit confirmation
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.confirm }}" != "SHUTDOWN" ]; then
+            echo "confirm was '${{ github.event.inputs.confirm }}', not SHUTDOWN — refusing."
+            exit 1
+          fi
+
+      - name: Record the state BEFORE, so the change is provable
+        run: |
+          set -euo pipefail
+          curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print("BEFORE name=",d.get("name")," suspended=",d.get("suspended")," suspenders=",d.get("suspenders"))'
+
+      - name: Suspend the service
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/suspend.out -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Accept: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/suspend")
+          echo "suspend endpoint returned HTTP $code"
+          cat /tmp/suspend.out || true
+          # 200 and 202 both mean accepted. Anything else is a real failure and
+          # must not be swallowed -- `|| echo` on a curl is a documented trap in
+          # this repository's own review history.
+          case "$code" in
+            200|202) ;;
+            *) echo "suspend was not accepted"; exit 1 ;;
+          esac
+
+      - name: VERIFY it is actually suspended, and fail if it is not
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            state=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("suspended",""))')
+            echo "attempt $attempt: suspended=$state"
+            if [ "$state" = "suspended" ]; then
+              echo "CONFIRMED: the service is suspended."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The service did not reach 'suspended'. The app may still be serving."
+          exit 1
+
+      - name: Report the public hostnames as the internet now sees them
+        if: always()
+        run: |
+          set -euo pipefail
+          for host in https://solarpro.aiappinvent.com/ https://solarpro-global.onrender.com/; do
+            # No `|| echo 000` here: that idiom concatenates and produces
+            # '000000', which this project has been bitten by.
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$host" || true)
+            echo "$host -> ${code:-no-response}"
+          done
