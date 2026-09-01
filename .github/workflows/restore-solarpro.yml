@@ -1,0 +1,164 @@
+name: RESTORE SolarPro (apply rotated credentials, then resume)
+
+# 🔴 THE COUNTERPART TO `emergency-shutdown.yml`, AND THE REASON THE ROTATION
+#    IS SAFE TO HAVE DONE WHILE THE APP WAS DOWN.
+#
+# On 2026-09-01 the owner had SolarPro suspended after reporting that the
+# domain was being used to reach it, and asked for the credentials rotated.
+# Seven app-side secrets were rotated in GitHub the same day:
+#
+#   SOLARPRO_ADMIN_PASSWORD   SOLARPRO_OWNER_PASSWORD   SECRET_KEY
+#   KEYCLOAK_WEBHOOK_SECRET   METRICS_BEARER
+#   CDC_DRAIN_TOKEN           ENTERPRISE_JOB_TOKEN
+#
+# ⚠️ ROTATING A GITHUB SECRET CHANGES NOTHING BY ITSELF. Render holds its own
+# copy in the service environment, and that is what the application actually
+# reads at boot. Until this workflow runs, Render still has the OLD values —
+# so the rotation is STAGED, not live, and saying otherwise would be the
+# "a message is not a mechanism" defect.
+#
+# Render was deliberately NOT touched while the service was suspended: an
+# env-var write triggers a deploy, and a deploy against a suspended service is
+# exactly the thing that might have put the application back on the internet
+# during a suspected intrusion. So the order here is:
+#
+#   1. write every rotated secret into the Render environment
+#   2. THEN resume
+#   3. THEN verify
+#
+# The application therefore never boots holding a credential that was live
+# while the incident was open.
+#
+# 🔴 PER-KEY PUT, NEVER THE BULK ENDPOINT.
+#   PUT /v1/services/{id}/env-vars/{KEY}   <- used here, updates one key
+#   PUT /v1/services/{id}/env-vars         <- REPLACES ALL, would wipe
+#                                             KC_HOSTNAME, DATABASE_URL, ...
+#
+# ⚠️ WHAT THIS DOES NOT ROTATE. Third-party provider keys cannot be minted from
+# here and are still the OLD ones: BREVO_API_KEY, OPENROUTER_API_KEY,
+# PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, RESEND_API_KEY, SMTP_PASS and —
+# most important — RENDER_API_KEY itself. Those work whether or not the app is
+# running, so they are the urgent half and they have to be revoked at each
+# provider. Do not read this workflow as "the rotation is complete".
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RESTORE to bring the app back online'
+        required: true
+        default: ''
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: Refuse without an explicit confirmation
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.confirm }}" != "RESTORE" ]; then
+            echo "confirm was '${{ github.event.inputs.confirm }}', not RESTORE — refusing."
+            exit 1
+          fi
+
+      - name: Record the state BEFORE
+        run: |
+          set -euo pipefail
+          curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print("BEFORE name=",d.get("name")," suspended=",d.get("suspended"))'
+
+      - name: Apply every rotated credential to the Render environment
+        env:
+          SOLARPRO_ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+          SOLARPRO_OWNER_PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          KEYCLOAK_WEBHOOK_SECRET: ${{ secrets.KEYCLOAK_WEBHOOK_SECRET }}
+          METRICS_BEARER: ${{ secrets.METRICS_BEARER }}
+          CDC_DRAIN_TOKEN: ${{ secrets.CDC_DRAIN_TOKEN }}
+          ENTERPRISE_JOB_TOKEN: ${{ secrets.ENTERPRISE_JOB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 🔴 EVERY WRITE IS CHECKED. A rotation that silently failed on one
+          # key would bring the app back holding a credential the incident
+          # exposed, while this job reported success — the exact "success
+          # message over a failed operation" shape this account has logged.
+          fail=0
+          for key in SOLARPRO_ADMIN_PASSWORD SOLARPRO_OWNER_PASSWORD SECRET_KEY \
+                     KEYCLOAK_WEBHOOK_SECRET METRICS_BEARER CDC_DRAIN_TOKEN \
+                     ENTERPRISE_JOB_TOKEN; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "::error::$key is empty in GitHub Secrets — refusing to write a blank credential"
+              fail=1
+              continue
+            fi
+            code=$(python3 -c "import json,sys; print(json.dumps({'value': sys.argv[1]}))" "$value" \
+              | curl -sS -o /tmp/put.out -w '%{http_code}' -X PUT \
+                  -H "Authorization: Bearer $RENDER_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  --data-binary @- \
+                  "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/$key")
+            case "$code" in
+              200|201) echo "  $key -> HTTP $code  ok" ;;
+              *) echo "::error::$key -> HTTP $code"; head -c 300 /tmp/put.out || true; fail=1 ;;
+            esac
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "At least one credential did not reach Render. NOT resuming."
+            exit 1
+          fi
+
+      - name: Resume the service
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/resume.out -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Accept: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/resume")
+          echo "resume endpoint returned HTTP $code"
+          cat /tmp/resume.out || true
+          case "$code" in
+            200|202) ;;
+            *) echo "resume was not accepted"; exit 1 ;;
+          esac
+
+      - name: VERIFY it is actually running, and fail if it is not
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            state=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("suspended",""))')
+            echo "attempt $attempt: suspended=$state"
+            if [ "$state" = "not_suspended" ]; then
+              echo "CONFIRMED: the service is no longer suspended."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The service did not leave 'suspended'."
+          exit 1
+
+      - name: Report the public hostnames, and wait out the cold start
+        if: always()
+        run: |
+          set -euo pipefail
+          # Render free-tier cold starts take ~2 minutes. A short timeout here
+          # is not proof of an outage — this account has a standing note about
+          # exactly that.
+          for host in https://solarpro.aiappinvent.com/ https://solarpro-global.onrender.com/; do
+            for attempt in $(seq 1 12); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$host" || true)
+              echo "$host -> ${code:-no-response} (attempt $attempt)"
+              [ "$code" = "200" ] && break
+              sleep 15
+            done
+          done
+          echo
+          echo "⚠️ Re-enable the two workflows the shutdown disabled:"
+          echo "   gh workflow enable \"FX Rates Refresh\""
+          echo "   gh workflow enable keep-warm"
