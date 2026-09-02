@@ -13,6 +13,7 @@
     "hardBounces|sales@infinitysolarusa.com|2026-06-10T23:42:53.000Z",
     "softBounces|admin@solarpro.global|2026-06-13T21:50:55.000Z",
     "softBounces|adriennebuhmann@gmail.com|2026-08-08T02:02:08.000Z",
+    "softBounces|alaric747@comcast.net|2026-09-01T14:04:57.000Z",
     "softBounces|andrewjw121984@gmail.com|2026-08-13T08:39:31.000Z",
     "softBounces|ariane.haupt@synergie.de|2026-08-21T10:41:23.000Z",
     "softBounces|bbjraf@yahoo.com|2026-08-05T03:01:24.000Z",
@@ -394,6 +395,9 @@
     "softBounces|sales@aiappinvent.com|2026-08-25T12:31:09.000Z",
     "softBounces|sales@aiappinvent.com|2026-08-25T13:39:06.000Z",
     "softBounces|sales@aiappinvent.com|2026-08-25T15:45:34.000Z",
+    "softBounces|sales@aiappinvent.com|2026-09-01T02:26:51.000Z",
+    "softBounces|sales@aiappinvent.com|2026-09-01T07:11:57.000Z",
+    "softBounces|sales@aiappinvent.com|2026-09-01T12:37:15.000Z",
     "softBounces|smoke_1chen2w8@solarpro-test.local|2026-06-24T17:15:45.000Z",
     "softBounces|support@aiappinvent.com|2026-07-09T19:05:47.000Z",
     "softBounces|talk2us@ofgen.co.ke|2026-06-11T15:14:22.000Z",
@@ -408,15 +412,15 @@
     "softBounces|wng288@gmail.com|2026-08-04T10:04:33.000Z",
     "softBounces|yuliya.kolosova@gmail.com|2026-08-09T12:10:18.000Z"
   ],
-  "last_run_utc": "2026-08-28T01:04:22.449770+00:00",
+  "last_run_utc": "2026-09-02T00:25:50.316389+00:00",
   "totals": {
     "blocked": 0,
-    "deferred": 0,
-    "delivered": 0,
+    "deferred": 2,
+    "delivered": 2,
     "hardBounces": 0,
     "opened": 0,
-    "other": 0,
-    "softBounces": 0,
+    "other": 6,
+    "softBounces": 4,
     "spam": 0
   },
   "window_days": 1
