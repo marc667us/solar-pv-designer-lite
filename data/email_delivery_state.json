@@ -412,15 +412,15 @@
     "softBounces|wng288@gmail.com|2026-08-04T10:04:33.000Z",
     "softBounces|yuliya.kolosova@gmail.com|2026-08-09T12:10:18.000Z"
   ],
-  "last_run_utc": "2026-09-02T00:25:50.316389+00:00",
+  "last_run_utc": "2026-09-04T11:37:42.680204+00:00",
   "totals": {
     "blocked": 0,
-    "deferred": 2,
-    "delivered": 2,
+    "deferred": 0,
+    "delivered": 0,
     "hardBounces": 0,
     "opened": 0,
-    "other": 6,
-    "softBounces": 4,
+    "other": 0,
+    "softBounces": 0,
     "spam": 0
   },
   "window_days": 1
